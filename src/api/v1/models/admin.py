@@ -3,4 +3,4 @@ from typing import Optional, List, Literal
 
 
 class DeleteDatasetParams(BaseModel):
-    pilot_name: str
+    dataset_name: str

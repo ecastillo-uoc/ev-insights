@@ -40,6 +40,7 @@
                     "name": "init_db",
                     "info": "Initialize db, delete all data",
                     "enabled": true,
+                    "save_results": true,
                     "custom_params": {
                     }
                 }

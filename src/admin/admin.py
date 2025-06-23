@@ -12,7 +12,8 @@ ADMIN = [s.replace(".py", "") for s in [f for f in os.listdir(os.path.dirname(os
 
 
 class Admin:
-    def __init__(self, id: int, name: str, info: str, enabled: bool, output_interface: Interface, output_dir: str, custom_params: dict):
+    def __init__(self, id: int, name: str, info: str, enabled: bool, output_interface: Interface, output_dir: str, save_results: bool,
+                 custom_params: dict):
         self.id = id
         self.name = name
         self.info = info
@@ -21,6 +22,7 @@ class Admin:
         self.output_dir = output_dir
         if not os.path.isdir(self.output_dir):
             os.makedirs(self.output_dir)
+        self.save_results = save_results
         self.custom_params = custom_params
         self.logger = logging.getLogger('admin')
         self.logger.info("Initialized " + self.name)
@@ -31,6 +33,14 @@ class Admin:
     @abstractmethod
     def run(self):
         pass
+
+    def save_output_to_file(self):
+        # Save output to file
+        filename = os.path.join(self.output_dir, f"{self.name}.json")
+        with open(filename, 'w') as file:
+            pprint(self.results, stream=file)
+
+        return
 
 
 def import_class(module_path, class_name):
@@ -48,7 +58,6 @@ def import_class(module_path, class_name):
     _class = getattr(module, class_name)
     return _class
 
-
 def init_admin(config, output_interface=None):
     logger = logging.getLogger('init_admin')
     admin = None
@@ -64,6 +73,7 @@ def init_admin(config, output_interface=None):
                                enabled=config['enabled'],
                                output_interface=output_interface,
                                output_dir=config['output_dir'],
+                               save_results=config['save_results'],
                                custom_params=config['custom_params'])
         else:
             logger.info('Admin ' + config["name"] + ' not enabled.')

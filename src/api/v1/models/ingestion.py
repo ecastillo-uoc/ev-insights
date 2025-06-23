@@ -5,7 +5,7 @@ from typing import Optional, List, Literal
 class IngestDatasetsParams(BaseModel):
     datasets_list: list
     folder_path: str
-    limit_rows: int
+    limit_rows: Optional[int]
 
 
 class IngestDataParams(BaseModel):

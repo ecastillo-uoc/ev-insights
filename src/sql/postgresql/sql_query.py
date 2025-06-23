@@ -147,3 +147,53 @@ get_charging_station_ids = """
     FROM evinsights."ChargingStation"
     WHERE dataset_id = %s OR %s IS NULL
 """
+
+# Delete ChargingSession records by dataset_id
+delete_charging_sessions_by_dataset = """
+    DELETE FROM evinsights."ChargingSession"
+    WHERE fk_dataset_id = %s
+    RETURNING id;
+"""
+
+# # Delete UserForecast records by dataset_id
+# delete_user_forecast_by_dataset = """
+#     DELETE FROM evinsights."UserForecast"
+#     WHERE fk_user_id IN (
+#         SELECT id
+#         FROM evinsights."User"
+#         WHERE dataset_id = %s
+#     )
+#     RETURNING id;
+# """
+
+# # Delete ChargingStationForecast records by dataset_id
+# delete_charging_station_forecast_by_dataset = """
+#     DELETE FROM evinsights."ChargingStationForecast"
+#     WHERE fk_charging_station_id IN (
+#         SELECT id
+#         FROM evinsights."ChargingStation"
+#         WHERE dataset_id = %s
+#     )
+#     RETURNING id;
+# """
+
+# Delete User records by dataset_id
+delete_users_by_dataset = """
+    DELETE FROM evinsights."User"
+    WHERE dataset_id = %s
+    RETURNING id, orig_id;
+"""
+
+# Delete ChargingStation records by dataset_id
+delete_charging_stations_by_dataset = """
+    DELETE FROM evinsights."ChargingStation"
+    WHERE dataset_id = %s
+    RETURNING id, orig_id;
+"""
+
+# Delete Dataset record by id
+delete_dataset_by_id = """
+    DELETE FROM evinsights."Dataset"
+    WHERE id = %s
+    RETURNING id, name;
+"""

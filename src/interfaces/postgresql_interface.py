@@ -114,6 +114,7 @@ class PostgreSql(Interface):
         # Get dataset id
         dataset_id = self.get_dataset_id_by_name(dataset_name=data['dataset_name'])
 
+        inserted_count = 0
         if dataset_id is None:
             # Insert dataset details
             cursor = self.db.cursor()
@@ -132,11 +133,12 @@ class PostgreSql(Interface):
                         data['dataset_charging_point_type'],
                         data['dataset_notes'])
             cursor.execute(sql_query.insert_dataset_info, data_row)
+            inserted_count += cursor.rowcount
             cursor.close()
             self.db.commit()
         else:
             raise Exception(f"ERROR: Dataset {data['dataset_name']} already exists.")
-        return
+        return inserted_count
 
     def insert_charging_stations(self, data, dataset_name):
         # Get dataset id
@@ -147,6 +149,7 @@ class PostgreSql(Interface):
         id_column = 'charging_station_id' if 'charging_station_id' in data.columns else 'id'
         charging_stations_data = data[[id_column, 'max_charging_power']].drop_duplicates()
 
+        inserted_count = 0
         for index, row in charging_stations_data.iterrows():
             data_row = (row[id_column] if id_column in row and row[id_column] != '' else None,
                         row['manufacturer'] if 'manufacturer' in row and row['manufacturer'] != '' else None,
@@ -157,11 +160,12 @@ class PostgreSql(Interface):
                         row['max_discharging_power'] if 'max_discharging_power' in row and row['max_discharging_power'] != '' else None,
                         dataset_id)
             cursor.execute(sql_query.insert_charging_stations, data_row)
+            inserted_count += cursor.rowcount
 
         cursor.close()
 
         self.db.commit()
-        return
+        return inserted_count
 
     def insert_users(self, data, dataset_name):
         # Get dataset id
@@ -171,6 +175,7 @@ class PostgreSql(Interface):
         data = data.fillna("")  # TODO Should this be performed once before the start of data ingestion?
         users_data = data[['user_id', 'ev_id', 'ev_max_charging_power']].drop_duplicates()
 
+        inserted_count = 0
         for index, row in users_data.iterrows():
             data_row = (row['user_id'] if 'user_id' in row and row['user_id'] != '' else None,
                         row['ev_id'] if 'ev_id' in row and row['ev_id'] != '' else None,
@@ -184,10 +189,12 @@ class PostgreSql(Interface):
                         row['ev_max_discharging_power'] if 'ev_max_discharging_power' in row and row['ev_max_discharging_power'] != '' else None,
                         dataset_id)
             cursor.execute(sql_query.insert_users, data_row)
+            inserted_count += cursor.rowcount
+
         cursor.close()
 
         self.db.commit()
-        return
+        return inserted_count
 
     def insert_charging_sessions(self, data, dataset_name):
         # Get dataset id
@@ -208,6 +215,7 @@ class PostgreSql(Interface):
                                        'charging_station_id',
                                        'user_id', ]].drop_duplicates()
 
+        inserted_count = 0
         for index, row in charging_sessions_data.iterrows():
             # Get charging_station_id from charging_stations dict extracted from db
             charging_station_id = charging_stations.get(str(row['charging_station_id']))
@@ -227,10 +235,11 @@ class PostgreSql(Interface):
                 continue
 
             cursor.execute(sql_query.insert_charging_sessions, data_row)
+            inserted_count += cursor.rowcount
         cursor.close()
 
         self.db.commit()
-        return
+        return inserted_count
 
     def get_charging_point_type_id(self, charging_point_type):
         cursor = self.db.cursor()
@@ -388,8 +397,60 @@ class PostgreSql(Interface):
         return df
 
     def delete_dataset(self, dataset_name):
-        # TODO
-        return
+        cursor = self.db.cursor()
+
+        dataset_id = self.get_dataset_id_by_name(dataset_name=dataset_name)
+
+        try:
+            # Delete ChargingSession records
+            cursor.execute(sql_query.delete_charging_sessions_by_dataset, [dataset_id])
+            charging_sessions_deleted = cursor.rowcount
+            charging_sessions_data = [{"id": row[0]} for row in cursor.fetchall()]
+
+            # These should not be deleted since are not input data but ev-insights results
+            # # Delete UserForecast records
+            # cursor.execute(sql_query.delete_user_forecast_by_dataset, [dataset_id])
+            # user_forecasts_deleted = cursor.rowcount
+            # user_forecasts_ids = [row[0] for row in cursor.fetchall()]
+            #
+            # These should not be deleted since are not input data but ev-insights results
+            # # Delete ChargingStationForecast records
+            # cursor.execute(sql_query.delete_charging_station_forecast_by_dataset, [dataset_id])
+            # charging_station_forecasts_deleted = cursor.rowcount
+            # charging_station_forecasts_ids = [row[0] for row in cursor.fetchall()]
+
+            # Delete User records
+            cursor.execute(sql_query.delete_users_by_dataset, [dataset_id])
+            users_deleted = cursor.rowcount
+            users_data = [{"id": row[0], "orig_id": row[1]} for row in cursor.fetchall()]
+
+            # Delete ChargingStation records
+            cursor.execute(sql_query.delete_charging_stations_by_dataset, [dataset_id])
+            charging_stations_deleted = cursor.rowcount
+            charging_stations_data = [{"id": row[0], "orig_id": row[1]} for row in cursor.fetchall()]
+
+            # Delete Dataset record
+            cursor.execute(sql_query.delete_dataset_by_id, [dataset_id])
+            dataset_deleted = cursor.rowcount
+            dataset_data = [{"id": row[0], "name": row[1]} for row in cursor.fetchall()]
+
+            self.db.commit()
+
+            return {
+                "ChargingSession": {"count": charging_sessions_deleted, "data": charging_sessions_data},
+                # "UserForecast": {"count": user_forecasts_deleted, "ids": user_forecasts_ids},
+                # "ChargingStationForecast": {"count": charging_station_forecasts_deleted, "ids": charging_station_forecasts_ids},
+                "User": {"count": users_deleted, "data": users_data},
+                "ChargingStation": {"count": charging_stations_deleted, "data": charging_stations_data},
+                "Dataset": {"count": dataset_deleted, "data": dataset_data}
+            }
+
+        except psycopg2.Error as err:
+            self.logger.error(f"Error deleting dataset with id {dataset_id}: {err}")
+            self.db.rollback()
+            return None
+        finally:
+            cursor.close()
 
     def save_forecast_prediction(self, forecaster_name, actor, model, experiment_id, run_id, results, algo):
         self.logger.info(f"Saving predict results to PostreSQL DB")

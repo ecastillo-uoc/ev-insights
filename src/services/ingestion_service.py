@@ -22,25 +22,38 @@ class IngestionService(Service):
                 self.logger.info("Ingesting dataset %s" % dataset_value['info']['dataset_name'])
 
                 # Insert dataset details
-                try:
-                    self.output_interface.insert_dataset_details(data=dataset_value['info'])
-                except Exception as e:
-                    self.output.append(str(e))
+                dataset_count = 0
+                dataset_count = self.output_interface.insert_dataset_details(data=dataset_value['info'])
 
                 # Insert charging stations details
-                self.output_interface.insert_charging_stations(data=dataset_value['data'],
-                                                               dataset_name=dataset_value['info']['dataset_name'])
+                charging_stations_count = self.output_interface.insert_charging_stations(
+                    data=dataset_value['data'],
+                    dataset_name=dataset_value['info']['dataset_name']
+                )
 
                 # Insert users
-                self.output_interface.insert_users(data=dataset_value['data'], dataset_name=dataset_value['info']['dataset_name'])
+                users_count = self.output_interface.insert_users(
+                    data=dataset_value['data'],
+                    dataset_name=dataset_value['info']['dataset_name']
+                )
 
                 # Insert charging sessions
-                self.output_interface.insert_charging_sessions(data=dataset_value['data'], dataset_name=dataset_value['info']['dataset_name'])
+                charging_sessions_count = self.output_interface.insert_charging_sessions(
+                    data=dataset_value['data'],
+                    dataset_name=dataset_value['info']['dataset_name']
+                )
 
                 # Add here further ingestion if needed
                 # ...
 
-            self.output.append("Bulk data ingested successfully")
+            self.output.append({'Message': "Bulk data ingested successfully"})
+            self.output.append(
+                {'Counts': {'dataset_count': dataset_count,
+                            'charging_stations_count': charging_stations_count,
+                            'users_count': users_count,
+                            'charging_sessions_count': charging_sessions_count}
+                 }
+            )
 
         elif self.input_interface.input_data_type == 'table':
             # Ingest single tables
@@ -82,5 +95,6 @@ class IngestionService(Service):
                         self.output.append("ChargingSessions ingested successfully")
 
         self.logger.info("Ingestion service end")
+
 
         return self.output

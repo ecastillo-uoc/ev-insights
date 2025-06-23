@@ -27,7 +27,7 @@
                 }
             },
             "utils": {
-                "output_dir": "output_dir": "../../data/output/",
+                "output_dir": "../../data/output/",
                 "logger": {
                     "output_dir": "log/",
                     "email_notifications": false,
@@ -38,10 +38,11 @@
                 {
                     "id": 1,
                     "name": "delete_dataset",
-                    "info": "Initialize db, delete all data",
+                    "info": "Delete a specific dataset",
                     "enabled": true,
+                    "save_results": true,
                     "custom_params": {
-                        "dataset_name": null
+                        "dataset_name": "Norway_12loc"
                     }
                 }
             ]

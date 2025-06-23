@@ -45,9 +45,9 @@ async def init_db():
 @router.post("/delete_dataset/")
 async def delete_dataset(params: DeleteDatasetParams):
     try:
-        dataset_name = params.pilot_name
+        dataset_name = params.dataset_name
         # Load base conf file
-        base_conf_file_path = os.path.join(base_conf_folder_path, "conf_api_deletedataset.json")
+        base_conf_file_path = os.path.join(base_conf_folder_path, "conf_api_delete_dataset.json")
         if os.path.isfile(base_conf_file_path):
             config = json.loads(open(base_conf_file_path).read().replace("\n", ""))
 

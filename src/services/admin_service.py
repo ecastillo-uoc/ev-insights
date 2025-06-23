@@ -23,18 +23,11 @@ class AdminService(Service):
 
             self.output.append(output_tmp)
 
+            if admin.save_results:
+                admin.save_output_to_file()
+
         self.logger.info("Admin service end")
 
         return self.output
 
-
-# if self.input_interface.datasets_details_file is not None:
-
-# TODO Questi vanno spostati in admin
-# if len(self.input_interface.datasets) == 0 and self.input_interface.limit_rows != 0:
-#     raise Exception(f"ERROR: No datasets provided")
-#
-# if len(self.input_interface.datasets) == 0 and self.input_interface.limit_rows == 0:
-#     # Clean db
-#     output.append("Database cleaned")
 
