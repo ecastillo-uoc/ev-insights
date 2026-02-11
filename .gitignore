@@ -1,2 +1,4 @@
 /data/output/
 /src/dist/
+*.pyc
+__pycache__
