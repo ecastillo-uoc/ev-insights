@@ -133,9 +133,14 @@ class File(Interface):
             dict: Dictionary containing dataset metadata and data.
         """
         datasets_details = {}
-        with open(datasets_details_file, mode='r', newline='', encoding='utf-8') as file:
-            reader = csv.DictReader(file)
-            datasets_details = [row for row in reader if row['dataset_name'] in datasets_list]
+        if datasets_details_file.suffix == '.json':
+            with open(datasets_details_file, mode='r', encoding='utf-8') as file:
+                data = json.load(file)
+                datasets_details = [row for row in data if row['dataset_name'] in datasets_list]
+        else:
+            with open(datasets_details_file, mode='r', newline='', encoding='utf-8') as file:
+                reader = csv.DictReader(file)
+                datasets_details = [row for row in reader if row['dataset_name'] in datasets_list]
 
         datasets = {}
         for dataset_info in datasets_details:

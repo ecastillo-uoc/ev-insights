@@ -13,7 +13,7 @@
                     "limit_rows": null,
                     "input_data_type": "bulk",
                     "datasets_list": ["Norway_12loc"],
-                    "datasets_details_file": "data\\input\\datasets_details.csv"
+                    "datasets_details_file": "data/input/datasets_details.json"
                 },
                 "output": {
                     "name": "PostgreSql",
