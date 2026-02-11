@@ -50,6 +50,8 @@ services:
       - ../../volumes/evinsights/evinsights-data/repo/evinsights/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - www
+    ports:
+      - "${PG_PORT}:5432"
     # labels:
     #   - "traefik.enable=true"
     #   - "traefik.http.routers.evinsights_postgres.rule=Host(`${HOSTNAME}`)"
