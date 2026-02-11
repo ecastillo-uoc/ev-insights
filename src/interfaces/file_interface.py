@@ -1,4 +1,3 @@
-import logging
 import os
 import json
 import glob
@@ -156,9 +155,20 @@ class File(Interface):
                     _encoding = dataset_info.get('dataset_encoding')
                     _text_quotes = dataset_info.get('text_quotes','"').replace('\'','')
                     _decimal = dataset_info.get('decimal',',')
-                    df_orig = pd.read_csv(filepath_or_buffer=inputfile, delimiter=_delimiter,
-                                          encoding=_encoding, nrows=limit_rows,
-                                          quotechar =_text_quotes, decimal=_decimal)
+                    
+                    read_csv_args = {
+                        "filepath_or_buffer": inputfile,
+                        "delimiter": _delimiter,
+                        "encoding": _encoding,
+                        "nrows": limit_rows,
+                        "decimal": _decimal
+                    }
+                    if _text_quotes:
+                        read_csv_args["quotechar"] = _text_quotes
+                    else:
+                        read_csv_args["quoting"] = csv.QUOTE_NONE
+
+                    df_orig = pd.read_csv(**read_csv_args)
 
                 if dataset_info.get('dataset_file_type') == 'xlsx':
                     df_orig = pd.read_excel(io=inputfile, sheet_name=dataset_info['dataset_sheet_name'],
@@ -235,7 +245,7 @@ class File(Interface):
         # Converti la stringa di data in formato datetime
         return pd.to_datetime(date_string_with_2000, format='%Y-%m-%d %H:%M:%S')
 
-    def prepare_dataset_amb_barcellona(self, df):
+    def prepare_dataset_amb_barcelona(self, df):
         """
         Prepares the dataset for the 'AMB_Barcelona' source by renaming columns and adding required fields.
 
@@ -438,7 +448,7 @@ class File(Interface):
         for dataset_id, dataset_value in self.datasets.items():
             match dataset_value['info']['dataset_name']:
                 case 'AMB_Barcelona':
-                    df = self.prepare_dataset_amb_barcellona(df=dataset_value['data'])
+                    df = self.prepare_dataset_amb_barcelona(df=dataset_value['data'])
 
                 case 'BeLib':
                     df = self.prepare_dataset_belib(df=dataset_value['data'])

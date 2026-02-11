@@ -35,7 +35,7 @@ This tutorial guides you through the configuration, initialization, and executio
 ---
 
 ## Configuration
-The first step is to insert the desired dataset details into the configuration file `data/input/datasets_details.csv`.
+The first step is to insert the desired dataset details into the configuration file `data/input/datasets_details.csv` or `data/input/datasets_details.json`.
 This file contains metadata about the datasets to be ingested, such as dataset name, url, description, owner, license, file type, and more.
 
 The file includes:

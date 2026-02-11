@@ -20,7 +20,7 @@
         "decimal": ","
     },
     {
-        "dataset_name": "AMB_Barcellona",
+        "dataset_name": "AMB_Barcelona",
         "dataset_url": "https://zenodo.org/records/5721233#.YtaAc4TP0uU",
         "dataset_description": "The data set collects data of public charging stations in Barcelona from 2019 and is divided into two data sets.",
         "dataset_owner": "USER-CHI H2020",
@@ -36,8 +36,8 @@
         "dataset_license": "Creative Common Attributes 4.0",
         "dataset_charging_point_type": "public",
         "dataset_notes": "",
-        "text_quotes": "\"",
-        "decimal": ","
+        "text_quotes": "",
+        "decimal": "."
     },
     {
         "dataset_name": "Elaad",
@@ -122,6 +122,26 @@
     {
         "dataset_name": "Norway_12loc",
         "dataset_url": "https://zenodo.org/records/12730566",
+        "dataset_description": "Electric vehicle charging dataset with 35,000 charging sessions from 12 residential locations in Norway",
+        "dataset_owner": "",
+        "dataset_country": "NO",
+        "dataset_region": "",
+        "dataset_city": "",
+        "dataset_active": "True",
+        "dataset_file_name": "Dataset1_charging_reports.csv",
+        "dataset_sheet_name": "",
+        "dataset_file_type": "csv",
+        "dataset_delimiter": ";",
+        "dataset_encoding": "latin1",
+        "dataset_license": "Creative Commons Attribution 4.0 International ",
+        "dataset_charging_point_type": "private (domestic)",
+        "dataset_notes": "",
+        "text_quotes": "\"",
+        "decimal": ","
+    },
+    {
+        "dataset_name": "Norway_12loc_v2",
+        "dataset_url": "https://zenodo.org/records/13896176",
         "dataset_description": "Electric vehicle charging dataset with 35,000 charging sessions from 12 residential locations in Norway",
         "dataset_owner": "",
         "dataset_country": "NO",

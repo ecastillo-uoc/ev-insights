@@ -1,6 +1,7 @@
 import os
 from pprint import pprint
 from src.services.service import Service
+from src.utils.logger import Colors
 
 
 class IngestionService(Service):
@@ -19,7 +20,7 @@ class IngestionService(Service):
             # Ingest bulk datasets
             for dataset_id, dataset_value in self.input_interface.datasets.items():
 
-                self.logger.info("Ingesting dataset %s" % dataset_value['info']['dataset_name'])
+                self.logger.info(f"Ingesting dataset {Colors.BLUE}{dataset_value['info']['dataset_name']}{Colors.NORMAL}" )
 
                 # Insert dataset details
                 dataset_count = 0
