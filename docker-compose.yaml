@@ -10,7 +10,8 @@ volumes:
 
 networks:
   www:
-    external: true
+    name: www
+    driver: bridge
 
 services:
 
@@ -25,7 +26,7 @@ services:
     environment:
       - SERVICE_ENVIRONMENT=${SERVICE_ENVIRONMENT}
       - SERVICE_SCHEDULE_ENABLED=${SCHEDULE_ENABLED}
-    command: sh -c "chmod 777 entrypoint.sh && ./entrypoint.sh"
+    command: sh -c "ls -la && chmod 777 entrypoint.sh && ./entrypoint.sh"
     networks:
       - www
     depends_on:
@@ -124,7 +125,7 @@ services:
     entrypoint: >
       bash -c "
       mc alias set minio http://minio:${MINIO_PORT} ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY} &&
-      if ! mc ls minio | grep --quiet ${AWS_BUCKET_NAME}; then
+      if ! mc ls minio/${AWS_BUCKET_NAME} > /dev/null 2>&1; then
         mc mb minio/${AWS_BUCKET_NAME}
       else
         echo '${AWS_BUCKET_NAME} already exists'
