@@ -1,6 +1,6 @@
-import os
 import logging
 from abc import abstractmethod
+from pathlib import Path, PureWindowsPath
 from src.interfaces.interface import init_interface
 from datetime import datetime
 from pprint import pprint
@@ -11,9 +11,8 @@ SERVICES = {"analysis", "forecast", "ingestion", "admin"}
 class Service:
     def __init__(self, name, output_dir, interfaces):
         self.name = name
-        self.output_dir = output_dir
-        if not os.path.isdir(self.output_dir):
-            os.makedirs(self.output_dir)
+        self.output_dir = Path(PureWindowsPath(output_dir))
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger('service')
         self.logger.info("Initialized " + self.name)
         self.interfaces = interfaces

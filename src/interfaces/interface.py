@@ -1,7 +1,7 @@
-import os
 import logging
 from abc import abstractmethod
 from datetime import datetime
+from pathlib import Path, PureWindowsPath
 from pprint import pprint
 
 INTERFACES = {"File", "MySql", "PostgreSql", "MLflow"}
@@ -11,9 +11,8 @@ class Interface:
     def __init__(self, name, type, output_dir):
         self.name = name
         self.type = type
-        self.output_dir = output_dir
-        if not os.path.isdir(self.output_dir):
-            os.makedirs(self.output_dir)
+        self.output_dir = Path(PureWindowsPath(output_dir))
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger('interface')
         self.logger.info("Initialized " + self.name)
         return

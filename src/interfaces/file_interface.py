@@ -4,7 +4,7 @@ import json
 import glob
 import logging
 import csv
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import pandas as pd
 from pprint import pprint
 from datetime import datetime, timedelta
@@ -41,13 +41,13 @@ class File(Interface):
             datasets_details_file (str): Path to the file containing dataset metadata.
         """
         super().__init__(name=name, type=type, output_dir=output_dir)
-        self.input_dir = input_dir
+        self.input_dir = Path(PureWindowsPath(input_dir))
         self.limit_rows = limit_rows
         self.input_data_type = input_data_type
 
         # Data gathering from files
         if self.type == "input":
-            self.datasets_details_file = Path(datasets_details_file)
+            self.datasets_details_file = Path(PureWindowsPath(datasets_details_file))
             self.datasets_list = datasets_list
 
             if self.input_data_type == 'bulk':
