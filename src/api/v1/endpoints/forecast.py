@@ -23,7 +23,7 @@ else:
 
 router = APIRouter()
 
-if bool(os.environ["SCHEDULE_ENABLED"]) == True:
+if bool(os.environ["SERVICE_SCHEDULE_ENABLED"]) == True:
     scheduler = AsyncIOScheduler()
 
 
@@ -131,7 +131,7 @@ async def predict(params: PredictModelsDataParams):
         return {'message': str(e)}
 
 
-if bool(os.environ["SCHEDULE_ENABLED"]) == True:
+if bool(os.environ["SERVICE_SCHEDULE_ENABLED"]) == True:
     @router.on_event("startup")
     def startup_event():
         # Run predict schedule each midnight

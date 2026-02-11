@@ -10,8 +10,7 @@ volumes:
 
 networks:
   www:
-    name: www
-    driver: bridge
+    external: true
 
 services:
 
@@ -25,7 +24,7 @@ services:
       context: .
     environment:
       - SERVICE_ENVIRONMENT=${SERVICE_ENVIRONMENT}
-      - SERVICE_SCHEDULE_ENABLED=${SCHEDULE_ENABLED}
+      - SERVICE_SCHEDULE_ENABLED=${SERVICE_SCHEDULE_ENABLED}
     command: sh -c "ls -la && chmod 777 entrypoint.sh && ./entrypoint.sh"
     networks:
       - www
@@ -34,7 +33,7 @@ services:
       - mlflow
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.evinsights-services.rule=Host(`<your_hostname>`)"
+      - "traefik.http.routers.evinsights-services.rule=Host(`api.${HOSTNAME}`)"
       - "traefik.http.routers.evinsights-services.entrypoints=web"
       - "traefik.http.routers.evinsights-services.service=evinsights-services"
       - "traefik.http.services.evinsights-services.loadbalancer.server.port=${SERVICE_PORT}"
@@ -51,12 +50,12 @@ services:
       - ../../volumes/evinsights/evinsights-data/repo/evinsights/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - www
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.evinsights_postgres.rule=Host(`<your_hostname>`)"
-      - "traefik.http.routers.evinsights_postgres.entrypoints=web"
-      - "traefik.http.routers.evinsights_postgres.service=evinsights_postgres"
-      - "traefik.http.services.evinsights_postgres.loadbalancer.server.port=${PG_PORT}"
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.evinsights_postgres.rule=Host(`${HOSTNAME}`)"
+    #   - "traefik.http.routers.evinsights_postgres.entrypoints=web"
+    #   - "traefik.http.routers.evinsights_postgres.service=evinsights_postgres"
+    #   - "traefik.http.services.evinsights_postgres.loadbalancer.server.port=${PG_PORT}"
 
   pgadmin:
     image: dpage/pgadmin4
@@ -69,14 +68,14 @@ services:
       - ../../volumes/evinsights/pgadmin-var_lib_pgadmin:/var/lib/pgadmin
       - ../../volumes/evinsights/evinsights-data/repo/evinsights/servers.json:/pgadmin4/servers.json
       - ../../volumes/evinsights/evinsights-data/repo/evinsights/config_local.py:/pgadmin4/config_local.py
-    user: '$UID:$GID'
+    # user: '$UID:$GID'
     networks:
       - www
     depends_on:
       - postgres
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.evinsights_pgadmin4.rule=Host(`<your_hostname>`)"
+      - "traefik.http.routers.evinsights_pgadmin4.rule=Host(`pgadmin.${HOSTNAME}`)"
       - "traefik.http.routers.evinsights_pgadmin4.entrypoints=web"
       - "traefik.http.routers.evinsights_pgadmin4.service=evinsights_pgadmin4"
       - "traefik.http.services.evinsights_pgadmin4.loadbalancer.server.port=${PGADMIN_PORT}"
@@ -104,12 +103,12 @@ services:
     command: server /data
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.evinsights_minio-server.rule=Host(`<your_hostname>`)"
+      - "traefik.http.routers.evinsights_minio-server.rule=Host(`s3.${HOSTNAME}`)"
       - "traefik.http.routers.evinsights_minio-server.entrypoints=web"
       - "traefik.http.routers.evinsights_minio-server.service=evinsights_minio-server"
       - "traefik.http.services.evinsights_minio-server.loadbalancer.server.port=${MINIO_PORT}"
 
-      - "traefik.http.routers.evinsights_minio.rule=Host(`<your_hostname>`)"
+      - "traefik.http.routers.evinsights_minio.rule=Host(`minio.${HOSTNAME}`)"
       - "traefik.http.routers.evinsights_minio.entrypoints=web"
       - "traefik.http.routers.evinsights_minio.service=evinsights_minio"
       - "traefik.http.services.evinsights_minio.loadbalancer.server.port=${MINIO_CONSOLE_PORT}"
@@ -161,7 +160,7 @@ services:
       - minio
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.evinsights_mlflow.rule=Host(`<your_hostname>`)"
+      - "traefik.http.routers.evinsights_mlflow.rule=Host(`mlflow.${HOSTNAME}`)"
       - "traefik.http.routers.evinsights_mlflow.entrypoints=web"
       - "traefik.http.routers.evinsights_mlflow.service=evinsights_mlflow"
       - "traefik.http.services.evinsights_mlflow.loadbalancer.server.port=${MLFLOW_PORT}"
@@ -177,7 +176,7 @@ services:
       - ../../volumes/evinsights/prometheus-data:/prometheus
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.evinsights_prometheus.rule=Host(`<your_hostname>`)"
+      - "traefik.http.routers.evinsights_prometheus.rule=Host(`monitor.${HOSTNAME}`)"
       - "traefik.http.routers.evinsights_prometheus.entrypoints=web"
       - "traefik.http.routers.evinsights_prometheus.service=evinsights_prometheus"
       - "traefik.http.services.evinsights_prometheus.loadbalancer.server.port=${PROMETHEUS_PORT}"
