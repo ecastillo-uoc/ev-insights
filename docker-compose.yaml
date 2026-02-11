@@ -50,14 +50,15 @@ services:
       - ../../volumes/evinsights/evinsights-data/repo/evinsights/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - www
-    ports:
-      - "${PG_PORT}:5432"
-    # labels:
-    #   - "traefik.enable=true"
-    #   - "traefik.http.routers.evinsights_postgres.rule=Host(`${HOSTNAME}`)"
-    #   - "traefik.http.routers.evinsights_postgres.entrypoints=web"
-    #   - "traefik.http.routers.evinsights_postgres.service=evinsights_postgres"
-    #   - "traefik.http.services.evinsights_postgres.loadbalancer.server.port=${PG_PORT}"
+    # ports:
+    #   - "${PG_PORT}:543"
+    labels:
+      # To be able to access the database from outside the container through traefik
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.evinsights_postgres.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.evinsights_postgres.entrypoints=postgres"
+      - "traefik.tcp.routers.evinsights_postgres.service=evinsights_postgres"
+      - "traefik.tcp.services.evinsights_postgres.loadbalancer.server.port=5432"
 
   pgadmin:
     image: dpage/pgadmin4

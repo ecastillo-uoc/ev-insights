@@ -7,6 +7,7 @@ services:
       - "80:80"
       - "443:443"
       - "8080:8080"
+      - "5432:5432"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./conf/traefik/traefik.yml:/traefik.yml:ro
