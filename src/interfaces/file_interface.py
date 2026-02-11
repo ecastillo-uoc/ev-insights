@@ -146,8 +146,13 @@ class File(Interface):
             if inputfile.is_file():
                 df_orig = pd.DataFrame()
                 if dataset_info.get('dataset_file_type') == 'csv':
-                    df_orig = pd.read_csv(filepath_or_buffer=inputfile, delimiter=dataset_info.get('dataset_delimiter'),
-                                          encoding=dataset_info.get('dataset_encoding'), nrows=limit_rows)
+                    _delimiter = dataset_info.get('dataset_delimiter')
+                    _encoding = dataset_info.get('dataset_encoding')
+                    _text_quotes = dataset_info.get('text_quotes','"').replace('\'','')
+                    _decimal = dataset_info.get('decimal',',')
+                    df_orig = pd.read_csv(filepath_or_buffer=inputfile, delimiter=_delimiter,
+                                          encoding=_encoding, nrows=limit_rows,
+                                          quotechar =_text_quotes, decimal=_decimal)
 
                 if dataset_info.get('dataset_file_type') == 'xlsx':
                     df_orig = pd.read_excel(io=inputfile, sheet_name=dataset_info['dataset_sheet_name'],
