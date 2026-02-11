@@ -1,11 +1,10 @@
 import json
-import os
 import sys
 import argparse
 import logging
 from shutil import copy
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from pprint import pprint
 from src.utils.logger import Logger
 from src.services.service import init_service
@@ -35,7 +34,7 @@ def main(config_file=None, config_json=None):
         config = config_json['services'][service_name]
 
         # Init output dir
-        output_dir = Path(config['utils']['output_dir']).resolve() / (
+        output_dir = Path(PureWindowsPath(config['utils']['output_dir'])).resolve() / (
             datetime_now.strftime("%Y-%m-%d_%H.%M.%S") + "__" +
             Path(__file__).stem + "__" +
             config_file_path.stem
@@ -49,26 +48,26 @@ def main(config_file=None, config_json=None):
         config_dir.mkdir(parents=True, exist_ok=True)
 
         # Init log dir
-        log_dir = output_dir / config['utils']['logger']['output_dir']
+        log_dir = output_dir / PureWindowsPath(config['utils']['logger']['output_dir'])
         config['utils']['logger']['output_dir'] = str(log_dir)
         log_dir.mkdir(parents=True, exist_ok=True)
 
         # Init interfaces dir
-        input_interface_dir = output_dir / config['interfaces']['input']['output_dir']
+        input_interface_dir = output_dir / PureWindowsPath(config['interfaces']['input']['output_dir'])
         config['interfaces']['input']['output_dir'] = str(input_interface_dir)
         input_interface_dir.mkdir(parents=True, exist_ok=True)
 
-        output_interface_dir = output_dir / config['interfaces']['output']['output_dir']
+        output_interface_dir = output_dir / PureWindowsPath(config['interfaces']['output']['output_dir'])
         config['interfaces']['output']['output_dir'] = str(output_interface_dir)
         output_interface_dir.mkdir(parents=True, exist_ok=True)
 
         if "mlflow" in config['interfaces']:
-            mlflow_dir = Path(config['utils']['input_dir']) / config['interfaces']['mlflow']['mlflow_dir']
+            mlflow_dir = Path(PureWindowsPath(config['utils']['input_dir'])) / Path(PureWindowsPath(config['interfaces']['mlflow']['mlflow_dir']))
             config['interfaces']['mlflow']['mlflow_dir'] = str(mlflow_dir.resolve())
             mlflow_dir.mkdir(parents=True, exist_ok=True)
 
         # Init service dir
-        output_service_dir = output_dir / config['output_dir']
+        output_service_dir = output_dir / PureWindowsPath(config['output_dir'])
         config['output_dir'] = str(output_service_dir)
         output_service_dir.mkdir(parents=True, exist_ok=True)
 
@@ -82,14 +81,14 @@ def main(config_file=None, config_json=None):
             copy(config_file_path, config_dir)
             # Save also utils config file with full path for any inconvenience
             filename = Path(config_file_path).stem + "_fullpaths.json"
-            file_path = os.path.join(config_dir, filename)
-            with open(file_path, 'w') as json_file:
+            file_path = config_dir / filename
+            with file_path.open('w') as json_file:
                 json.dump(config, json_file, indent=4)
 
         elif config_json is not None:
             # Write config into the output folder
-            file_path = os.path.join(config_dir, "api_conf_file.json")
-            with open(file_path, 'w') as json_file:
+            file_path = config_dir / "api_conf_file.json"
+            with file_path.open('w') as json_file:
                 json.dump(config, json_file, indent=4)
 
         # Init service
