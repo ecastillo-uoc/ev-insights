@@ -9,8 +9,7 @@ from pathlib import Path
 from pprint import pprint
 from src.utils.logger import Logger
 from src.services.service import init_service
-path = os.path.dirname(os.path.dirname(__file__))
-sys.path.append(path)
+sys.path.append(str(Path(__file__).parent.parent))
 
 
 def main(config_file=None, config_json=None):
@@ -25,10 +24,10 @@ def main(config_file=None, config_json=None):
             raise Exception("Please only provide config_file_path or config_json")
 
         if config_file is not None:
-            config_file_path = config_file
-            config_json = json.loads(open(config_file).read().replace("\n", ""))
+            config_file_path = Path(config_file)
+            config_json = json.loads(config_file_path.read_text().replace("\n", ""))
         elif config_json is not None:
-            config_file_path = "api_" + config_json['service']
+            config_file_path = Path("api_" + config_json['service'])
 
         datetime_now = datetime.now()
 
@@ -36,46 +35,42 @@ def main(config_file=None, config_json=None):
         config = config_json['services'][service_name]
 
         # Init output dir
-        output_dir = os.path.join(config['utils']['output_dir'],
-                                  datetime_now.strftime("%Y-%m-%d_%H.%M.%S") + "__" +
-                                  Path(os.path.basename(__file__)).stem + "__" +
-                                  Path(os.path.basename(config_file_path)).stem)
-        config['utils']['output_dir'] = os.path.abspath(output_dir)
-        if not os.path.isdir(output_dir):
-            os.makedirs(output_dir)
+        output_dir = Path(config['utils']['output_dir']).resolve() / (
+            datetime_now.strftime("%Y-%m-%d_%H.%M.%S") + "__" +
+            Path(__file__).stem + "__" +
+            config_file_path.stem
+        )
+        config['utils']['output_dir'] = str(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
         # Init config dir
-        config_dir = os.path.join(output_dir, 'config')
-        config['utils']['config_dir'] = os.path.abspath(config_dir)
-        if not os.path.isdir(config_dir):
-            os.makedirs(config_dir)
+        config_dir = output_dir / 'config'
+        config['utils']['config_dir'] = str(config_dir)
+        config_dir.mkdir(parents=True, exist_ok=True)
 
         # Init log dir
-        log_dir = os.path.join(output_dir, config['utils']['logger']['output_dir'])
-        config['utils']['logger']['output_dir'] = os.path.abspath(log_dir)
-        if not os.path.isdir(log_dir):
-            os.makedirs(log_dir)
+        log_dir = output_dir / config['utils']['logger']['output_dir']
+        config['utils']['logger']['output_dir'] = str(log_dir)
+        log_dir.mkdir(parents=True, exist_ok=True)
 
         # Init interfaces dir
-        input_interface_dir = os.path.join(output_dir, config['interfaces']['input']['output_dir'])
-        config['interfaces']['input']['output_dir'] = os.path.abspath(input_interface_dir)
-        if not os.path.isdir(input_interface_dir):
-            os.makedirs(input_interface_dir)
-        output_interface_dir = os.path.join(output_dir, config['interfaces']['output']['output_dir'])
-        config['interfaces']['output']['output_dir'] = os.path.abspath(output_interface_dir)
-        if not os.path.isdir(output_interface_dir):
-            os.makedirs(output_interface_dir)
+        input_interface_dir = output_dir / config['interfaces']['input']['output_dir']
+        config['interfaces']['input']['output_dir'] = str(input_interface_dir)
+        input_interface_dir.mkdir(parents=True, exist_ok=True)
+
+        output_interface_dir = output_dir / config['interfaces']['output']['output_dir']
+        config['interfaces']['output']['output_dir'] = str(output_interface_dir)
+        output_interface_dir.mkdir(parents=True, exist_ok=True)
+
         if "mlflow" in config['interfaces']:
-            mlflow_dir = os.path.join(config['utils']['input_dir'], config['interfaces']['mlflow']['mlflow_dir'])
-            config['interfaces']['mlflow']['mlflow_dir'] = os.path.abspath(mlflow_dir)
-            if not os.path.isdir(mlflow_dir):
-                os.makedirs(mlflow_dir)
+            mlflow_dir = Path(config['utils']['input_dir']) / config['interfaces']['mlflow']['mlflow_dir']
+            config['interfaces']['mlflow']['mlflow_dir'] = str(mlflow_dir.resolve())
+            mlflow_dir.mkdir(parents=True, exist_ok=True)
 
         # Init service dir
-        output_service_dir = os.path.join(output_dir, config['output_dir'])
-        config['output_dir'] = os.path.abspath(output_service_dir)
-        if not os.path.isdir(output_service_dir):
-            os.makedirs(output_service_dir)
+        output_service_dir = output_dir / config['output_dir']
+        config['output_dir'] = str(output_service_dir)
+        output_service_dir.mkdir(parents=True, exist_ok=True)
 
         # Init logger
         Logger(config=config['utils']['logger'], filename="main")

@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+from pathlib import Path
 from pprint import pprint
 from fastapi import APIRouter, Depends
 from src.api.v1.models.forecast import TrainModelsDataParams, PredictModelsDataParams
@@ -12,11 +13,11 @@ from apscheduler.executors.pool import ThreadPoolExecutor
 
 # Set base conf
 if os.environ["SERVICE_ENVIRONMENT"] == "dev":
-    base_conf_folder_path = "conf/api/dev"
+    base_conf_folder_path = Path("conf/api/dev")
 elif os.environ["SERVICE_ENVIRONMENT"] == "test":
-    base_conf_folder_path = "conf/api/test"
+    base_conf_folder_path = Path("conf/api/test")
 elif os.environ["SERVICE_ENVIRONMENT"] == "prod":
-    base_conf_folder_path = "conf/api/prod"
+    base_conf_folder_path = Path("conf/api/prod")
 else:
     raise Exception(f"Wrong environment: {os.environ['SERVICE_ENVIRONMENT']}")
 
@@ -31,10 +32,10 @@ if bool(os.environ["SERVICE_SCHEDULE_ENABLED"]) == True:
 async def train(params: TrainModelsDataParams):
     try:
         # Load base conf file
-        base_conf_file_path = os.path.join(base_conf_folder_path, f"conf_api_forecast_train.json")
+        base_conf_file_path = base_conf_folder_path / "conf_api_forecast_train.json"
 
-        if os.path.isfile(base_conf_file_path):
-            config = json.loads(open(base_conf_file_path).read().replace("\n", ""))
+        if base_conf_file_path.is_file():
+            config = json.loads(base_conf_file_path.read_text().replace("\n", ""))
 
             # Add dynamic details to the base conf file
             # Set dataset_name
@@ -72,10 +73,10 @@ async def predict(params: PredictModelsDataParams):
     try:
         mode = params.mode
         # Load base conf file
-        base_conf_file_path = os.path.join(base_conf_folder_path, f"conf_api_forecast_predict_{mode}.json")
+        base_conf_file_path = base_conf_folder_path / f"conf_api_forecast_predict_{mode}.json"
         config = None
-        if os.path.isfile(base_conf_file_path):
-            config = json.loads(open(base_conf_file_path).read().replace("\n", ""))
+        if base_conf_file_path.is_file():
+            config = json.loads(base_conf_file_path.read_text().replace("\n", ""))
 
         if config:
             # Set mode (predict submode)

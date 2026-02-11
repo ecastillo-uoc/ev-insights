@@ -2,6 +2,7 @@ import argparse
 import os
 import json
 import subprocess
+from pathlib import Path
 
 
 def start_mlflow_server(backend_store_uri, default_artifact_root, host, port):
@@ -36,7 +37,7 @@ if __name__ == "__main__":
 
     config_file_path = args.c
 
-    config = json.loads(open(config_file_path).read().replace("\n", ""))
+    config = json.loads(Path(config_file_path).read_text().replace("\n", ""))
 
     print("Starting mlflow server...")
     start_mlflow_server(backend_store_uri=config['storage_uri'],

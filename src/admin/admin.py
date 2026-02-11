@@ -2,13 +2,14 @@ import os
 import logging
 import importlib
 import pandas as pd
+from pathlib import Path
 from pprint import pprint
 from abc import abstractmethod
 from src.interfaces.interface import Interface
 
 # Retrieve the names of admin functions from the source, ensuring the list updates automatically whenever a new admin is added.
-ADMIN = [s.replace(".py", "") for s in [f for f in os.listdir(os.path.dirname(os.path.abspath(__file__)))
-                                           if ".py" in f and f not in ["admin.py", "_sample_admin.py", "__init__.py"]]]
+ADMIN = [p.stem for p in Path(__file__).parent.glob("*.py")
+         if p.name not in ["admin.py", "_sample_admin.py", "__init__.py"]]
 
 
 class Admin:
@@ -19,9 +20,8 @@ class Admin:
         self.info = info
         self.enabled = enabled
         self.output_interface = output_interface
-        self.output_dir = output_dir
-        if not os.path.isdir(self.output_dir):
-            os.makedirs(self.output_dir)
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.save_results = save_results
         self.custom_params = custom_params
         self.logger = logging.getLogger('admin')
@@ -36,8 +36,8 @@ class Admin:
 
     def save_output_to_file(self):
         # Save output to file
-        filename = os.path.join(self.output_dir, f"{self.name}.json")
-        with open(filename, 'w') as file:
+        filename = self.output_dir / f"{self.name}.json"
+        with filename.open('w') as file:
             pprint(self.results, stream=file)
 
         return

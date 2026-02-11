@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from pprint import pprint
 from src.services.service import Service
 from src.analysis.analysis import init_analysis
@@ -23,7 +24,7 @@ class AnalysisService(Service):
                 analysis_name = f"{analysis_conf['id']}_{analysis_conf['name']}"
             else:
                 analysis_name = f"{analysis_conf['name']}"
-            analysis_conf['output_dir'] = os.path.join(self.output_dir, analysis_name)
+            analysis_conf['output_dir'] = str(Path(self.output_dir) / analysis_name)
             full_custom_mode = analysis_conf['full_custom_mode'] \
                 if "full_custom_mode" in analysis_conf.keys() and analysis_conf['full_custom_mode'] is True else False
             analysis = init_analysis(config=analysis_conf,

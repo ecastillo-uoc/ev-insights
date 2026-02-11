@@ -1,6 +1,7 @@
 import copy
 import os
 import socket
+from pathlib import Path
 from logging.config import dictConfig
 
 # config attributes example:
@@ -72,20 +73,19 @@ class Logger:
     }
 
     def __init__(self, config, filename=None):
-        log_dir = config['output_dir']
-        if not os.path.isdir(log_dir):
-            os.makedirs(log_dir)
+        log_dir = Path(config['output_dir'])
+        log_dir.mkdir(parents=True, exist_ok=True)
         logger_config_tmp = copy.deepcopy(self.LOGGER_CONFIG_DEFAULT)
         if filename:
             logger_config_tmp['handlers']['info_rotating_file_handler']['filename'] = \
-                os.path.join(log_dir, filename + "_" + logger_config_tmp['handlers']['info_rotating_file_handler']['filename'])
+                str(log_dir / (filename + "_" + logger_config_tmp['handlers']['info_rotating_file_handler']['filename']))
             logger_config_tmp['handlers']['error_file_handler']['filename'] = \
-                os.path.join(log_dir, filename + "_" + logger_config_tmp['handlers']['error_file_handler']['filename'])
+                str(log_dir / (filename + "_" + logger_config_tmp['handlers']['error_file_handler']['filename']))
         else:
             logger_config_tmp['handlers']['info_rotating_file_handler']['filename'] = \
-                os.path.join(log_dir, logger_config_tmp['handlers']['info_rotating_file_handler']['filename'])
+                str(log_dir / logger_config_tmp['handlers']['info_rotating_file_handler']['filename'])
             logger_config_tmp['handlers']['error_file_handler']['filename'] = \
-                os.path.join(log_dir, logger_config_tmp['handlers']['error_file_handler']['filename'])
+                str(log_dir / logger_config_tmp['handlers']['error_file_handler']['filename'])
 
         if config['email_notifications']:
             logger_config_tmp['handlers']['mail_handler']['credentials'] = \

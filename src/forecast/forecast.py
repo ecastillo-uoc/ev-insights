@@ -4,13 +4,14 @@ import logging
 import importlib
 import pandas as pd
 from datetime import datetime
+from pathlib import Path
 from pprint import pprint
 from abc import abstractmethod
 from src.interfaces.interface import Interface
 
 # Retrieve the names of forecasts from the source, ensuring the list updates automatically whenever a new forecast is added.
-FORECAST = [s.replace(".py", "") for s in [f for f in os.listdir(os.path.dirname(os.path.abspath(__file__)))
-                                           if ".py" in f and f not in ["forecast.py", "_sample_forecast.py", "__init__.py"]]]
+FORECAST = [p.stem for p in Path(__file__).parent.glob("*.py")
+            if p.name not in ["forecast.py", "_sample_forecast.py", "__init__.py"]]
 
 
 class Forecast:
@@ -29,9 +30,8 @@ class Forecast:
         self.full_custom_mode = full_custom_mode
         self.mode = mode
         self.submode = submode
-        self.models_dir = models_dir
-        if not os.path.isdir(self.models_dir):
-            os.makedirs(self.models_dir)
+        self.models_dir = Path(models_dir)
+        self.models_dir.mkdir(parents=True, exist_ok=True)
         self.model_name = model_name
         self.show_images = show_images
         self.save_images = save_images
@@ -40,9 +40,8 @@ class Forecast:
         self.output_interface = output_interface
         self.mlflow_interface = mlflow_interface
         # TODO add merge
-        self.output_dir = output_dir
-        if not os.path.isdir(self.output_dir):
-            os.makedirs(self.output_dir)
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.data_selection = data_selection
         self.custom_params = custom_params
         self.logger = logging.getLogger('forecast')
@@ -91,8 +90,8 @@ class Forecast:
     # TODO This should be moved into the interface
     def save_output_to_file(self):
         # Save output to file
-        filename = os.path.join(self.output_dir, f"{self.name}.json")
-        with open(filename, 'w') as file:
+        filename = self.output_dir / f"{self.name}.json"
+        with filename.open('w') as file:
             pprint(self.results, stream=file)
 
         return
@@ -188,7 +187,7 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
                                      full_custom_mode=config['full_custom_mode'],
                                      mode=config['mode'],
                                      submode=config['submode'] if 'submode' in config.keys() else None,
-                                     models_dir=os.path.join(models_dir, config['name']),
+                                     models_dir=str(Path(models_dir) / config['name']),
                                      model_name=config['model_name'],
                                      show_images=config['show_images'],
                                      save_images=config['save_images'],

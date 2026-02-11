@@ -2,13 +2,14 @@ import os
 import logging
 import importlib
 import pandas as pd
+from pathlib import Path
 from pprint import pprint
 from abc import abstractmethod
 from src.interfaces.interface import Interface
 
 # Retrieve the names of analyses from the source, ensuring the list updates automatically whenever a new analysis is added.
-ANALYSIS = [s.replace(".py", "") for s in [f for f in os.listdir(os.path.dirname(os.path.abspath(__file__)))
-                                           if ".py" in f and f not in ["analysis.py", "_sample_analysis.py", "__init__.py"]]]
+ANALYSIS = [p.stem for p in Path(__file__).parent.glob("*.py")
+            if p.name not in ["analysis.py", "_sample_analysis.py", "__init__.py"]]
 
 
 class Analysis:
@@ -26,9 +27,8 @@ class Analysis:
         self.input_interface = input_interface
         self.output_interface = output_interface
         # TODO add merge
-        self.output_dir = output_dir
-        if not os.path.isdir(self.output_dir):
-            os.makedirs(self.output_dir)
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.data_selection = data_selection
         self.custom_params = custom_params
         self.logger = logging.getLogger('analysis')
@@ -59,8 +59,11 @@ class Analysis:
 
     def save_output_to_file(self):
         # Save output to file
-        filename = os.path.join(self.output_dir, f"{self.name}.json")
-        with open(filename, 'w') as file:
+        # Since self.output_dir is now a pathlib.Path object (initialized in __init__), 
+        # using the / operator to join it with the filename string is the correct 
+        # and idiomatic way to construct paths in modern Python.
+        filename = self.output_dir / f"{self.name}.json"
+        with filename.open('w') as file:
             pprint(self.results, stream=file)
 
         return

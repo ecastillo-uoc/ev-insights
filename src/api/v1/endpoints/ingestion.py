@@ -2,6 +2,7 @@ import os
 import glob
 import json
 import shutil
+from pathlib import Path
 from pprint import pprint
 from datetime import datetime
 from fastapi import APIRouter, Depends
@@ -10,11 +11,11 @@ from src.__main__ import main
 
 # Set base conf
 if os.environ["SERVICE_ENVIRONMENT"] == "dev":
-    base_conf_folder_path = "conf/api/dev"
+    base_conf_folder_path = Path("conf/api/dev")
 elif os.environ["SERVICE_ENVIRONMENT"] == "test":
-    base_conf_folder_path = "conf/api/test"
+    base_conf_folder_path = Path("conf/api/test")
 elif os.environ["SERVICE_ENVIRONMENT"] == "prod":
-    base_conf_folder_path = "conf/api/prod"
+    base_conf_folder_path = Path("conf/api/prod")
 else:
     raise Exception(f"Wrong environment: {os.environ['SERVICE_ENVIRONMENT']}")
 
@@ -44,9 +45,9 @@ async def ingest_datasets(params: IngestDatasetsParams):
 
     try:
         # Load base conf file
-        base_conf_file_path = os.path.join(base_conf_folder_path, "conf_api_ingestdatasets.json")
-        if os.path.isfile(base_conf_file_path):
-            config = json.loads(open(base_conf_file_path).read().replace("\n", ""))
+        base_conf_file_path = base_conf_folder_path / "conf_api_ingestdatasets.json"
+        if base_conf_file_path.is_file():
+            config = json.loads(base_conf_file_path.read_text().replace("\n", ""))
 
             # Add dynamic details to the basic conf file
             config["services"]["ingestion"]["interfaces"]["input"]["datasets_list"] = params.datasets_list

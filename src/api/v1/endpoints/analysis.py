@@ -1,5 +1,6 @@
 import os
 import json
+from pathlib import Path
 from pprint import pprint
 from fastapi import APIRouter, Depends
 from src.api.v1.models.analysis import Stats
@@ -9,11 +10,11 @@ from src.celery_apps.tasks.analysis_tasks import stats_task
 
 # Set base conf
 if os.environ["SERVICE_ENVIRONMENT"] == "dev":
-    base_conf_folder_path = "conf/api/dev"
+    base_conf_folder_path = Path("conf/api/dev")
 elif os.environ["SERVICE_ENVIRONMENT"] == "test":
-    base_conf_folder_path = "conf/api/testa"
+    base_conf_folder_path = Path("conf/api/test")
 elif os.environ["SERVICE_ENVIRONMENT"] == "prod":
-    base_conf_folder_path = "conf/api/prod"
+    base_conf_folder_path = Path("conf/api/prod")
 else:
     raise Exception(f"Wrong environment: {os.environ['SERVICE_ENVIRONMENT']}")
 
@@ -41,9 +42,9 @@ async def stats(params: Stats):
 
     try:
         # Load base conf file
-        base_conf_file_path = os.path.join(base_conf_folder_path, "conf_api_stats.json")
-        if os.path.isfile(base_conf_file_path):
-            config = json.loads(open(base_conf_file_path).read().replace("\n", ""))
+        base_conf_file_path = base_conf_folder_path / "conf_api_stats.json"
+        if base_conf_file_path.is_file():
+            config = json.loads(base_conf_file_path.read_text().replace("\n", ""))
 
             # Customize conf file based on entity value
             if params.entity == 'db':

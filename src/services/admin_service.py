@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from pprint import pprint
 from src.services.service import Service
 from src.admin.admin import init_admin
@@ -16,7 +17,7 @@ class AdminService(Service):
         # Data analysis
         for admin_conf in self.admin_list:
 
-            admin_conf['output_dir'] = os.path.join(self.output_dir, admin_conf['name'])
+            admin_conf['output_dir'] = str(Path(self.output_dir) / admin_conf['name'])
             admin = init_admin(config=admin_conf, output_interface=self.output_interface)
 
             output_tmp = admin.run()

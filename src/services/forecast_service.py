@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from pprint import pprint
 from src.services.service import Service
 from src.forecast.forecast import init_forecast
@@ -23,7 +24,7 @@ class ForecastService(Service):
                 forecast_name = f"{forecast_conf['id']}_{forecast_conf['name']}"
             else:
                 forecast_name = f"{forecast_conf['name']}"
-            forecast_conf['output_dir'] = os.path.join(self.output_dir, forecast_name)
+            forecast_conf['output_dir'] = str(Path(self.output_dir) / forecast_name)
             full_custom_mode = forecast_conf['full_custom_mode'] \
                 if "full_custom_mode" in forecast_conf.keys() and forecast_conf['full_custom_mode'] is True else False
             forecast = init_forecast(config=forecast_conf,

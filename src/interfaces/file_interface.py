@@ -4,6 +4,7 @@ import json
 import glob
 import logging
 import csv
+from pathlib import Path
 import pandas as pd
 from pprint import pprint
 from datetime import datetime, timedelta
@@ -46,7 +47,7 @@ class File(Interface):
 
         # Data gathering from files
         if self.type == "input":
-            self.datasets_details_file = datasets_details_file
+            self.datasets_details_file = Path(datasets_details_file)
             self.datasets_list = datasets_list
 
             if self.input_data_type == 'bulk':
@@ -60,11 +61,11 @@ class File(Interface):
             elif self.input_data_type == 'table':
                 # Get data structured in tables (dataset, user, chargingstation, chargingsession)
                 self.logger.info(f"Ingest files from this folder {self.input_dir}")
-                self.file_list = glob.glob(os.path.join(self.input_dir,  "*.csv"))
+                self.file_list = list(Path(self.input_dir).glob("*.csv"))
 
                 self.data = {}
                 for file_path in self.file_list:
-                    file_name = os.path.basename(file_path)
+                    file_name = file_path.name
                     self.data.update({file_path: {'file_name': file_name,
                                                   'pilot': file_name.split("_")[1] if len(file_name.split("_")) == 3 else file_name.split("_")[0],
                                                   'table': (file_name.split("_")[2] if len(file_name.split("_")) == 3 else file_name.split("_")[1]).split(".")[0],
@@ -90,7 +91,7 @@ class File(Interface):
         Returns:
             int: Priority value for sorting.
         """
-        file_name = os.path.basename(file_path).lower()
+        file_name = Path(file_path).name.lower()
         for key in self.priority_map:
             if key in file_name:
                 return self.priority_map[key]
@@ -139,22 +140,21 @@ class File(Interface):
         datasets = {}
         for dataset_info in datasets_details:
             self.logger.info("Gathering '%s' dataset" % dataset_info['dataset_name'])
-            inputfile = os.path.join(self.input_dir, dataset_info['dataset_name'], dataset_info.get('dataset_file_name'))
+            inputfile = Path(self.input_dir) / dataset_info['dataset_name'] / dataset_info.get('dataset_file_name')
             self.logger.info(inputfile)
 
-            if os.path.exists(inputfile):
+            if inputfile.is_file():
                 df_orig = pd.DataFrame()
                 if dataset_info.get('dataset_file_type') == 'csv':
-                    df_orig = pd.read_csv(filepath_or_buffer=str(inputfile), delimiter=dataset_info.get('dataset_delimiter'),
+                    df_orig = pd.read_csv(filepath_or_buffer=inputfile, delimiter=dataset_info.get('dataset_delimiter'),
                                           encoding=dataset_info.get('dataset_encoding'), nrows=limit_rows)
 
                 if dataset_info.get('dataset_file_type') == 'xlsx':
-                    df_orig = pd.read_excel(io=str(inputfile), sheet_name=dataset_info['dataset_sheet_name'],
+                    df_orig = pd.read_excel(io=inputfile, sheet_name=dataset_info['dataset_sheet_name'],
                                             engine='openpyxl', nrows=limit_rows)
 
                 if dataset_info.get('dataset_file_type') == 'json':
-                    with open(inputfile) as data_file:
-                        data = json.load(data_file)
+                    data = json.loads(inputfile.read_text())
                     # TODO: Generalize "items" json flattening may be an issue
                     df_orig = pd.json_normalize(data, '_items').head(self.limit_rows)
 
@@ -485,16 +485,16 @@ class File(Interface):
         """
         for model_name, output in results['train'].items():
             model_filename = f"{model_name}.ubj"
-            custom_file_path_name = os.path.join(os.path.dirname(file_path), model_filename)
+            custom_file_path_name = Path(file_path).parent / model_filename
             # Rename existing files, if present, to keep track old models
-            if os.path.exists(custom_file_path_name):  # TODO flag per mantenere o meno vecchi modelli
-                path = os.path.dirname(custom_file_path_name)
-                new_file_name = f'{os.path.basename(custom_file_path_name)}.{datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]}'
-                new_file_path_name = os.path.join(path, new_file_name)
-                os.rename(custom_file_path_name, new_file_path_name)
+            if custom_file_path_name.exists():  # TODO flag per mantenere o meno vecchi modelli
+                path = custom_file_path_name.parent
+                new_file_name = f'{custom_file_path_name.name}.{datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]}'
+                new_file_path_name = path / new_file_name
+                custom_file_path_name.rename(new_file_path_name)
             # Save model to file
             model = output['model']
-            model.save_model(custom_file_path_name)
+            model.save_model(str(custom_file_path_name))
 
         return
 

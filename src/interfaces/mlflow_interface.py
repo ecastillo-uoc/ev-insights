@@ -1,6 +1,7 @@
 import os
 import requests
 import time
+from pathlib import Path
 from pprint import pprint
 from src.interfaces.interface import Interface
 import mlflow
@@ -17,9 +18,8 @@ class MLflow(Interface):
     def __init__(self, name, type, output_dir, mlflow_dir, host, port, user, password, bucket_name, init_storage):
         super().__init__(name=name, type=type, output_dir=output_dir)
 
-        self.mlflow_dir = mlflow_dir
-        if not os.path.isdir(self.mlflow_dir):
-            os.makedirs(self.mlflow_dir)
+        self.mlflow_dir = Path(mlflow_dir)
+        self.mlflow_dir.mkdir(parents=True, exist_ok=True)
         self.host = host
         self.port = port
         self.user = user
