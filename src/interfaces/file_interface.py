@@ -226,7 +226,7 @@ class File(Interface):
 
     def prepare_dataset_amb_barcellona(self, df):
         """
-        Prepares the dataset for the 'AMB_Barcellona' source by renaming columns and adding required fields.
+        Prepares the dataset for the 'AMB_Barcelona' source by renaming columns and adding required fields.
 
         Args:
             df (pd.DataFrame): The input DataFrame containing raw data.
@@ -426,7 +426,7 @@ class File(Interface):
         new_datasets = {}
         for dataset_id, dataset_value in self.datasets.items():
             match dataset_value['info']['dataset_name']:
-                case 'AMB_Barcellona':
+                case 'AMB_Barcelona':
                     df = self.prepare_dataset_amb_barcellona(df=dataset_value['data'])
 
                 case 'BeLib':

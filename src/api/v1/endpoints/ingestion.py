@@ -28,7 +28,7 @@ async def ingest_datasets(params: IngestDatasetsParams):
     """
     POST example
     {
-        "datasets_list": ["ACN_Caltech", "AMB_Barcellona", "Elaad", "OLEV", "BeLib"],
+        "datasets_list": ["ACN_Caltech", "AMB_Barcelona", "Elaad", "OLEV", "BeLib"],
         "folder_path": "../../data/input/public_datasets/",
         "limit_rows": 1000
     }
