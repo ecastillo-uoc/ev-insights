@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from dateutil import parser
 from src.interfaces.interface import Interface
 from src.utils.globals import DATAFRAME_COLUMNS
+from src.utils.logger import Colors
 
 
 class File(Interface):
@@ -144,7 +145,7 @@ class File(Interface):
 
         datasets = {}
         for dataset_info in datasets_details:
-            self.logger.info("Gathering '%s' dataset" % dataset_info['dataset_name'])
+            self.logger.info(f"Gathering {Colors.BLUE}{dataset_info['dataset_name']}{Colors.NORMAL} dataset")
             inputfile = Path(self.input_dir) / dataset_info['dataset_name'] / dataset_info.get('dataset_file_name')
             self.logger.info(inputfile)
 
