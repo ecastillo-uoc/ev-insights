@@ -147,19 +147,29 @@ class File(Interface):
             self.logger.info(f"Gathering {Colors.BLUE}{dataset_info['dataset_name']}{Colors.NORMAL} dataset")
             # Use 'dataset_folder' if specified, otherwise default to 'dataset_name'
             folder_name = dataset_info.get('dataset_folder', dataset_info['dataset_name'])
-            inputfile = Path(self.input_dir) / folder_name / dataset_info.get('dataset_file_name')
-            self.logger.info(inputfile)
+            dataset_name = dataset_info.get('dataset_file_name')
+            if folder_name is None or dataset_name is None:
+                raise ValueError("Currently processing path requires both folder_name and dataset_name")
 
-            if inputfile.is_file():
+            # Type checker now knows they are definitely strings
+            input_file = Path(self.input_dir) / folder_name / dataset_name
+
+            self.logger.info(input_file)
+
+            if input_file.is_file():
                 df_orig = pd.DataFrame()
-                if dataset_info.get('dataset_file_type') == 'csv':
+
+                dataset_type = dataset_info.get('dataset_file_type')
+                self.logger.info(f"Dataset type: {Colors.YELLOW}{dataset_type}{Colors.NORMAL}") 
+
+                if dataset_type == 'csv':
                     _delimiter = dataset_info.get('dataset_delimiter')
                     _encoding = dataset_info.get('dataset_encoding')
                     _text_quotes = dataset_info.get('text_quotes','"').replace('\'','')
                     _decimal = dataset_info.get('decimal',',')
                     
                     read_csv_args = {
-                        "filepath_or_buffer": inputfile,
+                        "filepath_or_buffer": input_file,
                         "delimiter": _delimiter,
                         "encoding": _encoding,
                         "nrows": limit_rows,
@@ -172,21 +182,25 @@ class File(Interface):
 
                     df_orig = pd.read_csv(**read_csv_args)
 
-                if dataset_info.get('dataset_file_type') == 'xlsx':
-                    df_orig = pd.read_excel(io=inputfile, sheet_name=dataset_info['dataset_sheet_name'],
+                if dataset_type == 'xlsx':
+                    df_orig = pd.read_excel(io=input_file, sheet_name=dataset_info['dataset_sheet_name'],
                                             engine='openpyxl', nrows=limit_rows)
 
-                if dataset_info.get('dataset_file_type') == 'json':
-                    data = json.loads(inputfile.read_text())
-                    # TODO: Generalize "items" json flattening may be an issue
-                    df_orig = pd.json_normalize(data, '_items').head(self.limit_rows)
-
+                if dataset_type == 'json':
+                    try:
+                        data = json.loads(input_file.read_text())
+                        # TODO: Generalize "items" json flattening may be an issue
+                        df_orig = pd.json_normalize(data, '_items').head(self.limit_rows)
+                    except json.JSONDecodeError as e:
+                        self.logger.error(f"Failed to parse JSON file {input_file}: {e}")
+                        continue # Skip this dataset and continue
+                
                 if df_orig is not None:
                     datasets.update({dataset_info['dataset_name']: {"info": dataset_info,
                                                                   "data": df_orig}})
             else:
                 raise Exception("File '%s' does not exist. Please check dataset name '%s' and file name '%s'" %
-                                (inputfile, dataset_info['dataset_name'], dataset_info.get('dataset_file_name')))
+                                (input_file, dataset_info['dataset_name'], dataset_info.get('dataset_file_name')))
 
         return datasets
 
@@ -452,11 +466,11 @@ class File(Interface):
             'AMB_Barcelona': self.prepare_dataset_amb_barcelona,
             'BeLib': self.prepare_dataset_belib,
             'Elaad': self.prepare_dataset_Elaad,
-            # 'Hanse_und_Universitaetsstadt_Rostock': self.prepare_dataset_hanse_und_universitaetsstadt_rostock, 
             'Harvard_dataverse': self.prepare_dataset_harvard_dataverse,
             'OLEV': self.prepare_dataset_olev,
             'ACN_Caltech': self.prepare_dataset_ACN_Caltech,
             'Norway_12loc': self.prepare_dataset_Norway_12loc,
+            # 'Hanse_und_Universitaetsstadt_Rostock': self.prepare_dataset_hanse_und_universitaetsstadt_rostock, 
         }
 
     def prepare_datasets(self):
