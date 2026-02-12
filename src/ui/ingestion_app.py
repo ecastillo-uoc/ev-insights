@@ -4,9 +4,9 @@ import json
 import glob
 from pathlib import Path
 
-# Add current directory to path so we can import src
-# assuming this script is run from ev-insights/
-sys.path.append(str(Path(__file__).parent))
+# Add project root to path so we can import src
+# assuming this script is run from ev-insights/ but lives in src/ui/
+sys.path.append(str(Path(__file__).parent.parent.parent))
 
 try:
     from src.__main__ import main as run_ingestion
