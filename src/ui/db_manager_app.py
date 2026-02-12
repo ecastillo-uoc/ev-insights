@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import glob
+import psycopg2
 from pathlib import Path
 from src.__main__ import main as run_ingestion
 
@@ -9,8 +10,44 @@ def render_db_manager_page():
     
     st.sidebar.header("Admin Configuration")
 
+    # --- DB Connectivity Check ---
+    with st.expander("🔌 Database Connectivity Check"):
+        st.markdown("[Open pgAdmin](http://pgadmin.GA35DX/login?next=/)")
+        st.write("Test connection to PostgreSQL database")
+        
+        # Default values
+        default_host = "localhost"
+        default_port = "5432"
+        default_db = "evinsights"
+        default_user = "evinsights"
+        default_pass = "evinsights"
+
+        col1, col2 = st.columns(2)
+        with col1:
+            host = st.text_input("Host", value=default_host)
+            port = st.text_input("Port", value=default_port)
+            database = st.text_input("Database", value=default_db)
+        with col2:
+            user = st.text_input("User", value=default_user)
+            password = st.text_input("Password", value=default_pass, type="password")
+        
+        if st.button("Test Connection"):
+            try:
+                conn = psycopg2.connect(
+                    host=host,
+                    port=port,
+                    database=database,
+                    user=user,
+                    password=password
+                )
+                conn.close()
+                st.success(f"Successfully connected to {host}:{port}/{database}")
+            except Exception as e:
+                st.error(f"Connection failed: {e}")
+
     # 1. Select Admin Config File
     admin_config_pattern = "conf/cli/conf_cli_admin_*.json"
+
     admin_config_files = glob.glob(admin_config_pattern)
     admin_config_files.sort()
 
