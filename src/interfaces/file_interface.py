@@ -440,6 +440,25 @@ class File(Interface):
                              "df.columns=%s"
                              % (DATAFRAME_COLUMNS, df.columns.tolist()))
 
+    @property
+    def _preparation_methods(self):
+        """
+        Returns a mapping of dataset names to their corresponding preparation methods.
+        To add a new dataset:
+        1. Implement the prepare_dataset_<name> method.
+        2. Add the mapping here.
+        """
+        return {
+            'AMB_Barcelona': self.prepare_dataset_amb_barcelona,
+            'BeLib': self.prepare_dataset_belib,
+            'Elaad': self.prepare_dataset_Elaad,
+            # 'Hanse_und_Universitaetsstadt_Rostock': self.prepare_dataset_hanse_und_universitaetsstadt_rostock, 
+            'Harvard_dataverse': self.prepare_dataset_harvard_dataverse,
+            'OLEV': self.prepare_dataset_olev,
+            'ACN_Caltech': self.prepare_dataset_ACN_Caltech,
+            'Norway_12loc': self.prepare_dataset_Norway_12loc,
+        }
+
     def prepare_datasets(self):
         """
         Prepares datasets by applying specific transformations based on dataset names.
@@ -449,38 +468,13 @@ class File(Interface):
         """
         new_datasets = {}
         for dataset_id, dataset_value in self.datasets.items():
-            match dataset_value['info']['dataset_name']:
-                case 'AMB_Barcelona':
-                    df = self.prepare_dataset_amb_barcelona(df=dataset_value['data'])
+            dataset_name = dataset_value['info']['dataset_name']
+            prepare_method = self._preparation_methods.get(dataset_name)
 
-                case 'BeLib':
-                    df = self.prepare_dataset_belib(df=dataset_value['data'])
-
-                case 'Elaad':
-                    df = self.prepare_dataset_Elaad(df=dataset_value['data'])
-
-                # TODO
-                #  case 'Hanse_und_Universitaetsstadt_Rostock':
-                #     df = prepare_dataset_hanse_und_universitaetsstadt_rostock(df=dataset_value['data'])
-
-                case 'Harvard_dataverse':
-                    df = self.prepare_dataset_harvard_dataverse(df=dataset_value['data'])
-
-                case 'OLEV':
-                    df = self.prepare_dataset_olev(df=dataset_value['data'])
-
-                case 'ACN_Caltech':
-                    df = self.prepare_dataset_ACN_Caltech(df=dataset_value['data'])
-
-                case 'Norway_12loc':
-                    df = self.prepare_dataset_Norway_12loc(df=dataset_value['data'])
-
-                # Here you can add other datasets
-                # case '<new_dataset_name>':
-                #     df = self.prepare_dataset_<new_dataset_name>(df=dataset_value['data'])
-
-                case _:
-                    raise ValueError("Wrong dataset name: %s" % dataset_value['info']['dataset_name'])
+            if prepare_method:
+                df = prepare_method(df=dataset_value['data'])
+            else:
+                raise ValueError("Wrong dataset name: %s" % dataset_name)
 
             # Check dataset columns
             if self.check_dataset_columns(df):
