@@ -58,8 +58,8 @@
         "dataset_notes": "",
         "text_quotes": "\"",
         "decimal": ","
-    }
-        {
+    },
+    {
         "dataset_name": "ACN_Caltech",
         "dataset_url": "https://ev.caltech.edu/dataset",
         "dataset_description": "Charging sessions collected from Caltech Pasadena CA. We currently collect data from 54 EVSEs in one campus garage. The site is open to the public but most usage is from faculty, staff and students.",
@@ -80,7 +80,7 @@
         "decimal": ","
     },
     {
-        "dataset_name": "ACN_Caltech",
+        "dataset_name": "ACN_JPL",
         "dataset_url": "https://ev.caltech.edu/dataset",
         "dataset_description": "Charging sessions collected from JPL A national research lab located in La Canada, CA. This site currently has 50 EVSEs and is only open to employees. It is indicative of a normal workplace schedule.",
         "dataset_owner": "Caltech.edu",
@@ -100,7 +100,7 @@
         "decimal": ","
     },
     {
-        "dataset_name": "ACN_Caltech",
+        "dataset_name": "ACN_Office001",
         "dataset_url": "https://ev.caltech.edu/dataset",
         "dataset_description": "Charging sessions collected from Office building in Silicon Valley area. It currently has 8 EVSEs and is used only by employees.",
         "dataset_owner": "Caltech.edu",
