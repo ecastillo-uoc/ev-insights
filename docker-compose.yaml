@@ -69,6 +69,7 @@ services:
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
     volumes:
       - ../../volumes/evinsights/pgadmin-var_lib_pgadmin:/var/lib/pgadmin
+      - ../../volumes/evinsights/pgadmin-var_log_pgadmin:/var/log/pgadmin4
       - ../../volumes/evinsights/evinsights-data/repo/evinsights/servers.json:/pgadmin4/servers.json
       - ../../volumes/evinsights/evinsights-data/repo/evinsights/config_local.py:/pgadmin4/config_local.py
     # user: '$UID:$GID'
