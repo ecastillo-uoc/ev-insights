@@ -145,7 +145,9 @@ class File(Interface):
         datasets = {}
         for dataset_info in datasets_details:
             self.logger.info(f"Gathering {Colors.BLUE}{dataset_info['dataset_name']}{Colors.NORMAL} dataset")
-            inputfile = Path(self.input_dir) / dataset_info['dataset_name'] / dataset_info.get('dataset_file_name')
+            # Use 'dataset_folder' if specified, otherwise default to 'dataset_name'
+            folder_name = dataset_info.get('dataset_folder', dataset_info['dataset_name'])
+            inputfile = Path(self.input_dir) / folder_name / dataset_info.get('dataset_file_name')
             self.logger.info(inputfile)
 
             if inputfile.is_file():
@@ -364,7 +366,7 @@ class File(Interface):
         df = df[DATAFRAME_COLUMNS]
         return df
 
-    def prepare_dataset_ACN_Caltech(self, df):
+    def prepare_dataset_ACN_Caltech(self, df) -> pd.DataFrame:
         """
         Prepares the dataset for the 'ACN_Caltech' source by renaming columns and adding required fields.
 
@@ -386,6 +388,7 @@ class File(Interface):
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
         df = df[DATAFRAME_COLUMNS]
+
         return df
 
     def prepare_dataset_Norway_12loc(self, df):

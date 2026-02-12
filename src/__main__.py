@@ -11,7 +11,7 @@ from src.services.service import init_service
 sys.path.append(str(Path(__file__).parent.parent))
 
 
-def main(config_file=None, config_json=None):
+def main(config_file=None, config_json=None, datasets_list=None, datasets_details_file=None):
 
     service = None
     output = []
@@ -32,6 +32,13 @@ def main(config_file=None, config_json=None):
 
         service_name = config_json['service']
         config = config_json['services'][service_name]
+
+        # Override datasets_list and datasets_details_file from CLI arguments if provided
+        if 'input' in config.get('interfaces', {}):
+            if datasets_list is not None:
+                config['interfaces']['input']['datasets_list'] = datasets_list
+            if datasets_details_file is not None:
+                config['interfaces']['input']['datasets_details_file'] = datasets_details_file
 
         # Init output dir
         output_dir = Path(PureWindowsPath(config['utils']['output_dir'])).resolve() / (
@@ -114,11 +121,13 @@ if __name__ == '__main__':
     # Read conf file
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('-c', help='configuration file', required=True)
+    arg_parser.add_argument('--datasets_list', help='List of datasets to ingest', nargs='+', required=False)
+    arg_parser.add_argument('--datasets_details_file', help='Path to datasets details file', required=False)
 
     # Set configuration
     args = arg_parser.parse_args()
 
-    output = main(config_file=args.c)
+    output = main(config_file=args.c, datasets_list=args.datasets_list, datasets_details_file=args.datasets_details_file)
 
 
 
