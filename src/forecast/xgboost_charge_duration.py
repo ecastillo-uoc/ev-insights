@@ -24,14 +24,7 @@ class xgboost_charge_duration(Forecast):
                          data_selection=data_selection, custom_params=custom_params)
         return
 
-    def check_data(self):
 
-        # Remove NaT values from plug_in_datetime
-        if self.df is not None:
-            if 'plug_in_datetime' in self.df.columns:
-                self.df = self.df.dropna(subset=['plug_in_datetime'])
-
-        return
 
     def feature_engineering(self):
 

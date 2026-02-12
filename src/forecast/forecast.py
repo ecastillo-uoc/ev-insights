@@ -67,9 +67,12 @@ class Forecast:
 
         return
 
-    @abstractmethod
     def check_data(self):
-        pass
+        # Remove NaT values from plug_in_datetime
+        if self.df is not None:
+            if 'plug_in_datetime' in self.df.columns:
+                self.df = self.df.dropna(subset=['plug_in_datetime'])
+        return
 
     @abstractmethod
     def feature_engineering(self):
