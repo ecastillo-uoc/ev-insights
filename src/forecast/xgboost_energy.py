@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.express as px
 from pprint import pprint
 from src.forecast.forecast import Forecast
+from src.utils.date_utils import utc_to_decimal_hours_minutes
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 # pd.set_option('display.max_columns', None)
@@ -59,7 +60,7 @@ class xgboost_energy(Forecast):
                 # Add feature
                 if 'plug_in_hour_minutes' not in self.df.columns:
                     self.df['plug_in_hour_minutes'] = self.df['plug_in_datetime'].apply(
-                        lambda row: self.utc_to_decimal_hours_minutes(row))
+                        lambda row: utc_to_decimal_hours_minutes(row))
                     self.columns.append('plug_in_hour_minutes')
 
             # Plugin Duration in minutes
@@ -229,6 +230,3 @@ class xgboost_energy(Forecast):
 
         self.results.update(output_dict)
         return
-
-    def utc_to_decimal_hours_minutes(self, utc_time):
-        return float(utc_time.strftime("%H")) + float(utc_time.strftime("%M")) / 60
