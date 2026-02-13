@@ -10,8 +10,21 @@ from abc import abstractmethod
 from src.interfaces.interface import Interface
 
 # Retrieve the names of forecasts from the source, ensuring the list updates automatically whenever a new forecast is added.
-FORECAST = [p.stem for p in Path(__file__).parent.glob("*.py")
-            if p.name not in ["forecast.py", "_sample_forecast.py", "__init__.py"]]
+# New logic: check forecast_implementations.py for subclasses of GenericForecast or Forecast explicitly
+try:
+    import src.forecast.forecast_implementations as forecast_impl
+    from src.forecast.generic_forecast import GenericForecast
+    import inspect
+    
+    FORECAST = []
+    # Dynamic discovery from module
+    for name, obj in inspect.getmembers(forecast_impl):
+        if inspect.isclass(obj) and issubclass(obj, (Forecast, GenericForecast)) and obj is not Forecast and obj is not GenericForecast:
+             FORECAST.append(name)
+except ImportError:
+    # Fallback to file based if module not found (legacy support)
+    FORECAST = [p.stem for p in Path(__file__).parent.glob("*.py")
+            if p.name not in ["forecast.py", "_sample_forecast.py", "__init__.py", "generic_forecast.py", "forecast_implementations.py"]]
 
 
 class Forecast:
@@ -170,15 +183,37 @@ def import_class(module_path, class_name):
 def init_forecast(config, models_dir, input_interface=None, output_interface=None, mlflow_interface=None):
     logger = logging.getLogger('init_forecast')
     forecast = None
-    forecast_module = config["name"]
+    forecast_name = config["name"]
+    
+    # Refresh FORECAST list if needed or rely on what was loaded at module level.
+    # We should support both: specific module file (old way) and forecast_implementations (new way)
+    
+    # Check if name is in FORECAST (which now includes classes from forecast_implementations)
+    # The check below might fail if FORECAST only has classes but not files if import failed? 
+    # But we modified FORECAST to contain class names.
+    
+    # Try importing from forecast_implementations first
+    ForecastClass = None
+    try:
+        import src.forecast.forecast_implementations as forecast_impl
+        if hasattr(forecast_impl, forecast_name):
+             ForecastClass = getattr(forecast_impl, forecast_name)
+    except ImportError:
+        pass
+        
+    # If not found, try legacy file import
+    if ForecastClass is None and forecast_name in [p.stem for p in Path(__file__).parent.glob("*.py")]:
+         try:
+             full_module_path = f"src.forecast.{forecast_name}"
+             ForecastClass = import_class(full_module_path, forecast_name)
+         except Exception:
+             pass
 
-    if config["name"] in FORECAST:
+    if ForecastClass:
         if config["enabled"]:
             if 'full_custom_mode' not in config.keys():
                 config['full_custom_mode'] = False
 
-            full_module_path = f"src.forecast.{forecast_module}"
-            ForecastClass = import_class(full_module_path, config["name"])
             forecast = ForecastClass(id=config['id'] if 'id' in config.keys() else 1,
                                      name=config['name'],
                                      algo=config['algo'],
@@ -199,12 +234,15 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
                                      output_interface=output_interface,
                                      mlflow_interface=mlflow_interface,
                                      output_dir=config['output_dir'],
-                                     data_selection=config['data_selection'] if not config['full_custom_mode'] else None,
-                                     custom_params=config['custom_params'] if not config['full_custom_mode'] else None)
+                                     data_selection=config['data_selection'] if not config.get('full_custom_mode') else None,
+                                     custom_params=config['custom_params'] if not config.get('full_custom_mode') else None)
         else:
             logger.info('Forecast ' + config["name"] + ' not enabled.')
+            
     else:
-        raise Exception('Forecast ' + config["name"] + ' does not exist. Check the config file. ' +
-                        'Available interfaces: ' + str(FORECAST))
+         # Fallback error
+         if config["enabled"]: # Only error if enabled? Original code raised exception regardless if not in FORECAST list?
+             # Original: if config["name"] in FORECAST: ... else raise Exception
+             raise Exception('Forecast ' + config["name"] + ' does not exist or class not found.')
 
     return forecast

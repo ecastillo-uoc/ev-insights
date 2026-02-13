@@ -3,6 +3,10 @@ import json
 import glob
 from pathlib import Path
 from src.__main__ import main as run_service
+from src.forecast.strategies import (
+    DATA_STRATEGY_REGISTRY,
+    MODEL_STRATEGY_REGISTRY
+)
 
 def render_forecast_page():
     st.title("📈 Forecast Service")
@@ -32,6 +36,31 @@ def render_forecast_page():
         f"Select {mode} Configuration", 
         config_files,
         index=0 if config_files else None
+    )
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Strategy Overrides")
+    
+    # Data Strategy Dropdown
+    data_labels = {k.value: v.display_name for k, v in DATA_STRATEGY_REGISTRY.items()}
+    data_options = [None] + list(data_labels.keys())
+    
+    selected_data_strategy_key = st.sidebar.selectbox(
+        "Data Strategy",
+        data_options,
+        format_func=lambda x: data_labels[x] if x else "Use Config Default",
+        help="Override the data processing strategy for all tasks defined in the config."
+    )
+    
+    # Model Strategy Dropdown
+    model_labels = {k.value: v.display_name for k, v in MODEL_STRATEGY_REGISTRY.items()}
+    model_options = [None] + list(model_labels.keys())
+    
+    selected_model_strategy_key = st.sidebar.selectbox(
+        "Model Strategy",
+        model_options,
+        format_func=lambda x: model_labels[x] if x else "Use Config Default",
+        help="Override the machine learning model strategy for all tasks defined in the config."
     )
     
     # --- Main Area ---
@@ -88,11 +117,35 @@ def render_forecast_page():
         
         with st.spinner("Processing... check terminal for real-time logs"):
             try:
-                # Call the main execution function
-                # We pass the selected config file path directly
-                result = run_service(
-                    config_file=selected_config_file
-                )
+                # 1. Prepare Configuration
+                # Reload config to apply any runtime overrides
+                with open(selected_config_file, 'r') as f:
+                    run_config = json.load(f)
+                
+                # Apply strategy overrides
+                overrides_applied = []
+                if selected_data_strategy_key or selected_model_strategy_key:
+                    forecast_tasks = run_config.get('services', {}).get('forecast', {}).get('forecast', [])
+                    if selected_data_strategy_key:
+                        overrides_applied.append(f"Data Strategy: {data_labels[selected_data_strategy_key]}")
+                        # Update all tasks
+                        for task in forecast_tasks:
+                             task['data_strategy'] = selected_data_strategy_key
+                    
+                    if selected_model_strategy_key:
+                        overrides_applied.append(f"Model Strategy: {model_labels[selected_model_strategy_key]}")
+                        # Update all tasks
+                        for task in forecast_tasks:
+                             task['model_strategy'] = selected_model_strategy_key
+                    
+                    st.write(f"ℹ️ Applying overrides: {', '.join(overrides_applied)}")
+
+                # 2. Run Service
+                # If overrides are present, pass the dictionary. Otherwise pass the file path.
+                if overrides_applied:
+                     result = run_service(config_json=run_config)
+                else:
+                     result = run_service(config_file=selected_config_file)
                 
                 st.success("Execution finished successfully!")
                 
