@@ -47,6 +47,22 @@ class PostgreSql(Interface):
 
         return
 
+    def get_countries(self):
+        """Get all unique countries from the database."""
+        cursor = self.db.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(sql_query.get_all_countries)
+        result = cursor.fetchall()
+        cursor.close()
+        return [row['country'] for row in result]
+
+    def get_years(self):
+        """Get all unique years from the database."""
+        cursor = self.db.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(sql_query.get_all_years)
+        result = cursor.fetchall()
+        cursor.close()
+        return [row['year'] for row in result]
+
     def open_db_connection(self):
         # Connect to Postgres server
         connection = psycopg2.connect(

@@ -7,7 +7,9 @@ from datetime import datetime
 from pathlib import Path
 from pprint import pprint
 from abc import abstractmethod
+
 from src.interfaces.interface import Interface
+from src.utils.logger import Colors
 
 # Retrieve the names of forecasts from the source, ensuring the list updates automatically whenever a new forecast is added.
 # New logic: check forecast_implementations.py for subclasses of GenericForecast or Forecast explicitly
@@ -58,7 +60,7 @@ class Forecast:
         self.data_selection = data_selection
         self.custom_params = custom_params
         self.logger = logging.getLogger('forecast')
-        self.logger.info("Initialized " + self.name)
+        self.logger.info(f"Initialized {Colors.GREEN}{self.name}{Colors.NORMAL}")
         self.df = pd.DataFrame()
         self.model = None
         self.prediction = None

@@ -7,9 +7,11 @@ import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from datetime import datetime
 
+from src.utils.logger import Colors
+from src.utils.date_utils import utc_to_decimal_hours_minutes
+
 from src.forecast.strategies.interfaces import PredictionTargetStrategy, ModelStrategy
 from src.forecast.strategies.utils_ts import add_lags, add_timefeat_df, smape
-from src.utils.date_utils import utc_to_decimal_hours_minutes
 from src.forecast.forecast import Forecast
 
 # --- Data Strategies ---
@@ -333,30 +335,30 @@ class LightGBMModelStrategy(ModelStrategy):
             
         return output_dict
 
-    def predict(self, df, feature_columns, target_column, model_objects, context_date):
+    def predict(self, df, feature_columns, target_column, model_objects, context_date, dataset_names=None, submode=None):
         return {'predict': {}}
 
 
 class XGBoostModelStrategy(ModelStrategy):
     def __init__(self, output_key: str = 'prediction'):
         self.output_key = output_key
+        self.logger = logging.getLogger(__name__)
 
     def train(self, 
               df: pd.DataFrame, 
-              columns: List[str], 
-              target_name: str, 
+              feature_columns: List[str], 
+              target_column: str, 
               dataset_names: List[str], 
-              logger: Any,
               model_name_prefix: str) -> Dict[str, Any]:
         
         output_dict = {'train': {}}
         params = {'random_state': 16, 'test_size': 0.20}
 
         for dataset_name in dataset_names:
-            logger.info(f"{dataset_name} - XGBoost Forecast ({target_name}) - Model training")
+            self.logger.info(f"{dataset_name} - XGBoost Forecast ({target_column}) - Model training")
             
             subset_df = df.loc[df['dataset_name'] == dataset_name].copy()
-            X = subset_df[columns].copy() if columns else subset_df.copy()
+            X = subset_df[feature_columns].copy() if feature_columns else subset_df.copy()
             
             if 'plug_in_weekday' in X.columns:
                 weekday_series = X['plug_in_weekday']
@@ -366,14 +368,14 @@ class XGBoostModelStrategy(ModelStrategy):
                 X = X.drop('plug_in_weekday', axis=1)
                 X = X.join(dums)
             
-            if target_name in X.columns:
-                X = X.drop(target_name, axis=1)
+            if target_column in X.columns:
+                X = X.drop(target_column, axis=1)
 
-            if target_name not in subset_df.columns:
-                logger.error(f"Target column {target_name} not found in dataframe")
+            if target_column not in subset_df.columns:
+                self.logger.error(f"Target column {target_column} not found in dataframe")
                 continue
 
-            y = subset_df[target_name].astype(float)
+            y = subset_df[target_column].astype(float)
             
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=params['test_size'], random_state=params['random_state']
@@ -393,8 +395,8 @@ class XGBoostModelStrategy(ModelStrategy):
             else:
                 accuracy = 100
             
-            logger.info(f'Mean Absolute Error: {round(mae, 2)}')
-            logger.info(f'Accuracy: {round(accuracy, 2)} %.')
+            self.logger.info(f'Mean Absolute Error: {round(mae, 2)}')
+            self.logger.info(f'Accuracy: {round(accuracy, 2)} %.')
             
             pilot_name = f"{model_name_prefix}_{dataset_name}"
             
@@ -417,14 +419,20 @@ class XGBoostModelStrategy(ModelStrategy):
         return output_dict
 
     def predict(self, 
-                model: Any, 
                 df: pd.DataFrame, 
-                columns: List[str],
-                submode: str, 
-                dataset_names: List[str]) -> Dict[str, Any]:
+                feature_columns: List[str],
+                target_column: str,
+                model_objects: Any, 
+                context_date: Any,
+                dataset_names: List[str],
+                submode: str) -> Dict[str, Any]:
         
         output_dict = {'predict': {}}
         
+        # Ensure model_objects is consistent (GenericForecast passes self.model)
+        # In original code it was expecting 'model'
+        model = model_objects
+
         for dataset_name in dataset_names:
             if submode == 'schedule':
                 subset = df.loc[df['dataset_name'] == dataset_name]
@@ -432,7 +440,7 @@ class XGBoostModelStrategy(ModelStrategy):
                     continue
                 
                 input_row = subset.iloc[[-1]].copy()
-                features = input_row[columns].copy() if columns else input_row.copy()
+                features = input_row[feature_columns].copy() if feature_columns else input_row.copy()
                 
                 if 'plug_in_weekday' in features.columns:
                      weekday_val = features['plug_in_weekday'].iloc[0]

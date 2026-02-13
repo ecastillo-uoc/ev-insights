@@ -63,6 +63,22 @@ get_dataset_list = """
     FROM evinsights."Dataset";
 """
 
+# Get all unique countries
+get_all_countries = """
+    SELECT DISTINCT country
+    FROM evinsights."Dataset"
+    WHERE country IS NOT NULL
+    ORDER BY country;
+"""
+
+# Get all unique years
+get_all_years = """
+    SELECT DISTINCT EXTRACT(YEAR FROM plug_in_datetime)::INTEGER as year
+    FROM evinsights."ChargingSession"
+    WHERE plug_in_datetime IS NOT NULL
+    ORDER BY year;
+"""
+
 # Query to get the number of tables
 get_number_of_tables = """
      SELECT schemaname, tablename

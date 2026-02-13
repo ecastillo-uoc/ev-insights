@@ -42,8 +42,10 @@ class GenericForecast(Forecast):
             df=self.df,
             feature_columns=self.feature_columns,
             target_column=target_col,
-            model_objects=self.model, # Strategy needs to know how to handle this
-            context_date=self.date
+            model_objects=self.model,
+            context_date=self.date,
+            dataset_names=self.datasets_names,
+            submode=self.submode
         )
         self.results.update(output)
 
