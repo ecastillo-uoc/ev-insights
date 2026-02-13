@@ -10,72 +10,52 @@ from src.forecast.strategies import (
 )
 from src.utils.globals import CHARGING_POINT_TYPES
 from src.interfaces.postgresql_interface import PostgreSql
-
-@st.cache_data
-def get_db_filter_options(config_file):
-    """Fetch available filter options (countries, years) from the database."""
-    try:
-        with open(config_file, 'r') as f:
-            config = json.load(f)
-        
-        service_config = config.get('services', {}).get('forecast', {})
-        input_interface = service_config.get('interfaces', {}).get('input', {})
-        
-        if input_interface.get('name') == 'PostgreSql':
-             db_interface = PostgreSql(
-                 name="temp_ui_connection",
-                 type="input",
-                 output_dir=".",
-                 host=input_interface.get('host', 'localhost'),
-                 port=input_interface.get('port', 5432),
-                 user=input_interface.get('user'),
-                 password=input_interface.get('password'),
-                 database=input_interface.get('database')
-             )
-             countries = db_interface.get_countries()
-             years = db_interface.get_years()
-             return countries, years
-    except Exception as e:
-        return [], []
-    return [], []
+from src.ui.shared_components import render_data_selection
 
 def render_forecast_page():
     st.title("📈 Forecast Service")
     
     # --- Data Selection ---
-    st.subheader("Data Selection")
+    # Use a default DB config for data selection filters to make it independent of operation mode
+    default_data_config = "conf/cli/conf_cli_forecast_train_db.json"
+    st.info(f"Using data source configuration: `{default_data_config}` for filter options.")
     
-    selected_charging_points = st.multiselect(
-        "Type of Charging Point",
-        CHARGING_POINT_TYPES,
-        default=CHARGING_POINT_TYPES,
-        help="Select specific charging point types. Leave empty to include all."
-    )
+    selection = render_data_selection(default_data_config)
 
-    # Dynamic Country and Year Loading (Try to find a valid config to connect to DB)
-    default_db_config = "conf/cli/conf_cli_forecast_train_db.json"
-    available_countries = []
-    available_years = []
+    selected_datasets = selection["datasets"]
+    selected_countries = selection["countries"]
+    selected_years = selection["years"]
+    selected_charging_points = selection["types"]
+
     
-    if Path(default_db_config).exists():
-         available_countries, available_years = get_db_filter_options(default_db_config)
-    
-    selected_countries = st.multiselect(
-        "Countries",
-        available_countries,
-        default=available_countries,
-        help="Filter datasets by country. Requires DB connection."
+    # Select Operation Mode (Train or Predict)
+    mode = st.radio(
+        "Operation Mode",
+        ("Train", "Predict"),
+        horizontal=True,
+        index=0
     )
-
-    selected_years = st.multiselect(
-        "Years",
-        available_years,
-        default=available_years,
-        help="Filter data by year (plug-in date). Requires DB connection."
-    )
-
     st.markdown("---")
+
+    # Filter config files based on naming convention
+    if mode == "Train":
+        config_pattern = "conf/cli/conf_cli_forecast_train*.json"
+    else:
+        # includes predict_query and predict_schedule
+        config_pattern = "conf/cli/conf_cli_forecast_predict*.json"
+
+    config_files = glob.glob(config_pattern)
+    config_files.sort()
     
+    # Select Configuration File based on Mode
+    selected_config_file = st.sidebar.selectbox(
+        f"Select {mode} Configuration", 
+        config_files,
+        index=0 if config_files else None
+    )
+    
+    # --- Sidebar Configuration ---
+    st.sidebar.header("Forecast Configuration")
     # --- Strategy Selection (Main Page) ---
     st.subheader("Strategy Selection")
 
@@ -105,37 +85,7 @@ def render_forecast_page():
             help="Override the machine learning model strategy for all tasks defined in the config."
         )
 
-    st.markdown("---")
-
-    # --- Sidebar Configuration ---
-    st.sidebar.header("Forecast Configuration")
-    
-    # 1. Select Operation Mode (Train or Predict)
-    mode = st.sidebar.radio(
-        "Operation Mode",
-        ("Train", "Predict"),
-        index=0
-    )
-    
-    # 2. Select Configuration File based on Mode
-    # Filter config files based on naming convention
-    if mode == "Train":
-        config_pattern = "conf/cli/conf_cli_forecast_train*.json"
-    else:
-        # includes predict_query and predict_schedule
-        config_pattern = "conf/cli/conf_cli_forecast_predict*.json"
-
-    config_files = glob.glob(config_pattern)
-    config_files.sort()
-    
-    selected_config_file = st.sidebar.selectbox(
-        f"Select {mode} Configuration", 
-        config_files,
-        index=0 if config_files else None
-    )
-
-    # --- Main Area ---
-    
+    # --- Main Area - Job Settings Display ---
     st.markdown("### ⚙️ Job Settings")
     
     # Load and display details of the selected config
@@ -181,7 +131,7 @@ def render_forecast_page():
         st.warning("No configuration files found matching the pattern.")
 
     st.markdown("---")
-    
+
     # --- Execution ---
     if st.button(f"🚀 Run Forecast {mode}", type="primary", disabled=not selected_config_file):
         st.info(f"Starting {mode} process...")
@@ -217,6 +167,13 @@ def render_forecast_page():
                          if 'data_selection' not in task:
                             task['data_selection'] = {}
                          task['data_selection']['years'] = selected_years
+
+                if selected_datasets:
+                     overrides_applied.append(f"Datasets: {len(selected_datasets)}")
+                     for task in forecast_tasks:
+                         if 'data_selection' not in task:
+                            task['data_selection'] = {}
+                         task['data_selection']['datasets'] = selected_datasets
 
                 if selected_target_key or selected_model_strategy_key:
                     if selected_target_key:

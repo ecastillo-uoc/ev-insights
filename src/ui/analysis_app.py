@@ -6,44 +6,7 @@ from pathlib import Path
 from src.__main__ import main as run_service
 # from src.utils.globals import CHARGING_POINT_TYPES  # Not used anymore
 from src.interfaces.postgresql_interface import PostgreSql
-
-@st.cache_data
-def fetch_db_data(config_file, datasets=None, countries=None, years=None, types=None):
-    """Fetch available options and count based on hierarchical filters."""
-    try:
-        with open(config_file, 'r') as f:
-            config = json.load(f)
-        
-        service_config = config.get('services', {}).get('analysis', {})
-        input_interface = service_config.get('interfaces', {}).get('input', {})
-        
-        if input_interface.get('name') == 'PostgreSql':
-             db_interface = PostgreSql(
-                 name="temp_ui_connection",
-                 type="input",
-                 output_dir=".",
-                 host=input_interface.get('host', 'localhost'),
-                 port=input_interface.get('port', 5432),
-                 user=input_interface.get('user'),
-                 password=input_interface.get('password'),
-                 database=input_interface.get('database')
-             )
-             
-             # Fetch data
-             res = {
-                 'datasets': db_interface.get_datasets_names(),
-                 'countries': db_interface.get_countries(datasets=datasets),
-                 'years': db_interface.get_years(datasets=datasets, countries=countries),
-                 'types': db_interface.get_charging_point_types(datasets=datasets, countries=countries, years=years),
-                 'count': db_interface.get_filtered_record_count(datasets=datasets, countries=countries, years=years, types=types)
-             }
-             
-             db_interface.close_interface()
-             return res
-    except Exception as e:
-        # st.error(f"DB Error: {e}")
-        return {'datasets': [], 'countries': [], 'years': [], 'types': [], 'count': 0}
-    return {'datasets': [], 'countries': [], 'years': [], 'types': [], 'count': 0}
+from src.ui.shared_components import render_data_selection
 
 def render_analysis_page():
     st.title("📊 Analysis Service")
@@ -63,76 +26,11 @@ def render_analysis_page():
     )
 
     # --- Data Selection ---
-    st.subheader("Data Selection")
-    
-    # Default empty values
-    available_datasets = []
-    available_countries = []
-    available_years = []
-    available_types = []
-    record_count = 0
-    
-    # 1. Fetch Datasets (Level 0)
-    if selected_config_file and Path(selected_config_file).exists():
-        data_level_0 = fetch_db_data(selected_config_file) 
-        available_datasets = data_level_0['datasets']
-        
-    # Layout Selector - Rearranged
-    # 1. Datasets
-    selected_datasets = st.multiselect(
-        "1. Datasets",
-        available_datasets,
-        help="Filter by specific datasets. Impacts Countries, Years, etc."
-    )
-    
-    # 2. Countries (Level 1 - Depends on Datasets)
-    if selected_config_file:
-        data_level_1 = fetch_db_data(selected_config_file, datasets=selected_datasets)
-        available_countries = data_level_1['countries']
-        
-    selected_countries = st.multiselect(
-        "2. Countries",
-        available_countries,
-        default=available_countries,
-        help="Filter by Country."
-    )
-    
-    # 3. Years (Level 2 - Depends on Datasets + Countries)
-    if selected_config_file:
-        data_level_2 = fetch_db_data(selected_config_file, datasets=selected_datasets, countries=selected_countries)
-        available_years = data_level_2['years']
-
-    selected_years = st.multiselect(
-        "3. Years",
-        available_years,
-        default=available_years,
-        help="Filter by Year."
-    )
-    
-    # 4. Charging Point Types (Level 3 - Depends on D+C+Y)
-    if selected_config_file:
-        data_level_3 = fetch_db_data(selected_config_file, datasets=selected_datasets, countries=selected_countries, years=selected_years)
-        available_types = data_level_3['types']
-        
-    selected_types = st.multiselect(
-        "4. Charging Point Types",
-        available_types,
-        default=available_types,
-        help="Filter by Charging Point Type."
-    )
-    
-    # 5. Count Display
-    if selected_config_file:
-         data_final = fetch_db_data(selected_config_file, 
-                                    datasets=selected_datasets, 
-                                    countries=selected_countries, 
-                                    years=selected_years, 
-                                    types=selected_types)
-         record_count = data_final['count']
-    
-    st.metric("Total Records Selected", f"{record_count:,}")
-
-    st.markdown("---")
+    selection = render_data_selection(selected_config_file)
+    selected_datasets = selection["datasets"]
+    selected_countries = selection["countries"]
+    selected_years = selection["years"]
+    selected_types = selection["types"]
     
     # --- Main Area ---
     st.subheader("⚙️ Analysis Catalogue & Execution")
