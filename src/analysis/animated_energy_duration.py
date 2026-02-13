@@ -26,12 +26,15 @@ class animated_energy_duration(Analysis):
             if feature == 'plug_in_weekday':
                 # Add feature
                 if 'plug_in_weekday' not in self.df.columns:
+                    self.df['plug_in_datetime'] = pd.to_datetime(self.df['plug_in_datetime'])
                     self.df['plug_in_weekday'] = self.df['plug_in_datetime'].dt.day_name()
 
             # Plugin Duration in minutes
             if feature == 'plug_duration':
                 # Add feature
                 if 'plug_duration' not in self.df.columns:
+                    self.df['plug_in_datetime'] = pd.to_datetime(self.df['plug_in_datetime'])
+                    self.df['plug_out_datetime'] = pd.to_datetime(self.df['plug_out_datetime'])
                     self.df['plug_duration'] = (self.df['plug_out_datetime'] - self.df['plug_in_datetime']).dt.total_seconds() / 60
 
             # Plugin Duration in minutes clip

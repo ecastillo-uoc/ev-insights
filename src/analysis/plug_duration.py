@@ -25,6 +25,8 @@ class plug_duration(Analysis):
             if feature == 'plug_duration':
                 # Add feature
                 if 'plug_duration' not in self.df.columns:
+                    self.df['plug_in_datetime'] = pd.to_datetime(self.df['plug_in_datetime'])
+                    self.df['plug_out_datetime'] = pd.to_datetime(self.df['plug_out_datetime'])
                     self.df['plug_duration'] = (self.df['plug_out_datetime'] - self.df['plug_in_datetime']).dt.total_seconds() / 60
 
             # Plug Duration in minutes clip

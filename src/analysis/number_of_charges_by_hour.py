@@ -25,12 +25,14 @@ class number_of_charges_by_hour(Analysis):
             if feature == 'plug_in_hour':
                 # Add feature
                 if 'plug_in_hour' not in self.df.columns:
+                    self.df['plug_in_datetime'] = pd.to_datetime(self.df['plug_in_datetime'])
                     self.df['plug_in_hour'] = self.df['plug_in_datetime'].dt.hour
 
             # Add plug out hour
             if feature == 'plug_out_hour':
                 # Add feature
                 if 'plug_out_hour' not in self.df.columns:
+                    self.df['plug_out_datetime'] = pd.to_datetime(self.df['plug_out_datetime'])
                     self.df['plug_out_hour'] = self.df['plug_out_datetime'].dt.hour
         return
 

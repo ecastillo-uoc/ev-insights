@@ -33,6 +33,7 @@ class energy_supplied_by_plugin_hour(Analysis):
             if feature == 'plug_in_hour':
                 # Add feature
                 if 'plug_in_hour' not in self.df.columns:
+                    self.df['plug_in_datetime'] = pd.to_datetime(self.df['plug_in_datetime'])
                     self.df['plug_in_hour'] = self.df['plug_in_datetime'].dt.hour
         return
 
