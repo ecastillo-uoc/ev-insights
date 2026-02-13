@@ -27,15 +27,19 @@ class plug_duration_by_plugin_hour(Analysis):
             if feature == 'plug_in_hour':
                 # Add feature
                 if 'plug_in_hour' not in self.df.columns:
-                    self.df['plug_in_datetime'] = pd.to_datetime(self.df['plug_in_datetime'])
+                    # Convert to datetime, coercing errors to NaT (Not a Time)
+                    self.df['plug_in_datetime'] = pd.to_datetime(self.df['plug_in_datetime'], errors='coerce')
+                    # Remove rows with invalid dates to prevent errors
+                    self.df = self.df.dropna(subset=['plug_in_datetime'])
                     self.df['plug_in_hour'] = self.df['plug_in_datetime'].dt.hour
 
             # Plug Duration in minutes
             if feature == 'plug_duration':
                 # Add feature
                 if 'plug_duration' not in self.df.columns:
-                    self.df['plug_in_datetime'] = pd.to_datetime(self.df['plug_in_datetime'])
-                    self.df['plug_out_datetime'] = pd.to_datetime(self.df['plug_out_datetime'])
+                    self.df['plug_in_datetime'] = pd.to_datetime(self.df['plug_in_datetime'], errors='coerce')
+                    self.df['plug_out_datetime'] = pd.to_datetime(self.df['plug_out_datetime'], errors='coerce')
+                    self.df = self.df.dropna(subset=['plug_in_datetime', 'plug_out_datetime'])
                     self.df['plug_duration'] = (self.df['plug_out_datetime'] - self.df['plug_in_datetime']).dt.total_seconds() / 60
 
             # Plug Duration in minutes clip
@@ -44,7 +48,7 @@ class plug_duration_by_plugin_hour(Analysis):
                 if 'plug_duration_clip' not in self.df.columns:
                     self.df['plug_duration_clip'] = self.df['plug_duration']
                 # Apply filters
-                self.df['plug_duration_clip'] = np.clip(self.df['plug_duration_clip'].values, a_min=filters['min'], a_max=filters['max'])
+                self.df['plug_duration_clip'] = np.clip(self.df['plug_duration_clip'].to_numpy(dtype=float), a_min=filters['min'], a_max=filters['max'])
 
         return
 

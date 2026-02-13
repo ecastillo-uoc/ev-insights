@@ -44,20 +44,26 @@ class number_of_charges_by_hour(Analysis):
 
         # Run analysis
         for dataset_name in self.datasets_names:
+            dataset_name = str(dataset_name)
             self.logger.info(f"{dataset_name} - Plot total number of charging sessions by hour of the day")
 
             df = self.df.loc[self.df['dataset_name'] == dataset_name]
+
+            if df.empty:
+                continue
 
             grouped_df_in = df.groupby(['plug_in_hour']).count()[['plug_in_datetime']]
             grouped_df_out = df.groupby(['plug_out_hour']).count()[['plug_out_datetime']]
             grouped_df = pd.concat([grouped_df_out, grouped_df_in], axis=1)
             grouped_df.rename(columns={'plug_out_datetime': 'Plug Out', 'plug_in_datetime': 'Plug In'}, inplace=True)
 
-            fig = px.line(
+            fig = px.bar(
                 grouped_df,
                 title=f'<span style="font-size: 20px; display: block;">Number of charging sessions by hour of the day</span><br>' +
                       (f'<span style="font-size: 15px; display: block;">{self.info}</span><br>' if self.info != '' else '') +
                       f'<span style="font-size: 13px; display: block;">Dataset: {dataset_name}</span>',
+                barmode='group',
+                color_discrete_map={'Plug In': 'green', 'Plug Out': 'violet'}
             )
             fig.update_xaxes(title_text='Hours of the Day')
             fig.update_yaxes(title_text='Number of Charging Sessions')
@@ -84,7 +90,8 @@ class number_of_charges_by_hour(Analysis):
             if self.show_images:
                 fig.show()
 
-        # TODO write results in output_dict, that is void now
+            output_dict[dataset_name] = grouped_df.fillna(0).astype(int).to_dict()
+
         self.results = output_dict
 
         return
