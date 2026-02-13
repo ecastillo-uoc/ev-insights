@@ -1,4 +1,4 @@
-from .prediction_target import (
+from .prediction_target_registry import (
     PredictionTarget,
     PredictionTargetInfo,
     PREDICTION_TARGET_REGISTRY,
