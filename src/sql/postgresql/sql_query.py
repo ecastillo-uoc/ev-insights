@@ -213,3 +213,58 @@ delete_dataset_by_id = """
     WHERE id = %s
     RETURNING id, name;
 """
+# Get countries filtered by dataset names
+get_countries_by_datasets = """
+    SELECT DISTINCT country
+    FROM evinsights."Dataset"
+    WHERE country IS NOT NULL
+    AND name = ANY(%s)
+    ORDER BY country;
+"""
+
+# Get years filtered by dataset names
+get_years_by_datasets = """
+    SELECT DISTINCT EXTRACT(YEAR FROM cs.plug_in_datetime)::INTEGER as year
+    FROM evinsights."ChargingSession" cs
+    JOIN evinsights."Dataset" d ON cs.fk_dataset_id = d.id
+    WHERE cs.plug_in_datetime IS NOT NULL
+    AND d.name = ANY(%s)
+    ORDER BY year;
+"""
+
+# Get years filtered by dataset names and countries
+get_years_filtered = """
+    SELECT DISTINCT EXTRACT(YEAR FROM cs.plug_in_datetime)::INTEGER as year
+    FROM evinsights."ChargingSession" cs
+    JOIN evinsights."Dataset" d ON cs.fk_dataset_id = d.id
+    WHERE cs.plug_in_datetime IS NOT NULL
+    AND (%s::varchar[] IS NULL OR d.name = ANY(%s))
+    AND (%s::varchar[] IS NULL OR d.country = ANY(%s))
+    ORDER BY year;
+"""
+
+# Get Charging Point Types filtered
+get_charging_point_types_filtered = """
+    SELECT DISTINCT cst.type
+    FROM evinsights."ChargingSession" cs
+    JOIN evinsights."Dataset" d ON cs.fk_dataset_id = d.id
+    JOIN evinsights."ChargingStation" cst ON cs.fk_charging_station_id = cst.id
+    WHERE cst.type IS NOT NULL
+    AND (%s::varchar[] IS NULL OR d.name = ANY(%s))
+    AND (%s::varchar[] IS NULL OR d.country = ANY(%s))
+    AND (%s::integer[] IS NULL OR EXTRACT(YEAR FROM cs.plug_in_datetime)::INTEGER = ANY(%s))
+    ORDER BY cst.type;
+"""
+
+# Get filtered record count
+get_count_filtered = """
+    SELECT COUNT(*) as count
+    FROM evinsights."ChargingSession" cs
+    JOIN evinsights."Dataset" d ON cs.fk_dataset_id = d.id
+    JOIN evinsights."ChargingStation" cst ON cs.fk_charging_station_id = cst.id
+    WHERE 1=1
+    AND (%s::varchar[] IS NULL OR d.name = ANY(%s))
+    AND (%s::varchar[] IS NULL OR d.country = ANY(%s))
+    AND (%s::integer[] IS NULL OR EXTRACT(YEAR FROM cs.plug_in_datetime)::INTEGER = ANY(%s))
+    AND (%s::varchar[] IS NULL OR cst.type = ANY(%s));
+"""

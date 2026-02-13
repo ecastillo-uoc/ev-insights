@@ -47,21 +47,61 @@ class PostgreSql(Interface):
 
         return
 
-    def get_countries(self):
-        """Get all unique countries from the database."""
+    def get_datasets_names(self):
+        """Get all dataset names from the database."""
         cursor = self.db.cursor(cursor_factory=RealDictCursor)
-        cursor.execute(sql_query.get_all_countries)
+        cursor.execute(sql_query.get_dataset_list)
+        result = cursor.fetchall()
+        cursor.close()
+        return [row['name'] for row in result]
+
+    def get_countries(self, datasets=None):
+        """Get unique countries from the database, optionally filtered by datasets."""
+        cursor = self.db.cursor(cursor_factory=RealDictCursor)
+        # Using simple query if only datasets filter is needed, 
+        # but to support future advanced filtering we could switch to robust pattern.
+        # For now, keeping existing logic but handling empty list properly.
+        if datasets:
+            cursor.execute(sql_query.get_countries_by_datasets, (datasets,))
+        else:
+            cursor.execute(sql_query.get_all_countries)
         result = cursor.fetchall()
         cursor.close()
         return [row['country'] for row in result]
 
-    def get_years(self):
-        """Get all unique years from the database."""
+    def get_years(self, datasets=None, countries=None):
+        """Get unique years from the database, optionally filtered by datasets and countries."""
         cursor = self.db.cursor(cursor_factory=RealDictCursor)
-        cursor.execute(sql_query.get_all_years)
+        d_arg = datasets if datasets else None
+        c_arg = countries if countries else None
+        cursor.execute(sql_query.get_years_filtered, (d_arg, d_arg, c_arg, c_arg))
         result = cursor.fetchall()
         cursor.close()
         return [row['year'] for row in result]
+
+    def get_charging_point_types(self, datasets=None, countries=None, years=None):
+        """Get unique charging point types, optionally filtered."""
+        cursor = self.db.cursor(cursor_factory=RealDictCursor)
+        d_arg = datasets if datasets else None
+        c_arg = countries if countries else None
+        y_arg = years if years else None
+        cursor.execute(sql_query.get_charging_point_types_filtered, (d_arg, d_arg, c_arg, c_arg, y_arg, y_arg))
+        result = cursor.fetchall()
+        cursor.close()
+        return [row['type'] for row in result]
+
+    def get_filtered_record_count(self, datasets=None, countries=None, years=None, types=None):
+        """Get count of sessions matching filters."""
+        cursor = self.db.cursor(cursor_factory=RealDictCursor)
+        d_arg = datasets if datasets else None
+        c_arg = countries if countries else None
+        y_arg = years if years else None
+        t_arg = types if types else None
+        cursor.execute(sql_query.get_count_filtered, (d_arg, d_arg, c_arg, c_arg, y_arg, y_arg, t_arg, t_arg))
+        result = cursor.fetchall()
+        cursor.close()
+        return result[0]['count']
+
 
     def open_db_connection(self):
         # Connect to Postgres server
