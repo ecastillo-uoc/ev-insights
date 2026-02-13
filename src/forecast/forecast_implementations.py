@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 from datetime import datetime
 
 from src.forecast.strategies.interfaces import PredictionTargetStrategy, ModelStrategy
-from src.forecast.strategies.ts_utils import add_lags, add_timefeat_df, smape
+from src.forecast.strategies.utils_ts import add_lags, add_timefeat_df, smape
 from src.utils.date_utils import utc_to_decimal_hours_minutes
 from src.forecast.forecast import Forecast
 

@@ -7,6 +7,7 @@ from psycopg2.extras import RealDictCursor
 
 import pandas as pd
 from pprint import pprint
+
 from src.interfaces.interface import Interface
 from src.sql.postgresql import sql_query
 from src.utils.logger import Colors

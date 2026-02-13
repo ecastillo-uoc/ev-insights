@@ -8,6 +8,7 @@ import pandas as pd
 from pprint import pprint
 from datetime import datetime, timedelta
 from dateutil import parser
+
 from src.interfaces.interface import Interface
 from src.utils.globals import DATAFRAME_COLUMNS
 from src.utils.logger import Colors
