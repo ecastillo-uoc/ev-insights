@@ -11,6 +11,28 @@ from src.forecast.strategies import (
 from src.utils.globals import CHARGING_POINT_TYPES
 from src.interfaces.postgresql_interface import PostgreSql
 from src.ui.shared_components import render_data_selection
+import mlflow
+
+def get_mlflow_models():
+    """Fetch registered models from MLflow."""
+    try:
+        # Try to load config
+        config_path = "conf/cli/conf_mlflow_server.json"
+        if Path(config_path).exists():
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            host = config.get('host', 'localhost')
+            port = config.get('port', 5000)
+            tracking_uri = f"http://{host}:{port}"
+        else:
+            tracking_uri = "http://localhost:5000"
+        
+        client = mlflow.MlflowClient(tracking_uri=tracking_uri)
+        models = client.search_registered_models()
+        return [m.name for m in models]
+    except Exception as e:
+        # st.warning(f"Could not fetch MLflow models: {e}")
+        return []
 
 def render_forecast_page():
     st.title("📈 Forecast Service")
@@ -85,6 +107,22 @@ def render_forecast_page():
             help="Override the machine learning model strategy for all tasks defined in the config."
         )
 
+    # If mode is Predict, allow selecting a model from MLflow
+    selected_mlflow_model = None
+    if mode == "Predict":
+        st.subheader("Model Selection")
+        with st.spinner("Fetching available models from MLflow..."):
+            mlflow_models = get_mlflow_models()
+        
+        if mlflow_models:
+            selected_mlflow_model = st.selectbox(
+                "Select Trained Model",
+                [None] + mlflow_models,
+                help="Select a registered model from MLflow to use for prediction."
+            )
+        else:
+            st.warning("No registered models found in MLflow (or could not connect). using config default.")
+
     # --- Main Area - Job Settings Display ---
     st.markdown("### ⚙️ Job Settings")
     
@@ -157,46 +195,51 @@ def render_forecast_page():
                 if selected_countries:
                     overrides_applied.append(f"Countries: {', '.join(selected_countries)}")
                     for task in forecast_tasks:
-                         if 'data_selection' not in task:
+                        if 'data_selection' not in task:
                             task['data_selection'] = {}
-                         task['data_selection']['countries'] = selected_countries
+                        task['data_selection']['countries'] = selected_countries
 
                 if selected_years:
                     overrides_applied.append(f"Years: {len(selected_years)}")
                     for task in forecast_tasks:
-                         if 'data_selection' not in task:
+                        if 'data_selection' not in task:
                             task['data_selection'] = {}
-                         task['data_selection']['years'] = selected_years
+                        task['data_selection']['years'] = selected_years
 
                 if selected_datasets:
-                     overrides_applied.append(f"Datasets: {len(selected_datasets)}")
-                     for task in forecast_tasks:
-                         if 'data_selection' not in task:
+                    overrides_applied.append(f"Datasets: {len(selected_datasets)}")
+                    for task in forecast_tasks:
+                        if 'data_selection' not in task:
                             task['data_selection'] = {}
-                         task['data_selection']['datasets'] = selected_datasets
+                        task['data_selection']['datasets'] = selected_datasets
 
                 if selected_target_key or selected_model_strategy_key:
                     if selected_target_key:
                         overrides_applied.append(f"Prediction Target: {target_labels[selected_target_key]}")
                         # Update all tasks
                         for task in forecast_tasks:
-                             task['prediction_target'] = selected_target_key
+                            task['prediction_target'] = selected_target_key
                     
                     if selected_model_strategy_key:
                         overrides_applied.append(f"Model Strategy: {model_labels[selected_model_strategy_key]}")
                         # Update all tasks
                         for task in forecast_tasks:
-                             task['model_strategy'] = selected_model_strategy_key
-                    
+                            task['model_strategy'] = selected_model_strategy_key
+                
+                if selected_mlflow_model:
+                    overrides_applied.append(f"Model Name: {selected_mlflow_model}")
+                    for task in forecast_tasks:
+                        task['model_name'] = selected_mlflow_model
+
                 if overrides_applied:
                     st.write(f"ℹ️ Applying overrides: {', '.join(overrides_applied)}")
 
                 # 2. Run Service
                 # If overrides are present, pass the dictionary. Otherwise pass the file path.
                 if overrides_applied:
-                     result = run_service(config_json=run_config)
+                    result = run_service(config_json=run_config)
                 else:
-                     result = run_service(config_file=selected_config_file)
+                    result = run_service(config_file=selected_config_file)
                 
                 st.success("Execution finished successfully!")
                 
