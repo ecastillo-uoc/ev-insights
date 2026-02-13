@@ -4,7 +4,7 @@ import glob
 from pathlib import Path
 from src.__main__ import main as run_service
 from src.forecast.strategies import (
-    DATA_STRATEGY_REGISTRY,
+    PREDICTION_TARGET_REGISTRY,
     MODEL_STRATEGY_REGISTRY
 )
 
@@ -41,15 +41,15 @@ def render_forecast_page():
     st.sidebar.markdown("---")
     st.sidebar.subheader("Strategy Overrides")
     
-    # Data Strategy Dropdown
-    data_labels = {k.value: v.display_name for k, v in DATA_STRATEGY_REGISTRY.items()}
-    data_options = [None] + list(data_labels.keys())
+    # Prediction Target (formerly Data Strategy) Dropdown
+    target_labels = {k.value: v.display_name for k, v in PREDICTION_TARGET_REGISTRY.items()}
+    target_options = [None] + list(target_labels.keys())
     
-    selected_data_strategy_key = st.sidebar.selectbox(
-        "Data Strategy",
-        data_options,
-        format_func=lambda x: data_labels[x] if x else "Use Config Default",
-        help="Override the data processing strategy for all tasks defined in the config."
+    selected_target_key = st.sidebar.selectbox(
+        "Prediction Target",
+        target_options,
+        format_func=lambda x: target_labels[x] if x else "Use Config Default",
+        help="Override the prediction target (data strategy) for all tasks defined in the config."
     )
     
     # Model Strategy Dropdown
@@ -124,13 +124,13 @@ def render_forecast_page():
                 
                 # Apply strategy overrides
                 overrides_applied = []
-                if selected_data_strategy_key or selected_model_strategy_key:
+                if selected_target_key or selected_model_strategy_key:
                     forecast_tasks = run_config.get('services', {}).get('forecast', {}).get('forecast', [])
-                    if selected_data_strategy_key:
-                        overrides_applied.append(f"Data Strategy: {data_labels[selected_data_strategy_key]}")
+                    if selected_target_key:
+                        overrides_applied.append(f"Prediction Target: {target_labels[selected_target_key]}")
                         # Update all tasks
                         for task in forecast_tasks:
-                             task['data_strategy'] = selected_data_strategy_key
+                             task['prediction_target'] = selected_target_key
                     
                     if selected_model_strategy_key:
                         overrides_applied.append(f"Model Strategy: {model_labels[selected_model_strategy_key]}")
@@ -159,4 +159,3 @@ def render_forecast_page():
             except Exception as e:
                 st.error(f"An error occurred during execution: {e}")
                 st.exception(e)
-

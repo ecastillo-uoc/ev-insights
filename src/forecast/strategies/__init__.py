@@ -1,8 +1,8 @@
-from .data_registry import (
-    DataStrategyType,
-    DataStrategyInfo,
-    DATA_STRATEGY_REGISTRY,
-    get_data_strategy
+from .prediction_target import (
+    PredictionTarget,
+    PredictionTargetInfo,
+    PREDICTION_TARGET_REGISTRY,
+    get_prediction_target_strategy
 )
 from .model_registry import (
     ModelStrategyType,
@@ -12,10 +12,10 @@ from .model_registry import (
 )
 
 __all__ = [
-    "DataStrategyType",
-    "DataStrategyInfo",
-    "DATA_STRATEGY_REGISTRY",
-    "get_data_strategy",
+    "PredictionTarget",
+    "PredictionTargetInfo",
+    "PREDICTION_TARGET_REGISTRY",
+    "get_prediction_target_strategy",
     "ModelStrategyType",
     "ModelStrategyInfo",
     "MODEL_STRATEGY_REGISTRY",

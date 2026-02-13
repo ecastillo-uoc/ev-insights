@@ -2,7 +2,7 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Type, Dict, Any, Callable
 
-from src.forecast.strategies.interfaces import DataStrategy
+from src.forecast.strategies.interfaces import PredictionTargetStrategy
 from src.forecast.forecast_implementations import (
     SessionDataStrategy,
     StationChargesDataStrategy,
@@ -10,48 +10,48 @@ from src.forecast.forecast_implementations import (
 )
 
 @dataclass
-class DataStrategyInfo:
-    name: str
-    display_name: str
-    description: str
-    strategy_class: Type[DataStrategy]
+class PredictionTargetInfo:
+    name: str # Internal ID
+    display_name: str # UI Label
+    description: str # UI Tooltip
+    strategy_class: Type[PredictionTargetStrategy] # Implementation class
     default_params: Dict[str, Any]  # Used for feature_engineering
-    init_params: Dict[str, Any]  # Used for __init__ if needed
+    init_params: Dict[str, Any]  # Used for __init__ of the strategy
 
-class DataStrategyType(Enum):
+class PredictionTarget(Enum):
     SESSION_ENERGY = "session_energy"
     SESSION_DURATION = "session_duration"
     STATION_CHARGES = "station_charges"
     STATION_ENERGY = "station_energy"
 
 # Registry
-DATA_STRATEGY_REGISTRY: Dict[DataStrategyType, DataStrategyInfo] = {
-    DataStrategyType.SESSION_ENERGY: DataStrategyInfo(
-        name=DataStrategyType.SESSION_ENERGY.value,
+PREDICTION_TARGET_REGISTRY: Dict[PredictionTarget, PredictionTargetInfo] = {
+    PredictionTarget.SESSION_ENERGY: PredictionTargetInfo(
+        name=PredictionTarget.SESSION_ENERGY.value,
         display_name="Session Energy Prediction",
         description="Forecast total energy delivered for a session.",
         strategy_class=SessionDataStrategy,
-        default_params={}, # for feature_engineering
-        init_params={"target_column": "Energy (kWh)"} # for __init__ of SessionDataStrategy
+        default_params={}, 
+        init_params={"target_column": "Energy (kWh)"}
     ),
-    DataStrategyType.SESSION_DURATION: DataStrategyInfo(
-        name=DataStrategyType.SESSION_DURATION.value,
+    PredictionTarget.SESSION_DURATION: PredictionTargetInfo(
+        name=PredictionTarget.SESSION_DURATION.value,
         display_name="Session Duration Prediction",
         description="Forecast total duration of a charging session.",
         strategy_class=SessionDataStrategy,
         default_params={},
         init_params={"target_column": "Charge Duration (min)"}
     ),
-    DataStrategyType.STATION_CHARGES: DataStrategyInfo(
-        name=DataStrategyType.STATION_CHARGES.value,
+    PredictionTarget.STATION_CHARGES: PredictionTargetInfo(
+        name=PredictionTarget.STATION_CHARGES.value,
         display_name="Station Charges Count",
         description="Forecast number of simultaneous charges at a station.",
         strategy_class=StationChargesDataStrategy,
         default_params={},
         init_params={}
     ),
-    DataStrategyType.STATION_ENERGY: DataStrategyInfo(
-        name=DataStrategyType.STATION_ENERGY.value,
+    PredictionTarget.STATION_ENERGY: PredictionTargetInfo(
+        name=PredictionTarget.STATION_ENERGY.value,
         display_name="Station Energy Demand",
         description="Forecast total energy demand for a station.",
         strategy_class=StationEnergyDataStrategy,
@@ -60,8 +60,7 @@ DATA_STRATEGY_REGISTRY: Dict[DataStrategyType, DataStrategyInfo] = {
     ),
 }
 
-def get_data_strategy(strategy_type: DataStrategyType) -> DataStrategy:
-    """Factory function to get instantiated data strategy."""
-    info = DATA_STRATEGY_REGISTRY[strategy_type]
-    # Instantiate with init_params if any
+def get_prediction_target_strategy(target_type: PredictionTarget) -> PredictionTargetStrategy:
+    """Factory function to get instantiated strategy for a target."""
+    info = PREDICTION_TARGET_REGISTRY[target_type]
     return info.strategy_class(**info.init_params)

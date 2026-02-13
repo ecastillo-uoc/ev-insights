@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import pandas as pd
 
-class DataStrategy(ABC):
+class PredictionTargetStrategy(ABC):
     @abstractmethod
     def feature_engineering(self, df: pd.DataFrame, custom_params: dict) -> tuple[pd.DataFrame, list, list]:
         """

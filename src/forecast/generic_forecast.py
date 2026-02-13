@@ -1,8 +1,8 @@
 from src.forecast.forecast import Forecast
-from src.forecast.strategies.interfaces import DataStrategy, ModelStrategy
+from src.forecast.strategies.interfaces import PredictionTargetStrategy, ModelStrategy
 
 class GenericForecast(Forecast):
-    def __init__(self, data_strategy: DataStrategy, model_strategy: ModelStrategy, **kwargs):
+    def __init__(self, data_strategy: PredictionTargetStrategy, model_strategy: ModelStrategy, **kwargs):
         super().__init__(**kwargs)
         self.data_strategy = data_strategy
         self.model_strategy = model_strategy
