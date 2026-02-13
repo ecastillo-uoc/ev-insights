@@ -11,7 +11,7 @@ class Interface:
     def __init__(self, name, type, output_dir):
         self.name = name
         self.type = type
-        self.output_dir = Path(PureWindowsPath(output_dir))
+        self.output_dir = Path(PureWindowsPath(output_dir).as_posix())
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger('interface')
         self.logger.info("Initialized " + self.name)

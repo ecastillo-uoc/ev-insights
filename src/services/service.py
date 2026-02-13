@@ -11,7 +11,7 @@ SERVICES = {"analysis", "forecast", "ingestion", "admin"}
 class Service:
     def __init__(self, name, output_dir, interfaces):
         self.name = name
-        self.output_dir = Path(PureWindowsPath(output_dir))
+        self.output_dir = Path(PureWindowsPath(output_dir).as_posix())
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger('service')
         self.logger.info("Initialized " + self.name)

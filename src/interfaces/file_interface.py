@@ -42,13 +42,13 @@ class File(Interface):
             datasets_details_file (str): Path to the file containing dataset metadata.
         """
         super().__init__(name=name, type=type, output_dir=output_dir)
-        self.input_dir = Path(PureWindowsPath(input_dir))
+        self.input_dir = Path(PureWindowsPath(input_dir).as_posix())
         self.limit_rows = limit_rows
         self.input_data_type = input_data_type
 
         # Data gathering from files
         if self.type == "input":
-            self.datasets_details_file = Path(PureWindowsPath(datasets_details_file))
+            self.datasets_details_file = Path(PureWindowsPath(datasets_details_file).as_posix())
             self.datasets_list = datasets_list
 
             if self.input_data_type == 'bulk':
@@ -366,6 +366,10 @@ class File(Interface):
 
         Returns:
             pd.DataFrame: The processed DataFrame with standardized columns and additional fields.
+
+            ID PDC local;Statut du point de recharge;URL Description Point de charge;
+            Heure mise à jour;coordonneesXY;adresse_station;code_insee_commune;
+            arrondissement
         """
         df.rename(columns={'Prise de courant': 'max_charging_power',
                            'Borne': 'charging_station_id',

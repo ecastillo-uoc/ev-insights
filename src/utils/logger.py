@@ -94,7 +94,7 @@ class Logger:
             logger_config_tmp['handlers']['mail_handler']['subject'] = \
                 "*** " + logger_config_tmp['handlers']['mail_handler']['subject'] + \
                 " - " + socket.gethostname() + \
-                " - " + output_dir + " ***"
+                " - " + log_dir + " ***"
         else:
             logger_config_tmp['loggers']['']['handlers'].remove('mail_handler')
             logger_config_tmp['handlers'].pop('mail_handler')

@@ -1,5 +1,6 @@
-/data/output/
-/src/dist/
+data/output/
+src/dist/
 *.pyc
 __pycache__
 //home/ecastillo/dev/data/output/
+\/home/ecastillo/dev/data/output

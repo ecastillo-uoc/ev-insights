@@ -12,6 +12,8 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 
 def main(config_file=None, config_json=None, datasets_list=None, datasets_details_file=None):
+    
+    print(f"DEBUG: main called with datasets_list={datasets_list}")
 
     service = None
     output = []
@@ -36,12 +38,14 @@ def main(config_file=None, config_json=None, datasets_list=None, datasets_detail
         # Override datasets_list and datasets_details_file from CLI arguments if provided
         if 'input' in config.get('interfaces', {}):
             if datasets_list is not None:
+                print(f"DEBUG: Overriding datasets_list with {datasets_list}")
                 config['interfaces']['input']['datasets_list'] = datasets_list
             if datasets_details_file is not None:
                 config['interfaces']['input']['datasets_details_file'] = datasets_details_file
 
         # Init output dir
-        output_dir = Path(PureWindowsPath(config['utils']['output_dir'])).resolve() / (
+        _base_output_dir = PureWindowsPath(config['utils']['output_dir']).as_posix()
+        output_dir = Path(_base_output_dir).resolve() / (
             datetime_now.strftime("%Y-%m-%d_%H.%M.%S") + "__" +
             Path(__file__).stem + "__" +
             config_file_path.stem
@@ -55,26 +59,29 @@ def main(config_file=None, config_json=None, datasets_list=None, datasets_detail
         config_dir.mkdir(parents=True, exist_ok=True)
 
         # Init log dir
-        log_dir = output_dir / PureWindowsPath(config['utils']['logger']['output_dir'])
+        _base_logger_dir = PureWindowsPath(config['utils']['logger']['output_dir']).as_posix()
+        log_dir = output_dir / _base_logger_dir
         config['utils']['logger']['output_dir'] = str(log_dir)
         log_dir.mkdir(parents=True, exist_ok=True)
 
         # Init interfaces dir
-        input_interface_dir = output_dir / PureWindowsPath(config['interfaces']['input']['output_dir'])
+        _base_input_dir = PureWindowsPath(config['interfaces']['input']['output_dir']).as_posix()
+        input_interface_dir = output_dir / _base_input_dir
         config['interfaces']['input']['output_dir'] = str(input_interface_dir)
         input_interface_dir.mkdir(parents=True, exist_ok=True)
 
-        output_interface_dir = output_dir / PureWindowsPath(config['interfaces']['output']['output_dir'])
+        _base_output_interface_dir = PureWindowsPath(config['interfaces']['output']['output_dir']).as_posix()
+        output_interface_dir = output_dir / _base_output_interface_dir
         config['interfaces']['output']['output_dir'] = str(output_interface_dir)
         output_interface_dir.mkdir(parents=True, exist_ok=True)
 
         if "mlflow" in config['interfaces']:
-            mlflow_dir = Path(PureWindowsPath(config['utils']['input_dir'])) / Path(PureWindowsPath(config['interfaces']['mlflow']['mlflow_dir']))
+            mlflow_dir = Path(PureWindowsPath(config['utils']['input_dir']).as_posix()) / Path(PureWindowsPath(config['interfaces']['mlflow']['mlflow_dir']).as_posix())
             config['interfaces']['mlflow']['mlflow_dir'] = str(mlflow_dir.resolve())
             mlflow_dir.mkdir(parents=True, exist_ok=True)
 
         # Init service dir
-        output_service_dir = output_dir / PureWindowsPath(config['output_dir'])
+        output_service_dir = output_dir / PureWindowsPath(config['output_dir']).as_posix()
         config['output_dir'] = str(output_service_dir)
         output_service_dir.mkdir(parents=True, exist_ok=True)
 

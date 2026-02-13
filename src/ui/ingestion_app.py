@@ -96,7 +96,7 @@ def render_ingestion_page():
     if selected_datasets:
         st.markdown(f"**Selected Datasets ({len(selected_datasets)}):** {', '.join(selected_datasets)}")
     else:
-        st.markdown("**Selected Datasets:** *Reading from Config File default*")
+        st.markdown("**Selected Datasets:** *None selected - Using defaults from Config File*")
 
     if st.button("🚀 Run Ingestion", type="primary"):
         if not selected_config_file:
@@ -107,8 +107,16 @@ def render_ingestion_page():
             with st.spinner("Processing... check terminal for real-time logs"):
                 try:
                     # Prepare arguments
-                    datasets_arg = selected_datasets if selected_datasets else None
+                    # Explicitly pass the selected list. If empty (None or []), main() might us defaults if passed None.
+                    # We pass 'selected_datasets' which is a list. If it's empty [], main overrides config with [].
+                    # If we want defaults, we pass None.
                     
+                    datasets_arg = selected_datasets if selected_datasets else None
+                    if datasets_arg:
+                        st.write(f"Overriding config with datasets: {datasets_arg}")
+                    else:
+                        st.write("Using default datasets from configuration file.")
+
                     # Call the main function directly
                     result = run_ingestion(
                         config_file=selected_config_file,
