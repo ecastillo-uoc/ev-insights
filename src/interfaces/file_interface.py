@@ -374,7 +374,7 @@ class File(Interface):
             Heure mise à jour;coordonneesXY;adresse_station;code_insee_commune;
             arrondissement
         """
-        _logger.info(f"Preparing {Colors.PURPLE}BeLib{Colors.NORMAL} dataset")
+        _logger.info(f"Ingestion: Preparing {Colors.PURPLE}BeLib{Colors.NORMAL} dataset")
         _logger.debug(df.columns.to_list())
         df.rename(columns={'Prise de courant': 'max_charging_power',
                            'Borne': 'charging_station_id',
