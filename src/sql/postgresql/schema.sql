@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS evinsights."ChargingSession"
     plug_out_datetime timestamp without time zone,
     charge_end_datetime timestamp without time zone,
     charge_end_datetime_presence boolean,
-    energy_supplied numeric(3, 0),
+    energy_supplied numeric(12, 3),
     fk_dataset_id integer,
     fk_charging_station_id integer,
     fk_user_id integer,
@@ -44,8 +44,8 @@ CREATE TABLE IF NOT EXISTS evinsights."ChargingStation"
     model text COLLATE pg_catalog."default",
     type text COLLATE pg_catalog."default",
     num_plugs integer,
-    max_charging_power numeric(2, 0),
-    max_discharging_power numeric(2, 0),
+    max_charging_power numeric(12, 3),
+    max_discharging_power numeric(12, 3),
     dataset_id integer,
     CONSTRAINT "ChargingStation_pkey" PRIMARY KEY (id)
 );
@@ -85,8 +85,8 @@ CREATE TABLE IF NOT EXISTS evinsights."User"
     ev_battery_type text COLLATE pg_catalog."default",
     ev_battery_useable_capacity numeric(2, 0),
     ev_v2g boolean,
-    ev_max_charging_power numeric(2, 0),
-    ev_max_discharging_power numeric(2, 0),
+    ev_max_charging_power numeric(12, 3),
+    ev_max_discharging_power numeric(12, 3),
     dataset_id integer,
     CONSTRAINT "User_pkey" PRIMARY KEY (id)
 );
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS evinsights."ChargingStationForecast"
 (
     id integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 ),
     date date,
-    energy numeric(3),
+    energy numeric(12, 3),
     connections integer,
     experiment_id text,
     run_id text,
@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS evinsights."UserForecast"
 (
     id integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 ),
     date date,
-    energy numeric(3),
+    energy numeric(12, 3),
     duration integer,
     experiment_id text,
     run_id text,
