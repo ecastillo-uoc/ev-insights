@@ -171,7 +171,7 @@
         "dataset_file_name": "merged_belib_transactions.csv",
         "dataset_sheet_name": "",
         "dataset_file_type": "csv",
-        "dataset_delimiter": ";",
+        "dataset_delimiter": ",",
         "dataset_encoding": "UTF-8",
         "dataset_license": "Open Data Commons Open Database License (ODbL)",
         "dataset_charging_point_type": "public",
