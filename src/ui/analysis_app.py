@@ -11,15 +11,15 @@ from src.ui.shared_components import render_data_selection
 def render_analysis_page():
     st.title("📊 Analysis Service")
     
-    # --- Sidebar Configuration ---
-    st.sidebar.header("Analysis Configuration")
+    # --- Configuration ---
+    st.header("Analysis Configuration")
     
     # Select Configuration File
     config_pattern = "conf/cli/conf_cli_analysis*.json"
     config_files = glob.glob(config_pattern)
     config_files.sort()
     
-    selected_config_file = st.sidebar.selectbox(
+    selected_config_file = st.selectbox(
         "Select Configuration", 
         config_files,
         index=0 if config_files else None
@@ -115,23 +115,23 @@ def render_analysis_page():
                 if selected_countries:
                     overrides_applied.append(f"Countries: {', '.join(selected_countries)}")
                     for task in analysis_tasks:
-                         if 'data_selection' not in task:
+                        if 'data_selection' not in task:
                             task['data_selection'] = {}
-                         task['data_selection']['countries'] = selected_countries
+                        task['data_selection']['countries'] = selected_countries
 
                 if selected_years:
-                     overrides_applied.append(f"Years: {len(selected_years)}")
-                     for task in analysis_tasks:
-                         if 'data_selection' not in task:
+                    overrides_applied.append(f"Years: {len(selected_years)}")
+                    for task in analysis_tasks:
+                        if 'data_selection' not in task:
                             task['data_selection'] = {}
-                         task['data_selection']['years'] = selected_years
+                        task['data_selection']['years'] = selected_years
 
                 if selected_datasets:
-                     overrides_applied.append(f"Datasets: {len(selected_datasets)}")
-                     for task in analysis_tasks:
-                         if 'data_selection' not in task:
+                    overrides_applied.append(f"Datasets: {len(selected_datasets)}")
+                    for task in analysis_tasks:
+                        if 'data_selection' not in task:
                             task['data_selection'] = {}
-                         task['data_selection']['datasets'] = selected_datasets
+                        task['data_selection']['datasets'] = selected_datasets
 
                 if overrides_applied:
                     st.write(f"ℹ️ Applying overrides: {', '.join(overrides_applied)}")
@@ -142,10 +142,10 @@ def render_analysis_page():
                 st.success("Analysis execution finished successfully!")
                 
                 with result_placeholder.container():
-                     st.write("### Analysis Results")
-                     if result:
+                    st.write("### Analysis Results")
+                    if result:
                         st.json(result)
-                     else:
+                    else:
                         st.info("Check the `data/output` folder or logs for results if they are not returned here.")
                     
             except Exception as e:

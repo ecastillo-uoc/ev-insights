@@ -13,6 +13,8 @@ from src.interfaces.interface import Interface
 from src.utils.globals import DATAFRAME_COLUMNS
 from src.utils.logger import Colors
 
+_logger = logging.getLogger("interfaces.file")
+
 
 class File(Interface):
     """
@@ -42,6 +44,7 @@ class File(Interface):
             datasets_details_file (str): Path to the file containing dataset metadata.
         """
         super().__init__(name=name, type=type, output_dir=output_dir)
+        self.logger = _logger
         self.input_dir = Path(PureWindowsPath(input_dir).as_posix())
         self.limit_rows = limit_rows
         self.input_data_type = input_data_type
@@ -371,6 +374,8 @@ class File(Interface):
             Heure mise à jour;coordonneesXY;adresse_station;code_insee_commune;
             arrondissement
         """
+        _logger.info(f"Preparing {Colors.PURPLE}BeLib{Colors.NORMAL} dataset")
+        _logger.debug(df.columns.to_list())
         df.rename(columns={'Prise de courant': 'max_charging_power',
                            'Borne': 'charging_station_id',
                            'UUID Badge': 'user_id'},

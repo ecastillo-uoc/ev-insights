@@ -8,7 +8,7 @@ from src.__main__ import main as run_ingestion
 def render_db_manager_page():
     st.title("🛡️ DB Manager")
     
-    st.sidebar.header("Admin Configuration")
+    st.header("Admin Configuration")
 
     # --- DB Connectivity Check ---
     with st.expander("🔌 Database Connectivity Check"):
@@ -51,7 +51,7 @@ def render_db_manager_page():
     admin_config_files = glob.glob(admin_config_pattern)
     admin_config_files.sort()
 
-    selected_admin_config = st.sidebar.selectbox(
+    selected_admin_config = st.selectbox(
         "Select Admin Task (Config File)",
         admin_config_files,
         index=0 if admin_config_files else None
@@ -92,7 +92,7 @@ def render_db_manager_page():
                 dataset_details_file = "data/input/datasets_details.json"
                 available_datasets = []
                 if Path(dataset_details_file).exists():
-                     with open(dataset_details_file, 'r', encoding='utf-8') as f:
+                    with open(dataset_details_file, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                         if isinstance(data, list):
                             available_datasets = [item.get('dataset_name') for item in data if item.get('dataset_name')]

@@ -8,10 +8,10 @@ def render_ingestion_page():
     st.title("⚡ EV Insights Ingestion")
 
     # --- Configuration Section ---
-    st.sidebar.header("Ingestion configuration")
+    st.header("Ingestion configuration")
 
     # 1. Select Ingestion Type (Bulk or Table)
-    ingestion_type = st.sidebar.radio(
+    ingestion_type = st.radio(
         "Ingestion Type",
         ("bulk", "table"),
         index=0
@@ -28,7 +28,7 @@ def render_ingestion_page():
     # Sort to make it reproducible
     config_files.sort()
 
-    selected_config_file = st.sidebar.selectbox(
+    selected_config_file = st.selectbox(
         f"Select configuration file ({ingestion_type})", 
         config_files,
         index=0 if config_files else None
@@ -41,12 +41,16 @@ def render_ingestion_page():
     dataset_config_files.sort()
 
     dataset_configs = [f for f in dataset_config_files]
-    default_details_file = "data/input/datasets_details.json"
-    # details_file = st.sidebar.text_input("Datasets configuration details file", value=default_details_file)
-    selected_details_file = st.sidebar.selectbox(
+    preferred_details_file = "data/input/datasets_details_ok.json"
+    default_details_index = (
+        dataset_configs.index(preferred_details_file)
+        if preferred_details_file in dataset_configs
+        else (0 if dataset_configs else None)
+    )
+    selected_details_file = st.selectbox(
         "Select Datasets configuration details file", 
         dataset_configs,
-        index=0 if dataset_configs else None
+        index=default_details_index
     )
 
     # --- Datasets Selection ---
@@ -66,7 +70,10 @@ def render_ingestion_page():
                     data = json.load(f)
                     # Assuming list of dicts with 'dataset_name'
                     if isinstance(data, list):
-                        available_datasets = [item.get('dataset_name') for item in data if item.get('dataset_name')]
+                        available_datasets = sorted(
+                            [item.get('dataset_name') for item in data if item.get('dataset_name')],
+                            key=str.casefold,
+                        )
             except Exception as e:
                 st.error(f"Error reading details file: {e}")
         else:
@@ -128,7 +135,7 @@ def render_ingestion_page():
                     
                     st.subheader("Result Output:")
                     if result:
-                         st.json(result)
+                        st.json(result)
                     else:
                         st.write("No output returned (check logs).")
 

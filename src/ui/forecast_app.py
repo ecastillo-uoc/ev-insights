@@ -70,14 +70,14 @@ def render_forecast_page():
     config_files.sort()
     
     # Select Configuration File based on Mode
-    selected_config_file = st.sidebar.selectbox(
+    selected_config_file = st.selectbox(
         f"Select {mode} Configuration", 
         config_files,
         index=0 if config_files else None
     )
     
-    # --- Sidebar Configuration ---
-    st.sidebar.header("Forecast Configuration")
+    # --- Configuration ---
+    st.header("Forecast Configuration")
     # --- Strategy Selection (Main Page) ---
     st.subheader("Strategy Selection")
 

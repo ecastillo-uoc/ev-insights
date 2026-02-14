@@ -16,6 +16,15 @@ DATAFRAME_COLUMNS = ['plug_in_datetime',              # When vehicle is plugged-
                      'user_id',                       # ID of the user, if any
                      ]
 
-CHARGING_POINT_TYPES = ['private (domestic)',
-                        'private (workplace)',
-                        'public']
+CHARGING_POINT_TYPES = ['private_domestic',
+                        'private_workplace',
+                        'public'
+                        ]
+
+# https://www.power-sonic.com/ev-charging-connector-types/
+CONNECTOR_TYPES = ['T3',
+                  'T2', 
+                  'TE', 
+                  'CHAdeMO', 
+                  'Combo'
+                ]
