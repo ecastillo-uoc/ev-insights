@@ -16,7 +16,7 @@ class Logger:
         'version': 1,
         'loggers': {
             '': {  # root logger
-                'level': 'NOTSET',
+                'level': 'DEBUG',
                 'handlers': ['debug_console_handler', 'info_rotating_file_handler', 'error_file_handler', 'mail_handler'],
             },
             'my.package': {
@@ -27,7 +27,7 @@ class Logger:
         },
         'handlers': {
             'debug_console_handler': {
-                'level': 'INFO',
+                'level': 'DEBUG',
                 'formatter': 'info',
                 'class': 'logging.StreamHandler',
                 'stream': 'ext://sys.stdout',
