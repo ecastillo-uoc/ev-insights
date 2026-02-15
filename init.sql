@@ -2,6 +2,15 @@
 -- Connect as superuser
 \c postgres
 
+-- Destroy the databases if they already exist
+DROP DATABASE IF EXISTS mlflow;
+DROP DATABASE IF EXISTS evinsights;
+
+-- Drop users if they exist
+DROP USER IF EXISTS mlflow;
+DROP USER IF EXISTS evinsights;
+
+
 -- Create db
 CREATE DATABASE mlflow;
 CREATE DATABASE evinsights;
