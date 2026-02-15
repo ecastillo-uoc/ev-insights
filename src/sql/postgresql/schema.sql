@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS evinsights."Connector"
 (
     id integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 ),
     code varchar(20),
+    current_type varchar(2),
+    charging_level varchar(2),
     description text,
     PRIMARY KEY (id)
 );
