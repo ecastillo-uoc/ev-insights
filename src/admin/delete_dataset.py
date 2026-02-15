@@ -26,6 +26,7 @@ class delete_dataset(Admin):
             }
         )
 
+        self.logger.info(f"Dataset {dataset_name} deleted successfully from database")
         self.results = output_dict
 
         return self.results

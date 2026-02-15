@@ -218,8 +218,13 @@ class PostgreSql(Interface):
              # For now, let's assume 'id' or handle potentially missing ID gracefully
              id_column = 'id'
 
-
-        charging_station_columns = [col for col in [id_column, 'manufacturer', 'model', 'type', 'num_plugs', 'max_charging_power', 'max_discharging_power'] if col in data.columns]
+        # Ensure we capture all relevant columns for charging stations
+        allowed_columns = [
+            id_column, 'manufacturer', 'model', 'type', 'num_plugs', 
+            'max_charging_power', 'max_discharging_power',
+            'ocpp_version', 'longitude', 'latitude'
+        ]
+        charging_station_columns = [col for col in allowed_columns if col in data.columns]
         charging_stations_data = data[charging_station_columns].drop_duplicates()
 
         inserted_count = 0
@@ -231,6 +236,9 @@ class PostgreSql(Interface):
                         row['num_plugs'] if 'num_plugs' in row and row['num_plugs'] != '' else None,
                         row['max_charging_power'] if 'max_charging_power' in row and row['max_charging_power'] != '' else None,
                         row['max_discharging_power'] if 'max_discharging_power' in row and row['max_discharging_power'] != '' else None,
+                        row['ocpp_version'] if 'ocpp_version' in row and row['ocpp_version'] != '' else None,
+                        row['longitude'] if 'longitude' in row and row['longitude'] != '' else None,
+                        row['latitude'] if 'latitude' in row and row['latitude'] != '' else None,
                         dataset_id)
             cursor.execute(sql_query.insert_charging_stations, data_row)
             inserted_count += cursor.rowcount
@@ -277,9 +285,9 @@ class PostgreSql(Interface):
         
         inserted_count = 0
         for index, row in ev_data.iterrows():
-            data_row = (row['ev_manufacturer'], 
-                        row['ev_model'], 
-                        row['ev_battery_capacity_kWh'])
+            data_row = (row['ev_manufacturer'],
+                        row['ev_model'],
+                        row['ev_battery_capacity_kWh'] if row['ev_battery_capacity_kWh'] != '' else None)
             cursor.execute(sql_query.insert_electric_vehicle, data_row)
             inserted_count += cursor.rowcount
 
@@ -288,6 +296,8 @@ class PostgreSql(Interface):
         return inserted_count
 
     def insert_infrastructure(self, data, dataset_name):
+        # Drop duplicates based on orig_id
+        # data = data[['orig_id']].drop_duplicates()
         return self.insert_charging_stations(data, dataset_name)
 
     def insert_charging_sessions(self, data, dataset_name):

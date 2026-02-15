@@ -32,18 +32,27 @@ class IngestionService(Service):
                 self.logger.info(f"DF Columns: {df_columns}")
                 self.logger.info(f"Expected EV Columns: {set(self.input_interface.ev_dataframe_columns)}")
                 
+                # Initialize counters to 0 to avoid UnboundLocalError
+                charging_stations_count = 0
+                users_count = 0
+                charging_sessions_count = 0
+                ev_count = 0
+
                 # Determine ingestion type based on columns
-                if self.input_interface.ev_dataframe_columns and df_columns == set(self.input_interface.ev_dataframe_columns):
+                expected_ev_cols = set(self.input_interface.ev_dataframe_columns)
+                expected_infra_cols = set(self.input_interface.charging_station_dataframe_columns)
+
+                if self.input_interface.ev_dataframe_columns and expected_ev_cols.issubset(df_columns): # Use issubset to handle extra metadata cols
                      self.logger.info("Ingesting Electric Vehicles")
-                     self.output_interface.insert_electric_vehicles(data=dataset_value['data'])
+                     ev_count = self.output_interface.insert_electric_vehicles(data=dataset_value['data'])
                      
-                elif self.input_interface.charging_station_dataframe_columns and df_columns == set(self.input_interface.charging_station_dataframe_columns):
+                elif self.input_interface.charging_station_dataframe_columns and expected_infra_cols.issubset(df_columns):
                      self.logger.info("Ingesting Charging Stations (Infrastructure)")
                      # TODO: Implement insert_charging_stations_only if needed or reuse existing
                      # For now, re-using existing but it might expect session columns? Let's check.
                      # Existing expects 'orig_id', 'manufacturer', etc. Our current infrastructure df has 'origin_id', 'ocpp_version'...
                      # This needs alignment. I will direct to a new method.
-                     self.output_interface.insert_infrastructure(data=dataset_value['data'], dataset_name=dataset_value['info']['dataset_name'])
+                     charging_stations_count = self.output_interface.insert_infrastructure(data=dataset_value['data'], dataset_name=dataset_value['info']['dataset_name'])
 
                 else:
                     # Default: Sessions ingestion (which implicitly inserts stations and users)
@@ -75,7 +84,8 @@ class IngestionService(Service):
                 {'Counts': {'dataset_count': dataset_count,
                             'charging_stations_count': charging_stations_count,
                             'users_count': users_count,
-                            'charging_sessions_count': charging_sessions_count}
+                            'charging_sessions_count': charging_sessions_count,
+                            'ev_count': ev_count}
                  }
             )
 

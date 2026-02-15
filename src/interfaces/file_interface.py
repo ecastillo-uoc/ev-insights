@@ -304,8 +304,8 @@ class File(Interface):
     
 
     def prepare_dataset_ev_infra(self, df):
-        _logger.info(f"Ingestion: Preparing {Colors.BLUE}AMB_Barcelona_EV{Colors.NORMAL} dataset")
-        _logger.debug(df.columns.to_list())
+        _logger.info(f"Ingestion: Preparing {Colors.BLUE}AMB_Barcelona_EV / EV_models{Colors.NORMAL} dataset")
+        _logger.info(f"Columns found: {df.columns.to_list()}")
 
         # normalize names
         df.rename(columns={
@@ -333,6 +333,40 @@ class File(Interface):
             "Cumulative energy delivered in the year (Wh)": "energy_year_Wh",
             "Average charge power (W)": "power_W_avg"
         }, inplace=True)
+
+        # Handle missing columns that might not be in the CSV
+        if "energy_year_Wh" not in df.columns:
+            df["energy_year_Wh"] = None
+        if "power_W_avg" not in df.columns:
+            df["power_W_avg"] = None
+
+        # Logic to infer connector if not present
+        if "connector" not in df.columns:
+            possible_connector_columns = [
+                "Schuko 3kW 16A mode 1", 
+                "Mennekes 7 kW 16A mode 3", 
+                "Mennekes 43 kW 63A mode 3", 
+                "CHAdeMO 55kW 125A mode 4", 
+                "COMBO CCS 55 kW 125A mode 4"
+            ]
+            
+            # Find which of these columns actually exist in df (handling duplicates if pandas mangled them like .1)
+            existing_conn_cols = []
+            for col in df.columns:
+                # Check directly or starts with (due to pandas duplicate handling)
+                for p_col in possible_connector_columns:
+                    if col == p_col or col.startswith(p_col + "."):
+                        existing_conn_cols.append((col, p_col))
+                        break
+            
+            def get_connector_string(row):
+                connectors = []
+                for col_name, conn_type in existing_conn_cols:
+                    if str(row[col_name]).lower() == 'x':
+                        connectors.append(conn_type)
+                return ", ".join(sorted(list(set(connectors)))) if connectors else None
+
+            df["connector"] = df.apply(get_connector_string, axis=1)
         
         # Filter columns
         df = df[self.charging_station_dataframe_columns]

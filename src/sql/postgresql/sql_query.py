@@ -22,7 +22,7 @@ insert_charging_point_types = """
     VALUES (%s)
 """
 
-insert_dataset_info = """ 
+insert_dataset_info = """
     INSERT INTO evinsights."Dataset" (name, url, description, owner, country, region, city, dataset_directory, file_name, file_type, delimiter, encoding, 
                                    license, charging_point_type, notes)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -30,8 +30,8 @@ insert_dataset_info = """
 
 insert_charging_stations = """
     INSERT INTO evinsights."ChargingStation" (orig_id, manufacturer, model, type, num_plugs, max_charging_power, max_discharging_power, 
-                                           dataset_id)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                           ocpp_version, longitude, latitude, dataset_id)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
 
 insert_charging_sessions = """
