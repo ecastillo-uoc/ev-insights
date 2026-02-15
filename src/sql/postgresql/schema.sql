@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS evinsights."Dataset"
     country text COLLATE pg_catalog."default",
     region text COLLATE pg_catalog."default",
     city text COLLATE pg_catalog."default",
+    dataset_directory text COLLATE pg_catalog."default",
     file_name text COLLATE pg_catalog."default",
     file_type text COLLATE pg_catalog."default",
     delimiter text COLLATE pg_catalog."default",
@@ -137,6 +138,7 @@ CREATE TABLE IF NOT EXISTS evinsights."User"
     ev_max_charging_power numeric(12, 3),
     ev_max_discharging_power numeric(12, 3),
     dataset_id integer,
+    fk_electric_vehicle_id integer,
     CONSTRAINT "User_pkey" PRIMARY KEY (id)
 );
 
@@ -221,6 +223,13 @@ ALTER TABLE IF EXISTS evinsights."ChargingStation"
 ALTER TABLE IF EXISTS evinsights."ChargingStation"
     ADD CONSTRAINT fk_charging_point_type_id FOREIGN KEY (fk_charging_point_type_id)
     REFERENCES evinsights."ChargingPointType" (id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE NO ACTION
+    NOT VALID;
+
+ALTER TABLE IF EXISTS evinsights."User"
+    ADD CONSTRAINT fk_electric_vehicle_id FOREIGN KEY (fk_electric_vehicle_id)
+    REFERENCES evinsights."ElectricVehicle" (id) MATCH SIMPLE
     ON UPDATE NO ACTION
     ON DELETE NO ACTION
     NOT VALID;

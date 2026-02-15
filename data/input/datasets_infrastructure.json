@@ -1,0 +1,24 @@
+[
+        {
+        "dataset_name": "AMB_Barcelona_charging_points",
+        "dataset_url": "https://zenodo.org/records/5721233#.YtaAc4TP0uU",
+        "dataset_description": "contains the information about the public charging points of the metropolitan area of Barcelona. Fields are: charger typology (Quick/Normal); Charging point name and address; OCCP version; charger location; longitude; latitude; 7 flag fields for the connector type; observations; charging point maker.",
+        "dataset_owner": "USER-CHI H2020",
+        "dataset_country": "ES",
+        "dataset_region": "",
+        "dataset_city": "",
+        "dataset_active": "True",
+        "dataset_directory": "AMB_Barcelona",
+        "dataset_file_name": "STATIC INFORMATION CHARGING POINTS AMB 29042020.csv",
+        "dataset_sheet_name": "",
+        "dataset_file_type": "csv",
+        "dataset_delimiter": ";",
+        "dataset_encoding": "latin1",
+        "dataset_license": "Creative Common Attributes 4.0",
+        "dataset_charging_point_type": "public",
+        "dataset_notes": "",
+        "text_quotes": "",
+        "decimal": "."
+    }
+
+]

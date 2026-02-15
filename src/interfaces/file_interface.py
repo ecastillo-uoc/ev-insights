@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from dateutil import parser
 
 from src.interfaces.interface import Interface
-from src.utils.globals import get_dataframe_columns_from_db, CONNECTOR_TYPE_ALIASES
+from src.utils.globals import get_dataframe_columns_from_db, CONNECTOR_TYPE_ALIASES, DEFAULT_EV_DATAFRAME_COLUMNS, DEFAULT_CHARGING_STATION_DATAFRAME_COLUMNS
 from src.utils.logger import Colors
 
 _logger = logging.getLogger("interfaces.file")
@@ -49,10 +49,15 @@ class File(Interface):
         self.limit_rows = limit_rows
         self.input_data_type = input_data_type
         self.dataframe_columns = get_dataframe_columns_from_db()
+        self.ev_dataframe_columns = DEFAULT_EV_DATAFRAME_COLUMNS
+        self.charging_station_dataframe_columns = DEFAULT_CHARGING_STATION_DATAFRAME_COLUMNS
 
         # Data gathering from files
         if self.type == "input":
-            self.datasets_details_file = Path(PureWindowsPath(datasets_details_file).as_posix())
+            if isinstance(datasets_details_file, list):
+                 self.datasets_details_file = [Path(PureWindowsPath(f).as_posix()) for f in datasets_details_file]
+            else:
+                self.datasets_details_file = Path(PureWindowsPath(datasets_details_file).as_posix())
             self.datasets_list = datasets_list
 
             if self.input_data_type == 'bulk':
@@ -131,30 +136,40 @@ class File(Interface):
 
         Args:
             datasets_list (list): List of dataset names to process.
-            datasets_details_file (str): Path to the file containing dataset metadata.
+            datasets_details_file (str or list): Path to the file(s) containing dataset metadata.
             limit_rows (int, optional): Maximum number of rows to read.
 
         Returns:
             dict: Dictionary containing dataset metadata and data.
         """
-        datasets_details = {}
-        if datasets_details_file.suffix == '.json':
-            with open(datasets_details_file, mode='r', encoding='utf-8') as file:
-                data = json.load(file)
-                datasets_details = [row for row in data if row['dataset_name'] in datasets_list]
-        else:
-            with open(datasets_details_file, mode='r', newline='', encoding='utf-8') as file:
-                reader = csv.DictReader(file)
-                datasets_details = [row for row in reader if row['dataset_name'] in datasets_list]
+        datasets_details = []
+        files_to_read = datasets_details_file if isinstance(datasets_details_file, list) else [datasets_details_file]
 
+        for file_path in files_to_read:
+            # Check if file_path is a pure windows/posix path object or a string and handle accordingly
+            current_file_path = file_path if isinstance(file_path, Path) else Path(file_path)
+
+            if not current_file_path.exists():
+                self.logger.warning(f"Metadata file not found: {current_file_path}")
+                continue
+
+            if current_file_path.suffix == '.json':
+                with open(current_file_path, mode='r', encoding='utf-8') as file:
+                    data = json.load(file)
+                    datasets_details.extend([row for row in data if row['dataset_name'] in datasets_list])
+            else:
+                with open(current_file_path, mode='r', newline='', encoding='utf-8') as file:
+                    reader = csv.DictReader(file)
+                    datasets_details.extend([row for row in reader if row['dataset_name'] in datasets_list])
+        
         datasets = {}
         for dataset_info in datasets_details:
             self.logger.info(f"Gathering {Colors.BLUE}{dataset_info['dataset_name']}{Colors.NORMAL} dataset")
-            # Use 'dataset_folder' if specified, otherwise default to 'dataset_name'
-            folder_name = dataset_info.get('dataset_folder', dataset_info['dataset_name'])
+            # Use 'dataset_directory' if specified, otherwise 'dataset_folder', otherwise 'dataset_name'
+            folder_name = dataset_info.get('dataset_directory', dataset_info.get('dataset_folder', dataset_info['dataset_name']))
             dataset_name = dataset_info.get('dataset_file_name')
             if folder_name is None or dataset_name is None:
-                raise ValueError("Currently processing path requires both folder_name and dataset_name")
+                raise ValueError("Currently processing path requires both dataset_directory/folder and dataset_name")
 
             # Type checker now knows they are definitely strings
             input_file = Path(self.input_dir) / folder_name / dataset_name
@@ -267,34 +282,38 @@ class File(Interface):
         return pd.to_datetime(date_string_with_2000, format='%Y-%m-%d %H:%M:%S')
 
     def prepare_dataset_amb_barcelona_ev(self, df):
-        _logger.info(f"Ingestion: Preparing {Colors.BLUE}BeLib{Colors.NORMAL} dataset")
+        _logger.info(f"Ingestion: Preparing {Colors.BLUE}AMB_Barcelona_EV{Colors.NORMAL} dataset")
         _logger.debug(df.columns.to_list())
 
         # normalize names
         df.rename(columns={
-            "Marchio":"make",
-            "Modello":"model",
-            "BatteriaE (kWh)":"",
-
+            "Marchio":"ev_manufacturer",
+            "Modello":"ev_model",
+            "BatteriaE (kWh)":"ev_battery_capacity_kWh",
         }, inplace=True)
+        
+        # Filter columns
+        df = df[self.ev_dataframe_columns]
 
         return df
-    
+
     def prepare_dataset_amb_barcelona_charging_stations(self, df):
-        _logger.info(f"Ingestion: Preparing {Colors.BLUE}BeLib{Colors.NORMAL} dataset")
+        _logger.info(f"Ingestion: Preparing {Colors.BLUE}AMB_Barcelona_charging_points{Colors.NORMAL} dataset")
         _logger.debug(df.columns.to_list())
 
         # normalize names
         df.rename(columns={
             "CHARGING POINT (name and adress)": "origin_id",
-            "OCPP version": "ocpp_vesrion",
+            "OCPP version": "ocpp_version",
             "longitude"	:"longitude",
-            "latitude": "longitude",
+            "latitude": "latitude",
             "Plug type (AC 22 kW/DC 50 kW)" : "connector",
             "Cumulative energy delivered in the year (Wh)": "energy_year_Wh",
             "Average charge power (W)": "power_W_avg"
-
         }, inplace=True)
+        
+        # Filter columns
+        df = df[self.charging_station_dataframe_columns]
 
         return df
 
@@ -502,24 +521,39 @@ class File(Interface):
 
     def check_dataset_columns(self, df):
         """
-        Validates that the DataFrame contains the expected columns.
+        Validates that the DataFrame contains the expected columns for one of the supported types.
 
         Args:
             df (pd.DataFrame): The DataFrame to validate.
 
         Returns:
-            bool: True if the DataFrame contains the expected columns.
+            bool: True if the DataFrame contains the expected columns for one supported type.
 
         Raises:
-            ValueError: If the DataFrame does not contain the expected columns.
+            ValueError: If the DataFrame does not contain the expected columns for any supported type.
         """
-        if set(df.columns) == set(self.dataframe_columns):
+        columns = set(df.columns)
+        
+        # Check against Session columns
+        if columns == set(self.dataframe_columns):
             return True
-        else:
-            raise ValueError("Columns are not properly set\n"
-                             "Expected columns: %s\n"
-                             "df.columns=%s"
-                             % (self.dataframe_columns, df.columns.tolist()))
+            
+        # Check against EV columns
+        if columns == set(self.ev_dataframe_columns):
+            return True
+            
+        # Check against Charging Station columns
+        if columns == set(self.charging_station_dataframe_columns):
+            return True
+        
+        # If none match
+        raise ValueError("Columns are not properly set for any known type\n"
+                         "Expected Session columns: %s\n"
+                         "Expected EV columns: %s\n"
+                         "Expected Station columns: %s\n"
+                         "df.columns=%s"
+                         % (self.dataframe_columns, self.ev_dataframe_columns, 
+                            self.charging_station_dataframe_columns, df.columns.tolist()))
 
     @property
     def _preparation_methods(self):
@@ -531,6 +565,8 @@ class File(Interface):
         """
         return {
             'AMB_Barcelona': self.prepare_dataset_amb_barcelona,
+            'AMB_Barcelona_EV': self.prepare_dataset_amb_barcelona_ev,
+            'AMB_Barcelona_charging_points': self.prepare_dataset_amb_barcelona_charging_stations,
             'BeLib': self.prepare_dataset_belib,
             'ACN_Caltech': self.prepare_dataset_ACN_Caltech,
             'Norway_12loc': self.prepare_dataset_Norway_12loc,

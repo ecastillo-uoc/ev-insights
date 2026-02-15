@@ -1,0 +1,43 @@
+[
+        {
+        "dataset_name": "AMB_Barcelona_EV",
+        "dataset_url": "https://zenodo.org/records/5721233#.YtaAc4TP0uU",
+        "dataset_description": "containes data on battery size retrived from vehicle datasheet or manufacturer website. Fields are: record ID, vehicle manufacturer ; vehicle model; battery size in kWh.",
+        "dataset_owner": "USER-CHI H2020",
+        "dataset_country": "ES",
+        "dataset_region": "",
+        "dataset_city": "",
+        "dataset_active": "True",
+        "dataset_directory": "AMB_Barcelona",
+        "dataset_file_name": "EV.csv",
+        "dataset_sheet_name": "",
+        "dataset_file_type": "csv",
+        "dataset_delimiter": ";",
+        "dataset_encoding": "latin1",
+        "dataset_license": "Creative Common Attributes 4.0",
+        "dataset_notes": "",
+        "text_quotes": "",
+        "decimal": "."
+    },
+    {
+        "dataset_name": "EV_models",
+        "dataset_url": "https://www.kaggle.com/datasets/tarekmasryo/global-ev-charging-stations?select=ev_models.csv",
+        "dataset_description": "EV models compiled and refined by Tarek Masryo (© 2025) from public CC0 sources.",
+        "dataset_owner": "",
+        "dataset_country": "",
+        "dataset_region": "",
+        "dataset_city": "",
+        "dataset_active": "True",
+        "dataset_directory": "EV",
+        "dataset_file_name": "EV.csv",
+        "dataset_sheet_name": "",
+        "dataset_file_type": "csv",
+        "dataset_delimiter": ";",
+        "dataset_encoding": "latin1",
+        "dataset_license": "Attribution 4.0 International (CC BY 4.0)",
+        "dataset_notes": "",
+        "text_quotes": "",
+        "decimal": "."
+    },
+
+]

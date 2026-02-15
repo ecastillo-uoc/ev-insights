@@ -13,7 +13,11 @@
                     "limit_rows": null,
                     "input_data_type": "bulk",
                     "datasets_list": ["AMB_Barcelona", "Norway_12loc"],
-                    "datasets_details_file": "data/input/datasets_details.json"
+                    "datasets_details_file": [
+                        "data/input/datasets_sessions.json",
+                        "data/input/datasets_infrastructure.json",
+                        "data/input/datasets_ev.json"
+                    ]
                 },
                 "output": {
                     "name": "PostgreSql",

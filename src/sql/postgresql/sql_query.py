@@ -23,9 +23,9 @@ insert_charging_point_types = """
 """
 
 insert_dataset_info = """ 
-    INSERT INTO evinsights."Dataset" (name, url, description, owner, country, region, city, file_name, file_type, delimiter, encoding, 
+    INSERT INTO evinsights."Dataset" (name, url, description, owner, country, region, city, dataset_directory, file_name, file_type, delimiter, encoding, 
                                    license, charging_point_type, notes)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
 
 insert_charging_stations = """
@@ -44,6 +44,11 @@ insert_users = """
     INSERT INTO evinsights."User" (orig_id, ev_id, ev_manufacturer, ev_model, ev_battery_capacity_kWh, ev_battery_type, 
                                   ev_battery_useable_capacity, ev_v2g, ev_max_charging_power, ev_max_discharging_power, dataset_id) 
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+"""
+
+insert_electric_vehicle = """
+    INSERT INTO evinsights."ElectricVehicle" (ev_manufacturer, ev_model, ev_battery_capacity_kWh)
+    VALUES (%s, %s, %s)
 """
 
 # Queries for analysis

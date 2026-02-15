@@ -183,6 +183,7 @@ class PostgreSql(Interface):
                         data['dataset_country'],
                         data['dataset_region'],
                         data['dataset_city'],
+                        data.get('dataset_directory', None),
                         data['dataset_file_name'],
                         data['dataset_file_type'],
                         data['dataset_delimiter'],
@@ -204,8 +205,22 @@ class PostgreSql(Interface):
 
         cursor = self.db.cursor()
         data = data.fillna("")  # TODO Should this be performed once before the start of data ingestion?
-        id_column = 'charging_station_id' if 'charging_station_id' in data.columns else 'id'
-        charging_stations_data = data[[id_column, 'max_charging_power']].drop_duplicates()
+        
+        # Determine ID column
+        if 'charging_station_id' in data.columns:
+            id_column = 'charging_station_id'
+        elif 'id' in data.columns:
+            id_column = 'id'
+        elif 'origin_id' in data.columns:
+            id_column = 'origin_id'
+        else:
+             # Fallback or error if no ID column found
+             # For now, let's assume 'id' or handle potentially missing ID gracefully
+             id_column = 'id'
+
+
+        charging_station_columns = [col for col in [id_column, 'manufacturer', 'model', 'type', 'num_plugs', 'max_charging_power', 'max_discharging_power'] if col in data.columns]
+        charging_stations_data = data[charging_station_columns].drop_duplicates()
 
         inserted_count = 0
         for index, row in charging_stations_data.iterrows():
@@ -253,6 +268,27 @@ class PostgreSql(Interface):
 
         self.db.commit()
         return inserted_count
+
+    def insert_electric_vehicles(self, data):
+        cursor = self.db.cursor()
+        data = data.fillna("")
+        # Drop duplicates based on manufacturer and model
+        ev_data = data[['ev_manufacturer', 'ev_model', 'ev_battery_capacity_kWh']].drop_duplicates()
+        
+        inserted_count = 0
+        for index, row in ev_data.iterrows():
+            data_row = (row['ev_manufacturer'], 
+                        row['ev_model'], 
+                        row['ev_battery_capacity_kWh'])
+            cursor.execute(sql_query.insert_electric_vehicle, data_row)
+            inserted_count += cursor.rowcount
+
+        cursor.close()
+        self.db.commit()
+        return inserted_count
+
+    def insert_infrastructure(self, data, dataset_name):
+        return self.insert_charging_stations(data, dataset_name)
 
     def insert_charging_sessions(self, data, dataset_name):
         # Get dataset id

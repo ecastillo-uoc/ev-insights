@@ -26,23 +26,46 @@ class IngestionService(Service):
                 dataset_count = 0
                 dataset_count = self.output_interface.insert_dataset_details(data=dataset_value['info'])
 
-                # Insert charging stations details
-                charging_stations_count = self.output_interface.insert_charging_stations(
-                    data=dataset_value['data'],
-                    dataset_name=dataset_value['info']['dataset_name']
-                )
+                df_columns = set(dataset_value['data'].columns)
+                
+                self.logger.info(f"Checking columns for dataset: {dataset_value['info']['dataset_name']}")
+                self.logger.info(f"DF Columns: {df_columns}")
+                self.logger.info(f"Expected EV Columns: {set(self.input_interface.ev_dataframe_columns)}")
+                
+                # Determine ingestion type based on columns
+                if self.input_interface.ev_dataframe_columns and df_columns == set(self.input_interface.ev_dataframe_columns):
+                     self.logger.info("Ingesting Electric Vehicles")
+                     self.output_interface.insert_electric_vehicles(data=dataset_value['data'])
+                     
+                elif self.input_interface.charging_station_dataframe_columns and df_columns == set(self.input_interface.charging_station_dataframe_columns):
+                     self.logger.info("Ingesting Charging Stations (Infrastructure)")
+                     # TODO: Implement insert_charging_stations_only if needed or reuse existing
+                     # For now, re-using existing but it might expect session columns? Let's check.
+                     # Existing expects 'orig_id', 'manufacturer', etc. Our current infrastructure df has 'origin_id', 'ocpp_version'...
+                     # This needs alignment. I will direct to a new method.
+                     self.output_interface.insert_infrastructure(data=dataset_value['data'], dataset_name=dataset_value['info']['dataset_name'])
 
-                # Insert users
-                users_count = self.output_interface.insert_users(
-                    data=dataset_value['data'],
-                    dataset_name=dataset_value['info']['dataset_name']
-                )
+                else:
+                    # Default: Sessions ingestion (which implicitly inserts stations and users)
+                    self.logger.info("Ingesting Charging Sessions")
+                    
+                    # Insert charging stations details (extracted from session data usually)
+                    charging_stations_count = self.output_interface.insert_charging_stations(
+                        data=dataset_value['data'],
+                        dataset_name=dataset_value['info']['dataset_name']
+                    )
 
-                # Insert charging sessions
-                charging_sessions_count = self.output_interface.insert_charging_sessions(
-                    data=dataset_value['data'],
-                    dataset_name=dataset_value['info']['dataset_name']
-                )
+                    # Insert users
+                    users_count = self.output_interface.insert_users(
+                        data=dataset_value['data'],
+                        dataset_name=dataset_value['info']['dataset_name']
+                    )
+
+                    # Insert charging sessions
+                    charging_sessions_count = self.output_interface.insert_charging_sessions(
+                        data=dataset_value['data'],
+                        dataset_name=dataset_value['info']['dataset_name']
+                    )
 
                 # Add here further ingestion if needed
                 # ...

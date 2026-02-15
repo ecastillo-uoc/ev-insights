@@ -18,6 +18,22 @@ DEFAULT_DATAFRAME_COLUMNS = [
     'user_id',                       # ID of the user, if any
 ]
 
+DEFAULT_EV_DATAFRAME_COLUMNS = [
+    'ev_manufacturer',
+    'ev_model',
+    'ev_battery_capacity_kWh'
+]
+
+DEFAULT_CHARGING_STATION_DATAFRAME_COLUMNS = [
+    'origin_id',
+    'ocpp_version',
+    'longitude',
+    'latitude',
+    'connector',
+    'energy_year_Wh',
+    'power_W_avg'
+]
+
 DEFAULT_CHARGING_POINT_TYPES = [
     'private_domestic',
     'private_workplace',

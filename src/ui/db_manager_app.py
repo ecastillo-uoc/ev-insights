@@ -5,13 +5,32 @@ import psycopg2
 from pathlib import Path
 from src.__main__ import main as run_ingestion
 
+
+def get_existing_datasets(host, port, database, user, password):
+    try:
+        conn = psycopg2.connect(
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password
+        )
+        cursor = conn.cursor()
+        cursor.execute('SELECT name FROM evinsights."Dataset";')
+        datasets = [row[0] for row in cursor.fetchall()]
+        cursor.close()
+        conn.close()
+        return datasets
+    except Exception as e:
+        return []
+
 def render_db_manager_page():
     st.title("🛡️ DB Manager")
     
     st.header("Admin Configuration")
 
     # --- DB Connectivity Check ---
-    with st.expander("🔌 Database Connectivity Check"):
+    with st.expander("🔌 Database Connectivity Check", expanded=True):
         st.markdown("[Open pgAdmin](http://pgadmin.GA35DX/login?next=/)")
         st.write("Test connection to PostgreSQL database")
         
@@ -67,8 +86,15 @@ def render_db_manager_page():
             # Inspect the config to determine type and parameters
             # Assuming structure: service -> services -> admin -> admin (list)
             try:
-                admin_tasks = admin_config_json.get('services', {}).get('admin', {}).get('admin', [])
-                if admin_tasks:
+                # Handle both list and dict structures for robustness
+                admin_service = admin_config_json.get('services', {}).get('admin', {})
+                # Some configs might have admin as a list directly under 'admin' key inside 'services' -> 'admin'
+                # Check structure:
+                # "services": { "admin": { "admin": [ { "name": "delete_dataset"... } ] } }
+                
+                admin_tasks = admin_service.get('admin', [])
+                
+                if isinstance(admin_tasks, list) and admin_tasks:
                     task = admin_tasks[0] # Assume one task per file for simplicity
                     task_name = task.get('name')
                     task_info = task.get('info')
@@ -87,30 +113,30 @@ def render_db_manager_page():
             if task_name == "delete_dataset":
                 st.markdown("### 🗑️ Delete Dataset")
                 
-                # Load datasets to allow selection
-                # Reusing logic to find details file - simplified for Admin
-                dataset_details_file = "data/input/datasets_details.json"
-                available_datasets = []
-                if Path(dataset_details_file).exists():
-                    with open(dataset_details_file, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                        if isinstance(data, list):
-                            available_datasets = [item.get('dataset_name') for item in data if item.get('dataset_name')]
-                
-                dataset_to_delete = st.selectbox("Select Dataset to Delete", available_datasets)
-                
-                if dataset_to_delete:
-                    st.warning(f"⚠️ You are about to DELETE dataset: **{dataset_to_delete}**")
-                    confirm_delete = st.checkbox("I confirm I want to delete this dataset")
-                    if not confirm_delete:
-                        run_allowed = False
+                # Fetch existing datasets from DB
+                available_datasets = get_existing_datasets(
+                    host=host, port=port, database=database, user=user, password=password
+                )
+
+                if available_datasets:
+                    dataset_to_delete = st.selectbox("Select Dataset to Delete", available_datasets)
                     
-                    # Update config in memory
-                    if admin_tasks:
-                        # Ensure custom_params exists
-                        if 'custom_params' not in admin_tasks[0]:
-                            admin_tasks[0]['custom_params'] = {}
-                        admin_tasks[0]['custom_params']['dataset_name'] = dataset_to_delete
+                    if dataset_to_delete:
+                        st.warning(f"⚠️ You are about to DELETE dataset: **{dataset_to_delete}**")
+                        confirm_delete = st.checkbox("I confirm I want to delete this dataset")
+                        if not confirm_delete:
+                            run_allowed = False
+                        else:
+                            # Update config in memory
+                            if admin_tasks:
+                                # Ensure custom_params exists
+                                if 'custom_params' not in admin_tasks[0]:
+                                    admin_tasks[0]['custom_params'] = {}
+                                admin_tasks[0]['custom_params']['dataset_name'] = dataset_to_delete
+
+                else:
+                    st.warning("No available datasets found in the database. Please check your DB connection or ingest data first.")
+                    run_allowed = False
             
             elif task_name == "init_db":
                 st.markdown("### ☢️ Initialize Database")
