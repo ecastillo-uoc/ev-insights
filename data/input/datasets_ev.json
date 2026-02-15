@@ -1,5 +1,5 @@
 [
-        {
+    {
         "dataset_name": "AMB_Barcelona_EV",
         "dataset_url": "https://zenodo.org/records/5721233#.YtaAc4TP0uU",
         "dataset_description": "containes data on battery size retrived from vehicle datasheet or manufacturer website. Fields are: record ID, vehicle manufacturer ; vehicle model; battery size in kWh.",
@@ -38,6 +38,5 @@
         "dataset_notes": "",
         "text_quotes": "",
         "decimal": "."
-    },
-
+    }
 ]

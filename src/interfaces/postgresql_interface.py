@@ -189,7 +189,7 @@ class PostgreSql(Interface):
                         data['dataset_delimiter'],
                         data['dataset_encoding'],
                         data['dataset_license'],
-                        data['dataset_charging_point_type'],
+                        data.get('dataset_charging_point_type', None),
                         data['dataset_notes'])
             cursor.execute(sql_query.insert_dataset_info, data_row)
             inserted_count += cursor.rowcount

@@ -150,11 +150,11 @@ def render_db_manager_page():
                 with st.spinner("Processing... check terminal for real-time logs"):
                     try:
                         # Run with the JSON object (modified in memory)
+                        st.write("Running ingestion with config: ", admin_config_json.get('service'))
                         result = run_ingestion(
                             config_json=admin_config_json,
-                            # datasets_list and details not needed for admin usually, 
-                            # unless specific admin tasks use them via the standard interface override. 
-                            # But here we updated custom_params manually.
+                            datasets_list=None,
+                            datasets_details_file=None
                         )
                         st.success("Execution finished!")
                         st.subheader("Result Output:")

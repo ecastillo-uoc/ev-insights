@@ -45,7 +45,12 @@ class File(Interface):
         """
         super().__init__(name=name, type=type, output_dir=output_dir)
         self.logger = _logger
-        self.input_dir = Path(PureWindowsPath(input_dir).as_posix())
+        
+        if input_dir is not None:
+            self.input_dir = Path(PureWindowsPath(input_dir).as_posix())
+        else:
+            self.input_dir = None
+
         self.limit_rows = limit_rows
         self.input_data_type = input_data_type
         self.dataframe_columns = get_dataframe_columns_from_db()
@@ -293,6 +298,23 @@ class File(Interface):
         }, inplace=True)
         
         # Filter columns
+        df = df[self.ev_dataframe_columns]
+
+        return df
+    
+
+    def prepare_dataset_ev_infra(self, df):
+        _logger.info(f"Ingestion: Preparing {Colors.BLUE}AMB_Barcelona_EV{Colors.NORMAL} dataset")
+        _logger.debug(df.columns.to_list())
+
+        # normalize names
+        df.rename(columns={
+            "make":"ev_manufacturer",
+            "model":"ev_model",
+        }, inplace=True)
+        
+        # Filter columns
+        df["ev_battery_capacity_kWh"] = ""
         df = df[self.ev_dataframe_columns]
 
         return df
@@ -555,27 +577,6 @@ class File(Interface):
                          % (self.dataframe_columns, self.ev_dataframe_columns, 
                             self.charging_station_dataframe_columns, df.columns.tolist()))
 
-    @property
-    def _preparation_methods(self):
-        """
-        Returns a mapping of dataset names to their corresponding preparation methods.
-        To add a new dataset:
-        1. Implement the prepare_dataset_<name> method.
-        2. Add the mapping here.
-        """
-        return {
-            'AMB_Barcelona': self.prepare_dataset_amb_barcelona,
-            'AMB_Barcelona_EV': self.prepare_dataset_amb_barcelona_ev,
-            'AMB_Barcelona_charging_points': self.prepare_dataset_amb_barcelona_charging_stations,
-            'BeLib': self.prepare_dataset_belib,
-            'ACN_Caltech': self.prepare_dataset_ACN_Caltech,
-            'Norway_12loc': self.prepare_dataset_Norway_12loc,
-            'Elaad': self.prepare_dataset_Elaad,
-            'Harvard_dataverse': self.prepare_dataset_harvard_dataverse,
-            'OLEV': self.prepare_dataset_olev,
-
-            # 'Hanse_und_Universitaetsstadt_Rostock': self.prepare_dataset_hanse_und_universitaetsstadt_rostock, 
-        }
 
     def prepare_datasets(self):
         """
@@ -637,3 +638,32 @@ class File(Interface):
     def get_model(self):
         # TODO to be implemented
         return
+
+
+    @property
+    def _preparation_methods(self):
+        """
+        Returns a mapping of dataset names to their corresponding preparation methods.
+        To add a new dataset:
+        1. Implement the prepare_dataset_<name> method.
+        2. Add the mapping here.
+        """
+        return {
+            # EV
+            'EV_models': self.prepare_dataset_ev_infra,
+            'AMB_Barcelona_EV': self.prepare_dataset_amb_barcelona_ev,
+
+            # Charging points
+            'AMB_Barcelona_charging_points': self.prepare_dataset_amb_barcelona_charging_stations,
+
+            # Charging sessions
+            'AMB_Barcelona': self.prepare_dataset_amb_barcelona,
+            'BeLib': self.prepare_dataset_belib,
+            'ACN_Caltech': self.prepare_dataset_ACN_Caltech,
+            'Norway_12loc': self.prepare_dataset_Norway_12loc,
+            'Elaad': self.prepare_dataset_Elaad,
+            'Harvard_dataverse': self.prepare_dataset_harvard_dataverse,
+            'OLEV': self.prepare_dataset_olev,
+
+            # 'Hanse_und_Universitaetsstadt_Rostock': self.prepare_dataset_hanse_und_universitaetsstadt_rostock, 
+        }

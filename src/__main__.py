@@ -13,7 +13,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 def main(config_file=None, config_json=None, datasets_list=None, datasets_details_file=None):
     
-    print(f"DEBUG: main called with datasets_list={datasets_list}")
+    print(f"DEBUG: main called. Service: {config_json.get('service') if config_json else 'None'}, datasets_list={datasets_list}")
 
     service = None
     output = []
