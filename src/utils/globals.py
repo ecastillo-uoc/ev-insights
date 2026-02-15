@@ -33,6 +33,46 @@ DEFAULT_CONNECTOR_TYPES = [
     'Combo'
 ]
 
+# Mapping of various connector names to standard database codes
+CONNECTOR_TYPE_ALIASES = {
+    # Type 2 (Mennekes)
+    'Type 2': 'T2',
+    'Type2': 'T2',
+    'Mennekes': 'T2',
+    'IEC 62196-2': 'T2',
+    'IEC 62196 Type 2': 'T2',
+    'IEC62196-2': 'T2',
+
+    # Type 3 (Scame)
+    'Type 3': 'T3',
+    'Type3': 'T3',
+    'Type 3c': 'T3',
+    'Scame': 'T3',
+    'EV Plug Alliance': 'T3',
+
+    # Type E / Domestic (Schuko)
+    'Type E': 'TE',
+    'TypeE': 'TE',
+    'Schuko': 'TE',
+    'Domestic': 'TE',
+    'Standard': 'TE',
+    'E/F': 'TE',
+    'Wall Outlet': 'TE',
+
+    # CHAdeMO
+    'Chademo': 'CHAdeMO',
+    'JEVS G105': 'CHAdeMO',
+
+    # CCS (Combo)
+    'CCS': 'Combo',
+    'CCS2': 'Combo',
+    'Combo 2': 'Combo',
+    'CCS Combo 2': 'Combo',
+    'Combined Charging System': 'Combo',
+    'CCS Type 2': 'Combo',
+    'Combo T2': 'Combo'
+}
+
 
 def _get_db_config_from_env():
     return {

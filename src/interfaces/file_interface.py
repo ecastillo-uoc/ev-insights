@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from dateutil import parser
 
 from src.interfaces.interface import Interface
-from src.utils.globals import get_dataframe_columns_from_db
+from src.utils.globals import get_dataframe_columns_from_db, CONNECTOR_TYPE_ALIASES
 from src.utils.logger import Colors
 
 _logger = logging.getLogger("interfaces.file")
@@ -266,6 +266,38 @@ class File(Interface):
         # Converti la stringa di data in formato datetime
         return pd.to_datetime(date_string_with_2000, format='%Y-%m-%d %H:%M:%S')
 
+    def prepare_dataset_amb_barcelona_ev(self, df):
+        _logger.info(f"Ingestion: Preparing {Colors.BLUE}BeLib{Colors.NORMAL} dataset")
+        _logger.debug(df.columns.to_list())
+
+        # normalize names
+        df.rename(columns={
+            "Marchio":"make",
+            "Modello":"model",
+            "BatteriaE (kWh)":"",
+
+        }, inplace=True)
+
+        return df
+    
+    def prepare_dataset_amb_barcelona_charging_stations(self, df):
+        _logger.info(f"Ingestion: Preparing {Colors.BLUE}BeLib{Colors.NORMAL} dataset")
+        _logger.debug(df.columns.to_list())
+
+        # normalize names
+        df.rename(columns={
+            "CHARGING POINT (name and adress)": "origin_id",
+            "OCPP version": "ocpp_vesrion",
+            "longitude"	:"longitude",
+            "latitude": "longitude",
+            "Plug type (AC 22 kW/DC 50 kW)" : "connector",
+            "Cumulative energy delivered in the year (Wh)": "energy_year_Wh",
+            "Average charge power (W)": "power_W_avg"
+
+        }, inplace=True)
+
+        return df
+
     def prepare_dataset_amb_barcelona(self, df):
         """
         Prepares the dataset for the 'AMB_Barcelona' source by renaming columns and adding required fields.
@@ -278,19 +310,35 @@ class File(Interface):
         """
         _logger.info(f"Ingestion: Preparing {Colors.BLUE}BeLib{Colors.NORMAL} dataset")
         _logger.debug(df.columns.to_list())
-        df.rename(columns={'CONSUMPTION (kWh)': 'energy_supplied',
-                           'CHARGING POINT': 'charging_station_id',
-                           'Pmax': 'max_charging_power'}, inplace=True)
-        df['plug_in_datetime'] = (pd.to_datetime(df["START TIME"], dayfirst=True).astype('string') + " " +
+
+        # normalize names
+        df.rename(columns={
+            'CHARGING POINT': 'orig_ds',
+            'CONNECTOR':'connector',
+            'START TIME':'plug_in_datetime',
+            'STOP TIME':'plug_out_datetime',
+            'DURATION (min)': 'duration_min',
+            'CONSUMPTION (kWh)': 'energy_supplied',
+            'CHARGING POINT': 'charging_station_id',
+            'Pmax': 'max_charging_power'
+            }, inplace=True)
+        
+        # map connector aliases
+        if 'connector' in df.columns:
+            df['connector'] = df['connector'].map(CONNECTOR_TYPE_ALIASES).fillna(df['connector'])
+
+        # process data
+        df['plug_in_datetime'] = (pd.to_datetime(df['plug_in_datetime'], dayfirst=True).astype('string') + " " +
                                   df['ora'].astype('string') + ":" + df['Mins'].astype('string'))
         df['plug_in_datetime'] = pd.to_datetime(df['plug_in_datetime'], format='%Y-%m-%d %H:%M')
-        df['charge_end_datetime'] = df['plug_in_datetime'] + df['DURATION (min)'].apply(lambda x: timedelta(minutes=x))
+        df['charge_end_datetime'] = df['plug_in_datetime'] + df['duration_min'].apply(lambda x: timedelta(minutes=x))
         df['plug_out_datetime'] = df['charge_end_datetime']
         df['charge_end_datetime_presence'] = False
         df['user_id'] = pd.NA
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
         df = df[self.dataframe_columns]
+        
         return df
 
     def prepare_dataset_olev(self, df):

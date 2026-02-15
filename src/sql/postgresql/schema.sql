@@ -69,6 +69,16 @@ CREATE TABLE IF NOT EXISTS evinsights."Connector"
     PRIMARY KEY (id)
 );
 
+DROP TABLE IF EXISTS evinsights."ElectricVehicle";
+
+CREATE TABLE IF NOT EXISTS evinsights."ElectricVehicle"
+(
+    id integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),
+    ev_manufacturer text COLLATE pg_catalog."default",
+    ev_model text COLLATE pg_catalog."default",
+    ev_battery_capacity_kWh numeric(12, 2),
+    ev_battery_type text COLLATE pg_catalog."default",
+)
 
 DROP TABLE IF EXISTS evinsights."ChargingSession";
 
@@ -93,6 +103,7 @@ CREATE TABLE IF NOT EXISTS evinsights."ChargingStation"
 (
     id integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),
     orig_id text COLLATE pg_catalog."default",
+    orig_ds text,
     manufacturer text COLLATE pg_catalog."default",
     model text COLLATE pg_catalog."default",
     type text COLLATE pg_catalog."default",
@@ -100,6 +111,9 @@ CREATE TABLE IF NOT EXISTS evinsights."ChargingStation"
     max_charging_power numeric(12, 3),
     max_discharging_power numeric(12, 3),
     dataset_id integer,
+    ocpp_version varchar(10),
+    longitude numeric(11, 8),
+    latitude numeric(10, 8),
     fk_connector_id integer,
     fk_charging_point_type_id integer,
     CONSTRAINT "ChargingStation_pkey" PRIMARY KEY (id)
@@ -115,9 +129,9 @@ CREATE TABLE IF NOT EXISTS evinsights."User"
     ev_id text COLLATE pg_catalog."default",
     ev_manufacturer text COLLATE pg_catalog."default",
     ev_model text COLLATE pg_catalog."default",
-    ev_battery_capacity numeric(2, 0),
+    ev_battery_capacity_kWh numeric(12, 2),
     ev_battery_type text COLLATE pg_catalog."default",
-    ev_battery_useable_capacity numeric(2, 0),
+    ev_battery_useable_capacity numeric(12, 2),
     ev_v2g boolean,
     ev_max_charging_power numeric(12, 3),
     ev_max_discharging_power numeric(12, 3),

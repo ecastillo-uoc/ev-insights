@@ -41,7 +41,7 @@ insert_charging_sessions = """
 """
 
 insert_users = """
-    INSERT INTO evinsights."User" (orig_id, ev_id, ev_manufacturer, ev_model, ev_battery_capacity, ev_battery_type, 
+    INSERT INTO evinsights."User" (orig_id, ev_id, ev_manufacturer, ev_model, ev_battery_capacity_kWh, ev_battery_type, 
                                   ev_battery_useable_capacity, ev_v2g, ev_max_charging_power, ev_max_discharging_power, dataset_id) 
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """

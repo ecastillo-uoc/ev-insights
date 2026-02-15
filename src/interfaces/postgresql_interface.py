@@ -239,7 +239,7 @@ class PostgreSql(Interface):
                         row['ev_id'] if 'ev_id' in row and row['ev_id'] != '' else None,
                         row['ev_manufacturer'] if 'ev_manufacturer' in row and row['ev_manufacturer'] != '' else None,
                         row['ev_model'] if 'ev_model' in row and row['ev_model'] != '' else None,
-                        row['ev_battery_capacity'] if 'ev_battery_capacity' in row and row['ev_battery_capacity'] != '' else None,
+                        row['ev_battery_capacity_kWh'] if 'ev_battery_capacity_kWh' in row and row['ev_battery_capacity_kWh'] != '' else None,
                         row['ev_battery_type'] if 'ev_battery_type' in row and row['ev_battery_type'] != '' else None,
                         row['ev_battery_useable_capacity'] if 'ev_battery_useable_capacity' in row and row['ev_battery_useable_capacity'] != '' else None,
                         row['ev_v2g'] if 'ev_v2g' in row and row['ev_v2g'] != '' else None,
