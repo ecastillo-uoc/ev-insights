@@ -78,7 +78,8 @@ CREATE TABLE IF NOT EXISTS evinsights."ElectricVehicle"
     ev_model text COLLATE pg_catalog."default",
     ev_battery_capacity_kWh numeric(12, 2),
     ev_battery_type text COLLATE pg_catalog."default",
-)
+    PRIMARY KEY (id)
+);
 
 DROP TABLE IF EXISTS evinsights."ChargingSession";
 
