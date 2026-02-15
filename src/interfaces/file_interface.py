@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from dateutil import parser
 
 from src.interfaces.interface import Interface
-from src.utils.globals import DATAFRAME_COLUMNS
+from src.utils.globals import get_dataframe_columns_from_db
 from src.utils.logger import Colors
 
 _logger = logging.getLogger("interfaces.file")
@@ -48,6 +48,7 @@ class File(Interface):
         self.input_dir = Path(PureWindowsPath(input_dir).as_posix())
         self.limit_rows = limit_rows
         self.input_data_type = input_data_type
+        self.dataframe_columns = get_dataframe_columns_from_db()
 
         # Data gathering from files
         if self.type == "input":
@@ -275,6 +276,8 @@ class File(Interface):
         Returns:
             pd.DataFrame: The processed DataFrame with standardized columns and additional fields.
         """
+        _logger.info(f"Ingestion: Preparing {Colors.BLUE}BeLib{Colors.NORMAL} dataset")
+        _logger.debug(df.columns.to_list())
         df.rename(columns={'CONSUMPTION (kWh)': 'energy_supplied',
                            'CHARGING POINT': 'charging_station_id',
                            'Pmax': 'max_charging_power'}, inplace=True)
@@ -287,7 +290,7 @@ class File(Interface):
         df['user_id'] = pd.NA
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
-        df = df[DATAFRAME_COLUMNS]
+        df = df[self.dataframe_columns]
         return df
 
     def prepare_dataset_olev(self, df):
@@ -300,6 +303,8 @@ class File(Interface):
         Returns:
             pd.DataFrame: The processed DataFrame with standardized columns and additional fields.
         """
+        _logger.info(f"Ingestion: Preparing {Colors.BLUE}BeLib{Colors.NORMAL} dataset")
+        _logger.debug(df.columns.to_list())
         df.rename(columns={'Energy': 'energy_supplied',
                            'CPID': 'charging_station_id'}, inplace=True)
         df['plug_in_datetime'] = pd.to_datetime(df.StartDate + " " + df.StartTime, format='%Y-%m-%d %H:%M:%S')
@@ -310,7 +315,7 @@ class File(Interface):
         df['max_charging_power'] = pd.NA
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
-        df = df[DATAFRAME_COLUMNS]
+        df = df[self.dataframe_columns]
         return df
 
     def prepare_dataset_harvard_dataverse(self, df):
@@ -323,6 +328,8 @@ class File(Interface):
         Returns:
             pd.DataFrame: The processed DataFrame with standardized columns and additional fields.
         """
+        _logger.info(f"Ingestion: Preparing {Colors.BLUE}BeLib{Colors.NORMAL} dataset")
+        _logger.debug(df.columns.to_list())
         df.rename(columns={'kwhTotal': 'energy_supplied',
                            'stationId': 'charging_station_id',
                            'userId': 'user_id'}, inplace=True)
@@ -333,7 +340,7 @@ class File(Interface):
         df['max_charging_power'] = pd.NA
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
-        df = df[DATAFRAME_COLUMNS]
+        df = df[self.dataframe_columns]
         return df
 
     def prepare_dataset_Elaad(self, df):
@@ -357,7 +364,7 @@ class File(Interface):
         df['charging_station_id'] = df.apply(lambda row: '{}_{}'.format(row['ChargePoint'], row['Connector']), axis=1)
         df['ev_id'] = pd.NA
         df['max_charging_power'] = pd.NA
-        df = df[DATAFRAME_COLUMNS]
+        df = df[self.dataframe_columns]
         return df
 
     def prepare_dataset_belib(self, df):
@@ -374,7 +381,7 @@ class File(Interface):
             Heure mise à jour;coordonneesXY;adresse_station;code_insee_commune;
             arrondissement
         """
-        _logger.info(f"Ingestion: Preparing {Colors.PURPLE}BeLib{Colors.NORMAL} dataset")
+        _logger.info(f"Ingestion: Preparing {Colors.BLUE}BeLib{Colors.NORMAL} dataset")
         _logger.debug(df.columns.to_list())
         df.rename(columns={'Prise de courant': 'max_charging_power',
                            'Borne': 'charging_station_id',
@@ -387,7 +394,7 @@ class File(Interface):
         df['energy_supplied'] = df["L'énergie (Wh)"] / 1000
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
-        df = df[DATAFRAME_COLUMNS]
+        df = df[self.dataframe_columns]
         return df
 
     def prepare_dataset_ACN_Caltech(self, df) -> pd.DataFrame:
@@ -411,7 +418,7 @@ class File(Interface):
         df['max_charging_power'] = pd.NA
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
-        df = df[DATAFRAME_COLUMNS]
+        df = df[self.dataframe_columns]
 
         return df
 
@@ -425,6 +432,8 @@ class File(Interface):
         Returns:
             pd.DataFrame: The processed DataFrame with standardized columns and additional fields.
         """
+        _logger.info(f"Ingestion: Preparing {Colors.BLUE}BeLib{Colors.NORMAL} dataset")
+        _logger.debug(df.columns.to_list())
         df.rename(columns={"energy_session": "energy_supplied"},
                   inplace=True)
         df['charging_station_id'] = df.user_id  # in this dataset the charging_station_id is missing, since the charging stations are private we can use the user_id
@@ -435,7 +444,7 @@ class File(Interface):
         df['max_charging_power'] = pd.NA
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
-        df = df[DATAFRAME_COLUMNS]
+        df = df[self.dataframe_columns]
         return df
 
     # Here you can add other datasets
@@ -456,13 +465,13 @@ class File(Interface):
         Raises:
             ValueError: If the DataFrame does not contain the expected columns.
         """
-        if set(df.columns) == set(DATAFRAME_COLUMNS):
+        if set(df.columns) == set(self.dataframe_columns):
             return True
         else:
             raise ValueError("Columns are not properly set\n"
                              "Expected columns: %s\n"
                              "df.columns=%s"
-                             % (DATAFRAME_COLUMNS, df.columns.tolist()))
+                             % (self.dataframe_columns, df.columns.tolist()))
 
     @property
     def _preparation_methods(self):
@@ -475,11 +484,12 @@ class File(Interface):
         return {
             'AMB_Barcelona': self.prepare_dataset_amb_barcelona,
             'BeLib': self.prepare_dataset_belib,
+            'ACN_Caltech': self.prepare_dataset_ACN_Caltech,
+            'Norway_12loc': self.prepare_dataset_Norway_12loc,
             'Elaad': self.prepare_dataset_Elaad,
             'Harvard_dataverse': self.prepare_dataset_harvard_dataverse,
             'OLEV': self.prepare_dataset_olev,
-            'ACN_Caltech': self.prepare_dataset_ACN_Caltech,
-            'Norway_12loc': self.prepare_dataset_Norway_12loc,
+
             # 'Hanse_und_Universitaetsstadt_Rostock': self.prepare_dataset_hanse_und_universitaetsstadt_rostock, 
         }
 
