@@ -677,7 +677,10 @@ class File(Interface):
                 custom_file_path_name.rename(new_file_path_name)
             # Save model to file
             model = output['model']
-            model.save_model(str(custom_file_path_name))
+            s = str(custom_file_path_name)
+            model.save_model(s)
+
+            print(f"Saved forecast model {forecaster_name} to {s}")
 
         return
 
