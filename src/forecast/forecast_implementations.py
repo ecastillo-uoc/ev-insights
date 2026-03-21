@@ -382,6 +382,14 @@ class LightGBMModelStrategy(ModelStrategy):
                     self.logger.warning(f"DEBUG [LightGBM.predict] Empty subset for {dataset_name}, skipping")
                     continue
 
+                # Extract dates from index (ts_engineering) or plug_in_datetime column
+                if isinstance(subset.index, pd.DatetimeIndex):
+                    subset_dates = subset.index
+                elif 'plug_in_datetime' in subset.columns:
+                    subset_dates = pd.to_datetime(subset['plug_in_datetime'])
+                else:
+                    subset_dates = None
+
                 if submode == 'schedule':
                     # Take the last row as input for a single-step forecast
                     input_row = subset.iloc[[-1]].copy()
@@ -403,8 +411,13 @@ class LightGBMModelStrategy(ModelStrategy):
                         'created_at': datetime.now()
                     })
                 else:
+                    dates_list = subset_dates.strftime('%Y-%m-%d').tolist() if subset_dates is not None else None
+                    # Include actual values for comparison plotting
+                    actual_vals = subset[target_column].tolist() if target_column and target_column in subset.columns else None
                     output_dict['predict'].update({
                         'values': prediction.tolist(),
+                        'dates': dates_list,
+                        'actuals': actual_vals,
                         'date': context_date if context_date else datetime.now(),
                         'created_at': datetime.now()
                     })
@@ -539,6 +552,40 @@ class XGBoostModelStrategy(ModelStrategy):
                         self.output_key: val,
                         'value': val,
                         'date': datetime.now(),
+                        'created_at': datetime.now()
+                    })
+                else:
+                    subset = df.loc[df['dataset_name'] == dataset_name]
+                    if subset.empty:
+                        continue
+
+                    # Extract dates
+                    if isinstance(subset.index, pd.DatetimeIndex):
+                        subset_dates = subset.index
+                    elif 'plug_in_datetime' in subset.columns:
+                        subset_dates = pd.to_datetime(subset['plug_in_datetime'])
+                    else:
+                        subset_dates = None
+
+                    features = subset[feature_columns].copy() if feature_columns else subset.copy()
+
+                    if 'plug_in_weekday' in features.columns:
+                        weekday_series = features['plug_in_weekday']
+                        dums = pd.get_dummies(weekday_series, prefix='plug_in_weekday')
+                        weekday_cols = [f'plug_in_weekday_{i}' for i in range(7)]
+                        dums = dums.reindex(columns=weekday_cols, fill_value=0)
+                        features = features.drop('plug_in_weekday', axis=1)
+                        features = features.join(dums)
+
+                    prediction = model.predict(features)
+                    dates_list = subset_dates.strftime('%Y-%m-%d').tolist() if subset_dates is not None else None
+                    actual_vals = subset[target_column].tolist() if target_column and target_column in subset.columns else None
+                    output_dict['predict'].update({
+                        self.output_key: prediction.tolist(),
+                        'values': prediction.tolist(),
+                        'dates': dates_list,
+                        'actuals': actual_vals,
+                        'date': context_date if context_date else datetime.now(),
                         'created_at': datetime.now()
                     })
         except Exception as e:
@@ -703,9 +750,20 @@ class LSTMModelStrategy(ModelStrategy):
                     predictions_unscaled = scaler.inverse_transform(np.array(predictions).reshape(-1, 1))
                     predictions_series = predictions_unscaled.flatten().tolist()
                     
-                    # We save the predicted array to results, UI can process it
+                    # Generate future dates from last data point
+                    if isinstance(subset.index, pd.DatetimeIndex):
+                        last_date = subset.index[-1]
+                    elif 'plug_in_datetime' in subset.columns:
+                        last_date = pd.to_datetime(subset['plug_in_datetime']).iloc[-1]
+                    else:
+                        last_date = pd.Timestamp.now()
+                    future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1),
+                                                 periods=prediction_days, freq='D')
+
                     output_dict['predict'].update({
                         self.output_key: predictions_series,
+                        'values': predictions_series,
+                        'dates': future_dates.strftime('%Y-%m-%d').tolist(),
                         'value': predictions_series[0] if predictions_series else 0,
                         'date': datetime.now(),
                         'created_at': datetime.now()

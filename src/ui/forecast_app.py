@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import glob
 import logging
+import matplotlib.pyplot as plt
 from pathlib import Path
 
 from src.__main__ import main as run_service
@@ -12,6 +13,7 @@ from src.forecast.strategies import (
 from src.utils.globals import CHARGING_POINT_TYPES
 from src.interfaces.postgresql_interface import PostgreSql
 from src.ui.shared_components import render_data_selection
+from src.analysis.predictions import plot_forecast_results
 import mlflow
 
 def get_mlflow_models():
@@ -319,9 +321,30 @@ def render_forecast_page():
                 
                 st.success("Execution finished successfully!")
                 
-                # Show results if any
-                if result:
-                    with st.expander("Show Result Output"):
+                # Show results
+                if result and isinstance(result, dict):
+                    for task_name, task_result in result.items():
+                        pred = task_result.get('predict') if isinstance(task_result, dict) else None
+                        if pred and pred.get('values'):
+                            # Determine y-axis label from prediction target
+                            ylabel = "Value"
+                            if selected_target_key:
+                                if 'energy' in selected_target_key:
+                                    ylabel = "Energy (kWh)"
+                                elif 'charge' in selected_target_key or 'connection' in selected_target_key:
+                                    ylabel = "Connections"
+                                elif 'duration' in selected_target_key:
+                                    ylabel = "Duration (min)"
+                            fig = plot_forecast_results(
+                                task_result,
+                                forecast_name=task_name,
+                                ylabel=ylabel
+                            )
+                            if fig:
+                                st.pyplot(fig)
+                                plt.close(fig)
+                        
+                    with st.expander("Raw Result Output"):
                         st.json(result)
                 else:
                     st.write("No output returned (check logs).")
