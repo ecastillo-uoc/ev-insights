@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from acnportal import acndata
 from datetime import datetime
+from tqdm import tqdm
 
 def download_acn_data(api_token: str, site: str, start_time: datetime, end_time: datetime, output_path: Path):
     """
@@ -23,19 +24,25 @@ def download_acn_data(api_token: str, site: str, start_time: datetime, end_time:
     # Use get_sessions_by_time to fetch sessions in the specified timespan
     sessions_generator = client.get_sessions_by_time(site, start=start_time, end=end_time)
     
-    sessions_list = []
-    
-    # The generator yields each session
-    for session in sessions_generator:
-        sessions_list.append(session)
-        
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    # Store as JSON file, converting datetime objects to strings
+    sessions_count = 0
+    # Open the file and stream the JSON incrementally to save memory and ensure fault-tolerance
     with open(output_path, 'w') as fh:
-        json.dump({"_items": sessions_list}, fh, indent=4, default=str)
+        fh.write('{\n    "_items": [\n')
         
-    print(f"Dataset for {site} successfully downloaded ({len(sessions_list)} sessions) to: {output_path}")
+        # The generator yields each session
+        for session in tqdm(sessions_generator, desc=f"Downloading {site} sessions", unit=" session"):
+            if sessions_count > 0:
+                fh.write(',\n')
+            
+            # Dump individual session objects directly to the file
+            json.dump(session, fh, indent=8, default=str)
+            sessions_count += 1
+            
+        fh.write('\n    ]\n}')
+        
+    print(f"Dataset for {site} successfully downloaded ({sessions_count} sessions) to: {output_path}")
 
 def main():
     api_token = os.getenv('ACN_API_KEY', 'pKEJTVnOiI9mIVU1OSYbM0aFCpW-BLVlHbSLcHHpsOs')
