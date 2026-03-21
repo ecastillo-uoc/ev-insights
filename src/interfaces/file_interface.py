@@ -520,7 +520,7 @@ class File(Interface):
         df = df[self.dataframe_columns]
         return df
 
-    def prepare_dataset_ACN_Caltech(self, df) -> pd.DataFrame:
+    def prepare_dataset_ACN(self, df) -> pd.DataFrame:
         """
         Prepares the dataset for the 'ACN_Caltech' source by renaming columns and adding required fields.
 
@@ -530,9 +530,21 @@ class File(Interface):
         Returns:
             pd.DataFrame: The processed DataFrame with standardized columns and additional fields.
         """
-        df.rename(columns={"kWhDelivered": "energy_supplied",
-                           "stationID": "charging_station_id",
-                           "userID": "user_id"},
+        df.rename(columns={
+                        # _id
+                        # clusterID
+                        # connectionTime
+                        # disconnectTime
+                        # doneChargingTime
+                        "kWhDelivered": "energy_supplied",
+                        # sessionID
+                        # siteID
+                        # spaceID
+                        "stationID": "charging_station_id",
+                        # timezone
+                        "userID": "user_id"
+                        # userInputs
+                           },
                   inplace=True)
         df['plug_in_datetime'] = pd.to_datetime(df.connectionTime)
         df['charge_end_datetime'] = pd.to_datetime(df.doneChargingTime)
@@ -693,7 +705,8 @@ class File(Interface):
             # Charging sessions
             'AMB_Barcelona': self.prepare_dataset_amb_barcelona,
             'BeLib': self.prepare_dataset_belib,
-            'ACN_Caltech': self.prepare_dataset_ACN_Caltech,
+            'ACN_Caltech': self.prepare_dataset_ACN,
+            'ACN_JPL': self.prepare_dataset_ACN,
             'Norway_12loc': self.prepare_dataset_Norway_12loc,
             'Elaad': self.prepare_dataset_Elaad,
             'Harvard_dataverse': self.prepare_dataset_harvard_dataverse,

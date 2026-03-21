@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', save_path: str = None):
+def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', fig_dir: Path = None, dataset_name: str = None):
     """
     Plots the trends of energy consumption over time.
     
@@ -15,20 +15,27 @@ def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'times
         energy_col (str): The column name denoting the energy provided in kWh.
         save_path (str, optional): The file path to save the generated figure.
     """
+    save_path = fig_dir / f'{dataset_name}_energy_trends.png'
+    
+    # Ensure output directory exists before saving
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+            
+    save_path_str = str(save_path)
+
     plt.figure(figsize=(12, 6))
     
     # Optional sorting if not already sorted
     dataset = dataset.sort_values(by=time_col)
     
     plt.plot(dataset[time_col], dataset[energy_col], linestyle='-', linewidth=1, alpha=0.8)
-    plt.title('Energy Consumption Trends Over Time')
+    plt.title(f"'{dataset_name}' Energy over time ")
     plt.xlabel('Timestamp')
     plt.ylabel('Energy Provided (kWh)')
     plt.grid(True, linestyle='--', alpha=0.4)
     plt.tight_layout()
     
     if save_path:
-        plt.savefig(save_path)
+        plt.savefig(save_path_str)
         
     plt.show()
 
@@ -36,8 +43,7 @@ def fetch_and_plot_dataset_trends(dataset_name: str, db_config: dict, fig_dir: P
     """
     Fetches the dataset by name from the database and plots the energy trends.
     """
-    save_path = fig_dir / f'{dataset_name}_energy_trends.png'
-    
+        
     query = """
     SELECT 
         DATE(cs.plug_out_datetime) as timestamp, 
@@ -62,10 +68,7 @@ def fetch_and_plot_dataset_trends(dataset_name: str, db_config: dict, fig_dir: P
             dataset = pd.read_sql(query, conn, params={'dataset_name': dataset_name})
         
         if not dataset.empty:
-            # Ensure output directory exists before saving
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            plot_energy_consumption_trends(dataset, time_col='timestamp', energy_col='energy_kwh', save_path=str(save_path))
+            plot_energy_consumption_trends(dataset, time_col='timestamp', energy_col='energy_kwh', fig_dir=fig_dir, dataset_name=dataset_name)
         else:
             print(f"No data found for the {dataset_name} dataset in the database.")
             
@@ -94,6 +97,9 @@ def main():
     
     # You can reuse this function for any other datasets
     fetch_and_plot_dataset_trends('ACN_Caltech', db_config, FIG_DIR)
+    #fetch_and_plot_dataset_trends('ACN_JPL', db_config, FIG_DIR)
+    #fetch_and_plot_dataset_trends('BeLib', db_config, FIG_DIR)
+    #fetch_and_plot_dataset_trends('AMB_Barcelona', db_config, FIG_DIR)
 
 if __name__ == '__main__':
     main()

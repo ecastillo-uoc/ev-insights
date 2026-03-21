@@ -17,26 +17,26 @@ class IngestionService(Service):
 
         # Ingest data
         if self.input_interface.input_data_type == 'bulk':
+            # Initialize counters to 0 to avoid UnboundLocalError
+            dataset_count = 0
+            charging_stations_count = 0
+            users_count = 0
+            charging_sessions_count = 0
+            ev_count = 0
+
             # Ingest bulk datasets
             for dataset_id, dataset_value in self.input_interface.datasets.items():
 
                 self.logger.info(f"Ingesting dataset {Colors.BLUE}{dataset_value['info']['dataset_name']}{Colors.NORMAL}" )
 
                 # Insert dataset details
-                dataset_count = 0
-                dataset_count = self.output_interface.insert_dataset_details(data=dataset_value['info'])
+                dataset_count += self.output_interface.insert_dataset_details(data=dataset_value['info'])
 
                 df_columns = set(dataset_value['data'].columns)
                 
                 self.logger.info(f"Checking columns for dataset: {dataset_value['info']['dataset_name']}")
                 self.logger.info(f"DF Columns: {df_columns}")
                 self.logger.info(f"Expected EV Columns: {set(self.input_interface.ev_dataframe_columns)}")
-                
-                # Initialize counters to 0 to avoid UnboundLocalError
-                charging_stations_count = 0
-                users_count = 0
-                charging_sessions_count = 0
-                ev_count = 0
 
                 # Determine ingestion type based on columns
                 expected_ev_cols = set(self.input_interface.ev_dataframe_columns)
@@ -44,7 +44,7 @@ class IngestionService(Service):
 
                 if self.input_interface.ev_dataframe_columns and expected_ev_cols.issubset(df_columns): # Use issubset to handle extra metadata cols
                      self.logger.info("Ingesting Electric Vehicles")
-                     ev_count = self.output_interface.insert_electric_vehicles(data=dataset_value['data'])
+                     ev_count += self.output_interface.insert_electric_vehicles(data=dataset_value['data'])
                      
                 elif self.input_interface.charging_station_dataframe_columns and expected_infra_cols.issubset(df_columns):
                      self.logger.info("Ingesting Charging Stations (Infrastructure)")
@@ -52,26 +52,26 @@ class IngestionService(Service):
                      # For now, re-using existing but it might expect session columns? Let's check.
                      # Existing expects 'orig_id', 'manufacturer', etc. Our current infrastructure df has 'origin_id', 'ocpp_version'...
                      # This needs alignment. I will direct to a new method.
-                     charging_stations_count = self.output_interface.insert_infrastructure(data=dataset_value['data'], dataset_name=dataset_value['info']['dataset_name'])
+                     charging_stations_count += self.output_interface.insert_infrastructure(data=dataset_value['data'], dataset_name=dataset_value['info']['dataset_name'])
 
                 else:
                     # Default: Sessions ingestion (which implicitly inserts stations and users)
                     self.logger.info("Ingesting Charging Sessions")
                     
                     # Insert charging stations details (extracted from session data usually)
-                    charging_stations_count = self.output_interface.insert_charging_stations(
+                    charging_stations_count += self.output_interface.insert_charging_stations(
                         data=dataset_value['data'],
                         dataset_name=dataset_value['info']['dataset_name']
                     )
 
                     # Insert users
-                    users_count = self.output_interface.insert_users(
+                    users_count += self.output_interface.insert_users(
                         data=dataset_value['data'],
                         dataset_name=dataset_value['info']['dataset_name']
                     )
 
                     # Insert charging sessions
-                    charging_sessions_count = self.output_interface.insert_charging_sessions(
+                    charging_sessions_count += self.output_interface.insert_charging_sessions(
                         data=dataset_value['data'],
                         dataset_name=dataset_value['info']['dataset_name']
                     )
