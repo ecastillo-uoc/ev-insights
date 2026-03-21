@@ -106,6 +106,12 @@ def main(config_file=None, config_json=None, datasets_list=None, datasets_detail
                 json.dump(config, json_file, indent=4)
 
         # Init service
+        logger.info(f"DEBUG [main] Initializing service: {service_name}")
+        if service_name == 'forecast':
+            forecast_tasks = config.get('forecast', [])
+            for i, task in enumerate(forecast_tasks):
+                logger.info(f"DEBUG [main] Task {i}: name={task.get('name')}, algo={task.get('algo')}, "
+                            f"prediction_target={task.get('prediction_target')}, model_strategy={task.get('model_strategy')}")
         service = init_service(config=config)
 
         # Run service

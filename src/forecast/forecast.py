@@ -187,14 +187,138 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
     forecast = None
     forecast_name = config["name"]
     
-    # Refresh FORECAST list if needed or rely on what was loaded at module level.
-    # We should support both: specific module file (old way) and forecast_implementations (new way)
-    
-    # Check if name is in FORECAST (which now includes classes from forecast_implementations)
-    # The check below might fail if FORECAST only has classes but not files if import failed? 
-    # But we modified FORECAST to contain class names.
-    
-    # Try importing from forecast_implementations first
+    if 'full_custom_mode' not in config.keys():
+        config['full_custom_mode'] = False
+
+    # --- Strategy override support ---
+    # When the UI (or caller) provides 'prediction_target' and/or 'model_strategy',
+    # we dynamically compose a GenericForecast instead of looking up a hardcoded class.
+    prediction_target_key = config.get('prediction_target')
+    model_strategy_key = config.get('model_strategy')
+
+    logger.info(f"DEBUG [init_forecast] Config keys received: name={forecast_name}, algo={config.get('algo')}, "
+                f"prediction_target={prediction_target_key}, model_strategy={model_strategy_key}")
+    logger.info(f"DEBUG [init_forecast] All config keys: {list(config.keys())}")
+
+    if prediction_target_key or model_strategy_key:
+        from src.forecast.generic_forecast import GenericForecast
+        from src.forecast.strategies import (
+            PredictionTarget, get_prediction_target_strategy,
+            ModelStrategyType, get_model_strategy
+        )
+
+        # Resolve data strategy: from override or fall back to config name
+        data_strategy = None
+        if prediction_target_key:
+            try:
+                target_enum = PredictionTarget(prediction_target_key)
+                data_strategy = get_prediction_target_strategy(target_enum)
+                logger.info(f"Using prediction target override: {prediction_target_key}")
+            except (ValueError, KeyError):
+                logger.error(f"Unknown prediction_target: {prediction_target_key}")
+
+        # Resolve model strategy: from override or fall back to config algo
+        model_strategy = None
+        resolved_algo = config.get('algo', 'unknown')
+        if model_strategy_key:
+            try:
+                model_enum = ModelStrategyType(model_strategy_key)
+                model_strategy = get_model_strategy(model_enum)
+                resolved_algo = model_strategy_key
+                logger.info(f"Using model strategy override: {model_strategy_key}")
+            except (ValueError, KeyError):
+                logger.error(f"Unknown model_strategy: {model_strategy_key}")
+
+        # If only one override was given, resolve the other from the original config class
+        if data_strategy and model_strategy:
+            # Derive a meaningful name from the selections
+            resolved_name = f"{resolved_algo}_{prediction_target_key}"
+        elif data_strategy and not model_strategy:
+            # Need model strategy from original class or default
+            resolved_name = f"{config.get('algo', 'unknown')}_{prediction_target_key}"
+            # Try to get the model strategy from the original forecast class
+            try:
+                import src.forecast.forecast_implementations as forecast_impl
+                OrigClass = getattr(forecast_impl, forecast_name, None)
+                if OrigClass and hasattr(OrigClass, '__init__'):
+                    # Instantiate temporarily to extract strategy (GenericForecast stores it)
+                    import inspect
+                    sig = inspect.signature(OrigClass.__init__)
+                    # The strategies are passed as positional args in __init__, read from source
+                    # Safer: just use the algo from config to look up model strategy
+                    algo_key = config.get('algo', 'xgboost')
+                    model_enum = ModelStrategyType(algo_key)
+                    model_strategy = get_model_strategy(model_enum)
+            except Exception as e:
+                logger.warning(f"Could not resolve model strategy from config algo: {e}")
+        elif model_strategy and not data_strategy:
+            resolved_name = f"{resolved_algo}_{forecast_name.split('_', 1)[1] if '_' in forecast_name else forecast_name}"
+            # Try to get the data strategy from the original class
+            try:
+                import src.forecast.forecast_implementations as forecast_impl
+                OrigClass = getattr(forecast_impl, forecast_name, None)
+                if OrigClass:
+                    # Create a temp instance to extract data_strategy - too complex
+                    # Instead, parse the name convention: name contains the target hint
+                    # e.g. xgboost_charge_duration -> session_duration, lightgbm_station_energy -> station_energy
+                    name_parts = forecast_name.split('_', 1)
+                    if len(name_parts) > 1:
+                        target_hint = name_parts[1]
+                        target_mapping = {
+                            'charge_duration': PredictionTarget.SESSION_DURATION,
+                            'energy': PredictionTarget.SESSION_ENERGY,
+                            'station_charges': PredictionTarget.STATION_CHARGES,
+                            'station_energy': PredictionTarget.STATION_ENERGY,
+                        }
+                        target_enum = target_mapping.get(target_hint)
+                        if target_enum:
+                            data_strategy = get_prediction_target_strategy(target_enum)
+            except Exception as e:
+                logger.warning(f"Could not resolve data strategy from config name: {e}")
+
+        logger.info(f"DEBUG [init_forecast] Strategy resolution result: "
+                    f"data_strategy={type(data_strategy).__name__ if data_strategy else None}, "
+                    f"model_strategy={type(model_strategy).__name__ if model_strategy else None}")
+
+        if data_strategy and model_strategy and config.get("enabled", False):
+            forecast = GenericForecast(
+                data_strategy=data_strategy,
+                model_strategy=model_strategy,
+                id=config.get('id', 1),
+                name=resolved_name,
+                algo=resolved_algo,
+                info=config.get('info', ''),
+                actor=config.get('actor'),
+                actor_id=config.get('actor_id'),
+                date=config.get('date'),
+                enabled=config['enabled'],
+                full_custom_mode=config['full_custom_mode'],
+                mode=config['mode'],
+                submode=config.get('submode'),
+                models_dir=str(Path(models_dir) / resolved_name),
+                model_name=config['model_name'],
+                show_images=config.get('show_images', False),
+                save_images=config.get('save_images', False),
+                save_results=config.get('save_results', True),
+                input_interface=input_interface,
+                output_interface=output_interface,
+                mlflow_interface=mlflow_interface,
+                output_dir=config['output_dir'],
+                data_selection=config.get('data_selection') if not config.get('full_custom_mode') else None,
+                custom_params=config.get('custom_params') if not config.get('full_custom_mode') else None,
+            )
+            logger.info(f"Created dynamic GenericForecast: name={resolved_name}, algo={resolved_algo}")
+            return forecast
+        elif not config.get("enabled", False):
+            logger.info(f"Forecast {forecast_name} not enabled.")
+            return None
+        else:
+            logger.error(f"Could not resolve both strategies from overrides. "
+                         f"data_strategy={data_strategy}, model_strategy={model_strategy}. "
+                         f"Falling back to config name lookup.")
+
+    # --- Standard class lookup (no overrides or fallback) ---
+    logger.info(f"DEBUG [init_forecast] Falling through to standard class lookup for: {forecast_name}")
     ForecastClass = None
     try:
         import src.forecast.forecast_implementations as forecast_impl
@@ -213,9 +337,6 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
 
     if ForecastClass:
         if config["enabled"]:
-            if 'full_custom_mode' not in config.keys():
-                config['full_custom_mode'] = False
-
             forecast = ForecastClass(id=config['id'] if 'id' in config.keys() else 1,
                                      name=config['name'],
                                      algo=config['algo'],
@@ -242,9 +363,7 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
             logger.info('Forecast ' + config["name"] + ' not enabled.')
             
     else:
-         # Fallback error
-         if config["enabled"]: # Only error if enabled? Original code raised exception regardless if not in FORECAST list?
-             # Original: if config["name"] in FORECAST: ... else raise Exception
+         if config["enabled"]:
              raise Exception('Forecast ' + config["name"] + ' does not exist or class not found.')
 
     return forecast

@@ -229,15 +229,18 @@ def render_forecast_page():
                 if selected_target_key or selected_model_strategy_key:
                     if selected_target_key:
                         overrides_applied.append(f"Prediction Target: {target_labels[selected_target_key]}")
-                        # Update all tasks
                         for task in forecast_tasks:
                             task['prediction_target'] = selected_target_key
                     
                     if selected_model_strategy_key:
                         overrides_applied.append(f"Model Strategy: {model_labels[selected_model_strategy_key]}")
-                        # Update all tasks
                         for task in forecast_tasks:
                             task['model_strategy'] = selected_model_strategy_key
+                    
+                    # Debug: verify overrides are set on each task
+                    for i, task in enumerate(forecast_tasks):
+                        st.write(f"DEBUG [UI] Task {i}: name={task.get('name')}, algo={task.get('algo')}, "
+                                 f"prediction_target={task.get('prediction_target')}, model_strategy={task.get('model_strategy')}")
                 
                 if selected_mlflow_model:
                     overrides_applied.append(f"Model Name: {selected_mlflow_model}")

@@ -24,6 +24,12 @@ class ForecastService(Service):
                 forecast_name = f"{forecast_conf['id']}_{forecast_conf['name']}"
             else:
                 forecast_name = f"{forecast_conf['name']}"
+            
+            self.logger.info(f"DEBUG [ForecastService] Processing task: name={forecast_conf.get('name')}, "
+                            f"algo={forecast_conf.get('algo')}, "
+                            f"prediction_target={forecast_conf.get('prediction_target')}, "
+                            f"model_strategy={forecast_conf.get('model_strategy')}")
+            
             forecast_conf['output_dir'] = str(Path(self.output_dir) / forecast_name)
             full_custom_mode = forecast_conf['full_custom_mode'] \
                 if "full_custom_mode" in forecast_conf.keys() and forecast_conf['full_custom_mode'] is True else False
@@ -33,7 +39,8 @@ class ForecastService(Service):
                                      output_interface=self.output_interface if full_custom_mode is True else None)
 
             if forecast:
-                self.logger.info("Forecast: %s" % forecast.name)
+                self.logger.info(f"DEBUG [ForecastService] Forecast initialized: name={forecast.name}, algo={forecast.algo}, "
+                                f"type={type(forecast).__name__}")
 
                 output = None
                 if forecast.full_custom_mode:
