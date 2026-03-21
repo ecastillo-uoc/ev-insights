@@ -37,7 +37,8 @@ class ModelStrategy(ABC):
 
     @abstractmethod
     def predict(self, df: pd.DataFrame, feature_columns: list, target_column: str, 
-                model_objects: dict, context_date) -> dict:
+                model_objects, context_date, dataset_names: list = None,
+                submode: str = None) -> dict:
         """
         Make predictions.
         

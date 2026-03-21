@@ -347,6 +347,10 @@ class LightGBMModelStrategy(ModelStrategy):
 
     def predict(self, df, feature_columns, target_column, model_objects, context_date, dataset_names=None, submode=None):
         output_dict = {'predict': {}}
+        X = None
+        subset_dates = None
+        dates_list = None
+        actual_vals = None
         try:
             debug_msg = f"DEBUG [LightGBM.predict] Starting predict: " + \
                         f"df.shape={df.shape if df is not None else None}, " + \
@@ -827,5 +831,63 @@ class lstm_station_energy(GenericForecast):
         super().__init__(
             data_strategy=StationEnergyDataStrategy(),
             model_strategy=LSTMModelStrategy(output_key='energy'),
+            **kwargs
+        )
+
+# --- Additional forecast class combinations ---
+
+class lightgbm_session_energy(GenericForecast):
+    def __init__(self, **kwargs):
+        super().__init__(
+            data_strategy=SessionDataStrategy(target_column='energy_supplied'),
+            model_strategy=LightGBMModelStrategy(),
+            **kwargs
+        )
+
+class lightgbm_session_duration(GenericForecast):
+    def __init__(self, **kwargs):
+        super().__init__(
+            data_strategy=SessionDataStrategy(target_column='plug_duration'),
+            model_strategy=LightGBMModelStrategy(),
+            **kwargs
+        )
+
+class xgboost_session_energy(GenericForecast):
+    def __init__(self, **kwargs):
+        super().__init__(
+            data_strategy=SessionDataStrategy(target_column='energy_supplied'),
+            model_strategy=XGBoostModelStrategy(output_key='energy'),
+            **kwargs
+        )
+
+class xgboost_station_charges(GenericForecast):
+    def __init__(self, **kwargs):
+        super().__init__(
+            data_strategy=StationChargesDataStrategy(),
+            model_strategy=XGBoostModelStrategy(output_key='charges'),
+            **kwargs
+        )
+
+class xgboost_station_energy(GenericForecast):
+    def __init__(self, **kwargs):
+        super().__init__(
+            data_strategy=StationEnergyDataStrategy(),
+            model_strategy=XGBoostModelStrategy(output_key='energy'),
+            **kwargs
+        )
+
+class lstm_session_energy(GenericForecast):
+    def __init__(self, **kwargs):
+        super().__init__(
+            data_strategy=SessionDataStrategy(target_column='energy_supplied'),
+            model_strategy=LSTMModelStrategy(output_key='energy'),
+            **kwargs
+        )
+
+class lstm_station_charges(GenericForecast):
+    def __init__(self, **kwargs):
+        super().__init__(
+            data_strategy=StationChargesDataStrategy(),
+            model_strategy=LSTMModelStrategy(output_key='charges'),
             **kwargs
         )

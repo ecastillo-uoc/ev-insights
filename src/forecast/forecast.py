@@ -390,6 +390,92 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
             
     else:
          if config["enabled"]:
-             raise Exception('Forecast ' + config["name"] + ' does not exist or class not found.')
+            # --- Name-based strategy inference fallback ---
+            # Try to infer strategies from the forecast name pattern: {algo}_{target}
+            # e.g. "lightgbm_session_energy" → model=lightgbm, target=session_energy
+            logger.info(f"Class not found for '{forecast_name}', attempting name-based strategy inference")
+            from src.forecast.generic_forecast import GenericForecast as _GF
+            from src.forecast.strategies import (
+                PredictionTarget as _PT,
+                get_prediction_target_strategy as _get_pts,
+                PREDICTION_TARGET_REGISTRY as _PTR,
+                ModelStrategyType as _MST,
+                get_model_strategy as _get_ms,
+            )
+
+            _algo_map = {t.value: t for t in _MST}
+            _target_map = {t.value: t for t in _PT}
+
+            inferred_model = None
+            inferred_data = None
+            inferred_algo = None
+            inferred_target_key = None
+
+            # Try splitting name as "{algo}_{target}" with algo being one known token
+            for algo_key in _algo_map:
+                if forecast_name.startswith(algo_key + '_'):
+                    remainder = forecast_name[len(algo_key) + 1:]
+                    if remainder in _target_map:
+                        inferred_algo = algo_key
+                        inferred_target_key = remainder
+                        inferred_model = _get_ms(_algo_map[algo_key])
+                        inferred_data = _get_pts(_target_map[remainder])
+                        break
+
+            if inferred_model and inferred_data:
+                logger.info(f"Inferred strategies from name '{forecast_name}': "
+                            f"algo={inferred_algo}, target={inferred_target_key}")
+
+                # Merge registry defaults for the inferred target
+                try:
+                    target_info = _PTR[_PT(inferred_target_key)]
+                    registry_defaults = target_info.default_params
+                except (ValueError, KeyError):
+                    registry_defaults = {}
+
+                ds = config.get('data_selection', {})
+                if not ds.get('fields'):
+                    default_fields = registry_defaults.get('fields', {})
+                    if default_fields:
+                        ds['fields'] = dict(default_fields)
+                        config['data_selection'] = ds
+                        logger.info(f"Merged default fields from name-based inference: {list(default_fields.keys())}")
+
+                cp = config.get('custom_params', {})
+                if not cp:
+                    default_cp = registry_defaults.get('custom_params', {})
+                    if default_cp:
+                        config['custom_params'] = dict(default_cp)
+                        logger.info(f"Merged default custom_params from name-based inference")
+
+                forecast = _GF(
+                    data_strategy=inferred_data,
+                    model_strategy=inferred_model,
+                    id=config.get('id', 1),
+                    name=forecast_name,
+                    algo=inferred_algo,
+                    info=config.get('info', ''),
+                    actor=config.get('actor'),
+                    actor_id=config.get('actor_id'),
+                    date=config.get('date'),
+                    enabled=config['enabled'],
+                    full_custom_mode=config.get('full_custom_mode', False),
+                    mode=config['mode'],
+                    submode=config.get('submode'),
+                    models_dir=str(Path(models_dir) / forecast_name),
+                    model_name=config['model_name'],
+                    show_images=config.get('show_images', False),
+                    save_images=config.get('save_images', False),
+                    save_results=config.get('save_results', True),
+                    input_interface=input_interface,
+                    output_interface=output_interface,
+                    mlflow_interface=mlflow_interface,
+                    output_dir=config['output_dir'],
+                    data_selection=config.get('data_selection') if not config.get('full_custom_mode') else None,
+                    custom_params=config.get('custom_params') if not config.get('full_custom_mode') else None,
+                )
+                logger.info(f"Created GenericForecast via name-based inference: {forecast_name}")
+            else:
+                raise Exception(f'Forecast {config["name"]} does not exist or class not found in {FORECAST}')
 
     return forecast

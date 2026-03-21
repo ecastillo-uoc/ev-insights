@@ -315,6 +315,12 @@ def render_forecast_page():
                 # 2. Run Service
                 # If overrides are present, pass the dictionary. Otherwise pass the file path.
                 if overrides_applied:
+                    # Verify overrides are actually in the config dict (debug)
+                    _ft = run_config.get('services', {}).get('forecast', {}).get('forecast', [])
+                    for _i, _t in enumerate(_ft):
+                        print(f"DEBUG [forecast_app] PRE-RUN Task {_i}: name={_t.get('name')}, "
+                              f"algo={_t.get('algo')}, prediction_target={_t.get('prediction_target')}, "
+                              f"model_strategy={_t.get('model_strategy')}, model_name={_t.get('model_name')}")
                     result = run_service(config_json=run_config)
                 else:
                     result = run_service(config_file=selected_config_file)
@@ -322,28 +328,39 @@ def render_forecast_page():
                 st.success("Execution finished successfully!")
                 
                 # Show results
-                if result and isinstance(result, dict):
-                    for task_name, task_result in result.items():
-                        pred = task_result.get('predict') if isinstance(task_result, dict) else None
-                        if pred and pred.get('values'):
-                            # Determine y-axis label from prediction target
-                            ylabel = "Value"
-                            if selected_target_key:
-                                if 'energy' in selected_target_key:
-                                    ylabel = "Energy (kWh)"
-                                elif 'charge' in selected_target_key or 'connection' in selected_target_key:
-                                    ylabel = "Connections"
-                                elif 'duration' in selected_target_key:
-                                    ylabel = "Duration (min)"
-                            fig = plot_forecast_results(
-                                task_result,
-                                forecast_name=task_name,
-                                ylabel=ylabel
-                            )
-                            if fig:
-                                st.pyplot(fig)
-                                plt.close(fig)
-                        
+                # main() returns a list of dicts (one per service run)
+                # Each dict maps task_name → {predict: {...}, train: {...}}
+                result_dicts = []
+                if isinstance(result, list):
+                    for item in result:
+                        if isinstance(item, dict):
+                            result_dicts.append(item)
+                elif isinstance(result, dict):
+                    result_dicts.append(result)
+                
+                if result_dicts:
+                    for res_dict in result_dicts:
+                        for task_name, task_result in res_dict.items():
+                            pred = task_result.get('predict') if isinstance(task_result, dict) else None
+                            if pred and pred.get('values'):
+                                # Determine y-axis label from prediction target
+                                ylabel = "Value"
+                                if selected_target_key:
+                                    if 'energy' in selected_target_key:
+                                        ylabel = "Energy (kWh)"
+                                    elif 'charge' in selected_target_key or 'connection' in selected_target_key:
+                                        ylabel = "Connections"
+                                    elif 'duration' in selected_target_key:
+                                        ylabel = "Duration (min)"
+                                fig = plot_forecast_results(
+                                    task_result,
+                                    forecast_name=task_name,
+                                    ylabel=ylabel
+                                )
+                                if fig:
+                                    st.pyplot(fig)
+                                    plt.close(fig)
+                    
                     with st.expander("Raw Result Output"):
                         st.json(result)
                 else:
