@@ -340,6 +340,15 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
              ForecastClass = getattr(forecast_impl, forecast_name)
     except ImportError:
         pass
+
+    # Also check forecast_definitions (where the class combos live)
+    if ForecastClass is None:
+        try:
+            import src.forecast.forecast_definitions as forecast_defs
+            if hasattr(forecast_defs, forecast_name):
+                ForecastClass = getattr(forecast_defs, forecast_name)
+        except ImportError:
+            pass
         
     # If not found, try legacy file import
     if ForecastClass is None and forecast_name in [p.stem for p in Path(__file__).parent.glob("*.py")]:
@@ -351,6 +360,32 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
 
     if ForecastClass:
         if config["enabled"]:
+            # Merge registry defaults for empty fields/custom_params
+            # Infer prediction target from the class name: {algo}_{target}
+            _algo_keys = ['lightgbm', 'xgboost', 'lstm']
+            _inferred_target = None
+            for _ak in _algo_keys:
+                if forecast_name.startswith(_ak + '_'):
+                    _inferred_target = forecast_name[len(_ak) + 1:]
+                    break
+            if _inferred_target:
+                try:
+                    _ti = PREDICTION_TARGET_REGISTRY[PredictionTarget(_inferred_target)]
+                    _rd = _ti.default_params
+                    ds = config.get('data_selection', {})
+                    if not ds.get('fields'):
+                        _df = _rd.get('fields', {})
+                        if _df:
+                            ds['fields'] = dict(_df)
+                            config['data_selection'] = ds
+                    cp = config.get('custom_params', {})
+                    if not cp:
+                        _dcp = _rd.get('custom_params', {})
+                        if _dcp:
+                            config['custom_params'] = dict(_dcp)
+                except (ValueError, KeyError):
+                    pass
+
             forecast = ForecastClass(id=config['id'] if 'id' in config.keys() else 1,
                                      name=config['name'],
                                      algo=config['algo'],
@@ -383,10 +418,12 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
             # e.g. "lightgbm_session_energy" → model=lightgbm, target=session_energy
             logger.info(f"Class not found for '{forecast_name}', attempting name-based strategy inference")
             from .generic_forecast import GenericForecast as GenericForecast
-            from .strategies import (
+            from .prediction_target_registry import (
                 PredictionTarget as _PT,
                 get_prediction_target_strategy as _get_pts,
                 PREDICTION_TARGET_REGISTRY as _PTR,
+            )
+            from .model_registry import (
                 ModelStrategyType as _MST,
                 get_model_strategy as _get_ms,
             )

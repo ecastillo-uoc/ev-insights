@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from src.__main__ import main as run_service
-from src.forecast.strategies import (
+from src.forecast import (
     PREDICTION_TARGET_REGISTRY,
     MODEL_STRATEGY_REGISTRY
 )
