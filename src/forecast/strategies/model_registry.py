@@ -5,7 +5,8 @@ from typing import Type, Dict, Any
 from src.forecast.strategies.interfaces import ModelStrategy
 from src.forecast.forecast_implementations import (
     LightGBMModelStrategy,
-    XGBoostModelStrategy
+    XGBoostModelStrategy,
+    LSTMModelStrategy
 )
 
 @dataclass
@@ -37,6 +38,14 @@ MODEL_STRATEGY_REGISTRY: Dict[ModelStrategyType, ModelStrategyInfo] = {
         strategy_class=XGBoostModelStrategy,
         default_params={"n_estimators": 100, "max_depth": 3}
     ),
+    ModelStrategyType.LSTM: ModelStrategyInfo(
+        name=ModelStrategyType.LSTM.value,
+        display_name="LSTM",
+        description="Optimized distributed gradient boosting library designed to be highly efficient, flexible and portable.",
+        strategy_class=LSTMModelStrategy,
+        default_params={"n_estimators": 100, "max_depth": 3}
+    ),
+    
 }
 
 def get_model_strategy(strategy_type: ModelStrategyType) -> ModelStrategy:
