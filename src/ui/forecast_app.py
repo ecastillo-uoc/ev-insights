@@ -245,6 +245,23 @@ def render_forecast_page():
                         overrides_applied.append(f"Model Strategy: {model_labels[selected_model_strategy_key]}")
                         for task in forecast_tasks:
                             task['model_strategy'] = selected_model_strategy_key
+                            task['algo'] = selected_model_strategy_key
+                    
+                    # Update task name to reflect the actual strategy combination
+                    for task in forecast_tasks:
+                        t_key = task.get('prediction_target')
+                        m_key = task.get('model_strategy')
+                        if t_key and m_key:
+                            task['name'] = f"{m_key}_{t_key}"
+                        elif m_key:
+                            # Keep original target part from name (e.g. charge_duration)
+                            parts = task['name'].split('_', 1)
+                            if len(parts) > 1:
+                                task['name'] = f"{m_key}_{parts[1]}"
+                        elif t_key:
+                            # Keep original algo part from name
+                            parts = task['name'].split('_', 1)
+                            task['name'] = f"{parts[0]}_{t_key}"
                     
                     # Debug: verify overrides are set on each task
                     for i, task in enumerate(forecast_tasks):
