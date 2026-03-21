@@ -61,9 +61,19 @@ class ForecastService(Service):
                             experiment_id, run_id, model = self.mlflow_interface.get_model(algo=forecast.algo,
                                                                                            model_name=forecast.model_name)
                         else:
-                            prediction = self.input_interface.get_prediction(actor=forecast.actor,
-                                                                             actor_id=forecast.actor_id,
-                                                                             date=forecast.date)
+                            # Try loading model from file first
+                            try:
+                                experiment_id, run_id, model = self.output_interface.get_model(
+                                    algo=forecast.algo,
+                                    model_name=forecast.model_name,
+                                    models_dir=self.models_dir)
+                                self.logger.info(f"Loaded model from file: {forecast.model_name}")
+                            except (FileNotFoundError, NotImplementedError):
+                                # Fall back to loading a previous prediction from the database
+                                self.logger.info(f"No model file found, loading prediction from database")
+                                prediction = self.input_interface.get_prediction(actor=forecast.actor,
+                                                                                 actor_id=forecast.actor_id,
+                                                                                 date=forecast.date)
 
                     # Load data into Forecast object
                     forecast.load_data(df=df, prediction=prediction, model=model)
@@ -87,7 +97,8 @@ class ForecastService(Service):
                             else:
                                 self.output_interface.save_forecast_model(forecaster_name=forecast.name,
                                                                           results=forecast.results,
-                                                                          file_path=self.models_dir)
+                                                                          file_path=self.models_dir,
+                                                                          algo=forecast.algo)
                         elif forecast.mode == 'predict':
                             self.output_interface.save_forecast_prediction(forecaster_name=forecast.name,
                                                                            actor=forecast.actor,

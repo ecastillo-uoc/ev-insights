@@ -7,6 +7,7 @@ from psycopg2.extras import RealDictCursor
 
 import pandas as pd
 from pprint import pprint
+from pathlib import Path
 
 from src.interfaces.interface import Interface
 from src.sql.postgresql import sql_query
@@ -565,6 +566,84 @@ class PostgreSql(Interface):
             return None
         finally:
             cursor.close()
+
+    def save_forecast_model(self, forecaster_name, results, file_path, algo=None):
+        """
+        Save trained model(s) to disk as files.
+        Supports LightGBM (.ubj), XGBoost (.ubj), and Keras/LSTM (.keras + .pkl scaler).
+        """
+        import joblib
+        for model_name, output in results['train'].items():
+            model_obj = output['model']
+            models_path = Path(file_path).parent
+            models_path.mkdir(parents=True, exist_ok=True)
+
+            # LSTM/Keras models are stored as dicts with 'keras_model' and 'scaler'
+            if isinstance(model_obj, dict) and 'keras_model' in model_obj:
+                keras_path = models_path / f"{model_name}.keras"
+                scaler_path = models_path / f"{model_name}_scaler.pkl"
+                meta_path = models_path / f"{model_name}_meta.pkl"
+                model_obj['keras_model'].save(str(keras_path))
+                joblib.dump(model_obj['scaler'], str(scaler_path))
+                joblib.dump({'look_back': model_obj.get('look_back', 30)}, str(meta_path))
+                self.logger.info(f"Saved LSTM model {model_name} to {keras_path}")
+            else:
+                # LightGBM Booster and XGBoost models both support save_model
+                model_file = models_path / f"{model_name}.ubj"
+                # Rename existing file with timestamp to keep history
+                if model_file.exists():
+                    ts = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')[:-3]
+                    model_file.rename(models_path / f"{model_file.name}.{ts}")
+                model_obj.save_model(str(model_file))
+                self.logger.info(f"Saved forecast model {model_name} to {model_file}")
+
+    def get_model(self, algo, model_name, models_dir=None):
+        """
+        Load a trained model from disk.
+        Returns (None, None, model) to match MLflow interface signature.
+        """
+        import joblib
+        if models_dir is None:
+            raise ValueError("models_dir is required to load a model from file")
+
+        models_path = Path(models_dir).parent
+
+        # Try LSTM/Keras first
+        keras_path = models_path / f"{model_name}.keras"
+        if keras_path.exists():
+            from keras.models import load_model as keras_load_model
+            scaler_path = models_path / f"{model_name}_scaler.pkl"
+            meta_path = models_path / f"{model_name}_meta.pkl"
+            keras_model = keras_load_model(str(keras_path))
+            scaler = joblib.load(str(scaler_path)) if scaler_path.exists() else None
+            meta = joblib.load(str(meta_path)) if meta_path.exists() else {}
+            model = {
+                'keras_model': keras_model,
+                'scaler': scaler,
+                'look_back': meta.get('look_back', 30),
+            }
+            self.logger.info(f"Loaded LSTM model from {keras_path}")
+            return None, None, model
+
+        # Try .ubj (LightGBM / XGBoost)
+        ubj_path = models_path / f"{model_name}.ubj"
+        if ubj_path.exists():
+            if algo == 'lightgbm':
+                import lightgbm as lgb
+                model = lgb.Booster(model_file=str(ubj_path))
+            elif algo == 'xgboost':
+                import xgboost as xgb
+                model = xgb.XGBRegressor()
+                model.load_model(str(ubj_path))
+            else:
+                raise ValueError(f"Unknown algo '{algo}' for .ubj model file")
+            self.logger.info(f"Loaded {algo} model from {ubj_path}")
+            return None, None, model
+
+        raise FileNotFoundError(
+            f"No model file found for '{model_name}' in {models_path}. "
+            f"Looked for: {keras_path}, {ubj_path}"
+        )
 
     def save_forecast_prediction(self, forecaster_name, actor, model, experiment_id, run_id, results, algo):
         self.logger.info(f"Saving predict results to PostreSQL DB")

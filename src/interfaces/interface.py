@@ -34,7 +34,11 @@ class Interface:
         pass
 
     @abstractmethod
-    def save_forecast_model(self, forecaster_name, results, algo, file_path_name):
+    def save_forecast_model(self, forecaster_name, results, file_path, algo=None):
+        pass
+
+    @abstractmethod
+    def get_model(self, algo, model_name, models_dir=None):
         pass
 
     @abstractmethod

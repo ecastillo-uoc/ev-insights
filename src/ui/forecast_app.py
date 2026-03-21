@@ -48,6 +48,20 @@ def get_mlflow_models():
         traceback.print_exc()
         return []
 
+
+def get_local_models(models_dir="../../data/input/forecast_models/"):
+    """Scan models directory for locally saved model files (.ubj, .keras)."""
+    models = []
+    models_path = Path(models_dir)
+    if not models_path.exists():
+        return models
+    for f in models_path.iterdir():
+        if f.suffix == '.ubj':
+            models.append(f.stem)
+        elif f.suffix == '.keras':
+            models.append(f.stem)
+    return sorted(set(models))
+
 def render_forecast_page():
     st.title("📈 Forecast Service")
     
@@ -121,21 +135,49 @@ def render_forecast_page():
             help="Override the machine learning model strategy for all tasks defined in the config."
         )
 
-    # If mode is Predict, allow selecting a model from MLflow
+    # If mode is Predict, allow selecting a model from MLflow or local files
     selected_mlflow_model = None
     if mode == "Predict":
         st.subheader("Model Selection")
-        with st.spinner("Fetching available models from MLflow..."):
-            mlflow_models = get_mlflow_models()
-        
-        if mlflow_models:
-            selected_mlflow_model = st.selectbox(
-                "Select Trained Model",
-                [None] + mlflow_models,
-                help="Select a registered model from MLflow to use for prediction."
-            )
+
+        # Detect models_dir from selected config
+        models_dir = "../../data/input/forecast_models/"
+        if selected_config_file:
+            try:
+                with open(selected_config_file, 'r') as f:
+                    _cfg = json.load(f)
+                models_dir = _cfg.get('services', {}).get('forecast', {}).get('models_dir', models_dir)
+            except Exception:
+                pass
+
+        model_source = st.radio(
+            "Model Source",
+            ("Local Files", "MLflow"),
+            horizontal=True,
+            index=0
+        )
+
+        if model_source == "MLflow":
+            with st.spinner("Fetching available models from MLflow..."):
+                mlflow_models = get_mlflow_models()
+            if mlflow_models:
+                selected_mlflow_model = st.selectbox(
+                    "Select Trained Model (MLflow)",
+                    [None] + mlflow_models,
+                    help="Select a registered model from MLflow to use for prediction."
+                )
+            else:
+                st.warning("No registered models found in MLflow (or could not connect).")
         else:
-            st.warning("No registered models found in MLflow (or could not connect). using config default.")
+            local_models = get_local_models(models_dir)
+            if local_models:
+                selected_mlflow_model = st.selectbox(
+                    "Select Trained Model (Local)",
+                    [None] + local_models,
+                    help="Select a locally saved model file to use for prediction."
+                )
+            else:
+                st.warning(f"No local model files found in `{models_dir}`.")
 
     # --- Main Area - Job Settings Display ---
     st.markdown("### ⚙️ Job Settings")
