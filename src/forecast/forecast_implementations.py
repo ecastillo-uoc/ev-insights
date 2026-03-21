@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from datetime import datetime
 from keras.models import Sequential
-from keras.layers import LSTM as KerasLSTM, Dense, Dropout
+from keras.layers import Input, LSTM as KerasLSTM, Dense, Dropout
 from keras.optimizers import Adam
 
 from src.utils.logger import Colors
@@ -348,19 +348,30 @@ class LightGBMModelStrategy(ModelStrategy):
     def predict(self, df, feature_columns, target_column, model_objects, context_date, dataset_names=None, submode=None):
         output_dict = {'predict': {}}
         try:
-            self.logger.info(f"DEBUG [LightGBM.predict] Starting predict: "
-                            f"df.shape={df.shape if df is not None else None}, "
-                            f"feature_columns={feature_columns}, "
-                            f"target_column={target_column}, "
-                            f"model_objects type={type(model_objects).__name__}, "
-                            f"context_date={context_date}, "
-                            f"dataset_names={dataset_names}, "
-                            f"submode={submode}")
+            debug_msg = f"DEBUG [LightGBM.predict] Starting predict: " + \
+                        f"df.shape={df.shape if df is not None else None}, " + \
+                        f"feature_columns={feature_columns}, " + \
+                        f"target_column={target_column}, " + \
+                        f"model_objects type={type(model_objects).__name__}, " + \
+                        f"context_date={context_date}, " + \
+                        f"dataset_names={dataset_names}, " + \
+                        f"submode={submode}"
+            self.logger.info(debug_msg)
 
             model = model_objects
             if model is None:
                 self.logger.error("DEBUG [LightGBM.predict] model_objects is None – cannot predict")
                 return output_dict
+
+            # Use the model's own feature names to ensure predict matches training
+            if hasattr(model, 'feature_name'):
+                model_features = model.feature_name()
+                self.logger.info(f"DEBUG [LightGBM.predict] Model trained features ({len(model_features)}): {model_features}")
+                missing = [f for f in model_features if f not in df.columns]
+                if missing:
+                    self.logger.error(f"DEBUG [LightGBM.predict] Missing features in df: {missing}")
+                # Use model's features instead of feature_columns from data strategy
+                feature_columns = model_features
 
             for dataset_name in (dataset_names or []):
                 self.logger.info(f"DEBUG [LightGBM.predict] Processing dataset: {dataset_name}")
@@ -547,8 +558,10 @@ class LSTMModelStrategy(ModelStrategy):
         """
         model = Sequential()
         
+        model.add(Input(shape=input_shape))
+        
         # First LSTM layer with Dropout
-        model.add(KerasLSTM(units=50, activation=activation, return_sequences=True, input_shape=input_shape))
+        model.add(KerasLSTM(units=50, activation=activation, return_sequences=True))
         model.add(Dropout(dropout_rate))
         
         # Second LSTM layer with Dropout
