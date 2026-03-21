@@ -38,8 +38,32 @@ class GenericForecast(Forecast):
         )
         self.results.update(output)
 
+    def _resolve_model_strategy(self):
+        """Auto-detect model type and swap strategy if there's a mismatch."""
+        if self.model is None:
+            return
+        model_type = type(self.model).__name__
+        strategy_type = type(self.model_strategy).__name__
+
+        # Lazy imports to avoid circular dependency at module load time
+        if model_type == 'Booster' and strategy_type != 'LightGBMModelStrategy':
+            from src.forecast.forecast_implementations import LightGBMModelStrategy
+            self._gf_logger.info(f"Auto-switching from {strategy_type} to LightGBMModelStrategy (detected {model_type})")
+            self.model_strategy = LightGBMModelStrategy()
+        elif model_type in ('XGBRegressor', 'XGBClassifier') and strategy_type != 'XGBoostModelStrategy':
+            from src.forecast.forecast_implementations import XGBoostModelStrategy
+            self._gf_logger.info(f"Auto-switching from {strategy_type} to XGBoostModelStrategy (detected {model_type})")
+            self.model_strategy = XGBoostModelStrategy()
+        elif isinstance(self.model, dict) and 'keras_model' in self.model and strategy_type != 'LSTMModelStrategy':
+            from src.forecast.forecast_implementations import LSTMModelStrategy
+            self._gf_logger.info(f"Auto-switching from {strategy_type} to LSTMModelStrategy (detected keras dict)")
+            self.model_strategy = LSTMModelStrategy()
+
     def predict(self):
         target_col = self.target_columns[0] if self.target_columns else None
+
+        # Auto-detect and correct model strategy mismatch
+        self._resolve_model_strategy()
         
         self._gf_logger.info(f"DEBUG [GenericForecast.predict] mode={self.mode}, submode={self.submode}, "
                              f"algo={self.algo}, name={self.name}")
