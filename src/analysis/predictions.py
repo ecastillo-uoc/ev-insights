@@ -10,8 +10,8 @@ _logger = logging.getLogger("analysis.predictions")
 _logger.setLevel(logging.DEBUG)
 
 
-def plot_predictions(actual_dates, actual_values, future_dates, 
-                     predictions, 
+def plot_predictions_energy(actual_dates, actual_values, future_dates, 
+                     prediced_values, 
                      title:str,
                      prediction_days:str, 
                      save_dir=None, show_images:bool=False):
@@ -34,12 +34,12 @@ def plot_predictions(actual_dates, actual_values, future_dates,
     plt.plot(actual_dates, actual_values, label="Actual Data", color='blue', linewidth=1.5)
     
     # Plot predicted data
-    plt.plot(future_dates, predictions, label="LSTM Predictions", color='orange', linestyle='--', linewidth=2)
+    plt.plot(future_dates, prediced_values, label="LSTM Predictions", color='orange', linestyle='--', linewidth=2)
     
     # Formatting
-    plt.title(f"{title} - {prediction_days} Days Horizon")
+    plt.title(f"Forecast: model:{title} - {prediction_days} Days Horizon")
     plt.xlabel("Date")
-    plt.ylabel("Energy")
+    plt.ylabel("Energy (kWh)")
     plt.grid(True, linestyle='--', alpha=0.6)
     plt.legend()
     plt.tight_layout()

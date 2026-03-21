@@ -633,3 +633,45 @@ class PostgreSql(Interface):
         cursor.close()
         ids_list = [value for row in ids for value in row.values()]
         return ids_list
+
+    def get_predictions_history(self, actor, actor_id):
+        """Fetch all stored predictions for a given actor as a list of dicts."""
+        cursor = self.db.cursor(cursor_factory=RealDictCursor)
+        if actor.lower() == "charging_station":
+            cursor.execute(sql_query.get_charging_station_predictions_all, [actor_id])
+        elif actor.lower() == "user":
+            cursor.execute(sql_query.get_user_predictions_all, [actor_id])
+        else:
+            cursor.close()
+            return []
+        rows = cursor.fetchall()
+        cursor.close()
+        return [dict(r) for r in rows]
+
+    def get_actual_daily_data(self, actor, actor_id):
+        """Fetch daily aggregated actuals for a given actor as a list of dicts."""
+        cursor = self.db.cursor(cursor_factory=RealDictCursor)
+        if actor.lower() == "charging_station":
+            cursor.execute(sql_query.get_actual_daily_station, [actor_id])
+        elif actor.lower() == "user":
+            cursor.execute(sql_query.get_actual_daily_user, [actor_id])
+        else:
+            cursor.close()
+            return []
+        rows = cursor.fetchall()
+        cursor.close()
+        return [dict(r) for r in rows]
+
+    def get_actor_ids_with_predictions(self, actor):
+        """Fetch actor IDs that have stored predictions."""
+        cursor = self.db.cursor(cursor_factory=RealDictCursor)
+        if actor.lower() == "charging_station":
+            cursor.execute(sql_query.get_station_ids_with_predictions)
+        elif actor.lower() == "user":
+            cursor.execute(sql_query.get_user_ids_with_predictions)
+        else:
+            cursor.close()
+            return []
+        rows = cursor.fetchall()
+        cursor.close()
+        return [r['id'] for r in rows]

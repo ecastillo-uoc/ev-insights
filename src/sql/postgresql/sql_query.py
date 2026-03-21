@@ -157,6 +157,58 @@ get_charging_station_prediction = """
     LIMIT 1;
 """
 
+# Get all predictions for a charging station
+get_charging_station_predictions_all = """
+    SELECT date, energy, connections, experiment_id, run_id, created_at
+    FROM evinsights."ChargingStationForecast"
+    WHERE fk_charging_station_id = %s
+    ORDER BY date;
+"""
+
+# Get all predictions for a user
+get_user_predictions_all = """
+    SELECT date, energy, duration, experiment_id, run_id, created_at
+    FROM evinsights."UserForecast"
+    WHERE fk_user_id = %s
+    ORDER BY date;
+"""
+
+# Get daily actual energy and connections for a charging station
+get_actual_daily_station = """
+    SELECT DATE(cs.plug_in_datetime) as date,
+           SUM(cs.energy_supplied) as energy,
+           COUNT(*) as connections
+    FROM evinsights."ChargingSession" cs
+    WHERE cs.fk_charging_station_id = %s
+    GROUP BY DATE(cs.plug_in_datetime)
+    ORDER BY date;
+"""
+
+# Get daily actual energy and duration for a user
+get_actual_daily_user = """
+    SELECT DATE(cs.plug_in_datetime) as date,
+           SUM(cs.energy_supplied) as energy,
+           SUM(EXTRACT(EPOCH FROM (cs.plug_out_datetime - cs.plug_in_datetime)) / 60) as duration
+    FROM evinsights."ChargingSession" cs
+    WHERE cs.fk_user_id = %s
+    GROUP BY DATE(cs.plug_in_datetime)
+    ORDER BY date;
+"""
+
+# Get charging station IDs that have predictions
+get_station_ids_with_predictions = """
+    SELECT DISTINCT fk_charging_station_id as id
+    FROM evinsights."ChargingStationForecast"
+    ORDER BY id;
+"""
+
+# Get user IDs that have predictions
+get_user_ids_with_predictions = """
+    SELECT DISTINCT fk_user_id as id
+    FROM evinsights."UserForecast"
+    ORDER BY id;
+"""
+
 get_user_ids = """
     SELECT id
     FROM evinsights."User"

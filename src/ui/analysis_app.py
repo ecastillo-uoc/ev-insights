@@ -2,6 +2,9 @@ import streamlit as st
 import json
 import glob
 import logging
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from pathlib import Path
 
 from src.__main__ import main as run_service
@@ -159,3 +162,121 @@ def render_analysis_page():
             except Exception as e:
                 st.error(f"An error occurred during execution: {e}")
                 st.exception(e)
+
+    # --- Prediction Visualization ---
+    st.markdown("---")
+    st.header("📈 Prediction Visualization")
+
+    if not selected_config_file:
+        st.warning("Select a configuration file above to enable prediction visualization.")
+        return
+
+    try:
+        with open(selected_config_file, 'r') as f:
+            viz_config = json.load(f)
+
+        service_config = viz_config.get('services', {}).get('analysis', {})
+        if not service_config:
+            service_config = viz_config.get('services', {}).get('forecast', {})
+        input_iface_cfg = service_config.get('interfaces', {}).get('input', {})
+
+        if input_iface_cfg.get('name') != 'PostgreSql':
+            st.info("Prediction visualization requires a PostgreSQL data source.")
+            return
+
+        db = PostgreSql(
+            name="viz_predictions",
+            type="input",
+            output_dir=".",
+            host=input_iface_cfg.get('host', 'localhost'),
+            port=input_iface_cfg.get('port', 5432),
+            user=input_iface_cfg.get('user'),
+            password=input_iface_cfg.get('password'),
+            database=input_iface_cfg.get('database')
+        )
+
+        col_actor, col_metric = st.columns(2)
+        with col_actor:
+            actor_type = st.selectbox(
+                "Actor Type",
+                ["charging_station", "user"],
+                format_func=lambda x: "Charging Station" if x == "charging_station" else "User"
+            )
+        with col_metric:
+            if actor_type == "charging_station":
+                metric = st.selectbox("Metric", ["energy", "connections"])
+            else:
+                metric = st.selectbox("Metric", ["energy", "duration"])
+
+        actor_ids = db.get_actor_ids_with_predictions(actor_type)
+
+        if not actor_ids:
+            st.info(f"No stored predictions found for {actor_type.replace('_', ' ')}s.")
+            db.close_interface()
+            return
+
+        selected_actor_id = st.selectbox(
+            f"Select {actor_type.replace('_', ' ').title()} ID",
+            actor_ids
+        )
+
+        if st.button("📊 Load Prediction Plot"):
+            with st.spinner("Fetching data..."):
+                preds = db.get_predictions_history(actor_type, selected_actor_id)
+                actuals = db.get_actual_daily_data(actor_type, selected_actor_id)
+
+            if not preds:
+                st.warning("No predictions found for the selected actor.")
+            else:
+                df_pred = pd.DataFrame(preds)
+                df_pred['date'] = pd.to_datetime(df_pred['date'])
+                if metric in df_pred.columns:
+                    df_pred[metric] = pd.to_numeric(df_pred[metric], errors='coerce')
+
+                df_actual = pd.DataFrame(actuals) if actuals else pd.DataFrame()
+                if not df_actual.empty:
+                    df_actual['date'] = pd.to_datetime(df_actual['date'])
+                    if metric in df_actual.columns:
+                        df_actual[metric] = pd.to_numeric(df_actual[metric], errors='coerce')
+
+                # Build plot
+                fig, ax = plt.subplots(figsize=(14, 6))
+
+                if not df_actual.empty and metric in df_actual.columns:
+                    ax.plot(df_actual['date'], df_actual[metric],
+                            label="Actual", color='steelblue', linewidth=1.2)
+
+                if metric in df_pred.columns:
+                    ax.plot(df_pred['date'], df_pred[metric],
+                            label="Predicted", color='orange', linestyle='--',
+                            linewidth=2, marker='o', markersize=3)
+
+                ax.set_title(
+                    f"{actor_type.replace('_', ' ').title()} {selected_actor_id} — "
+                    f"{metric.title()} (Actual vs Predicted)"
+                )
+                ax.set_xlabel("Date")
+                ylabel_map = {"energy": "Energy (kWh)", "connections": "Connections",
+                              "duration": "Duration (min)"}
+                ax.set_ylabel(ylabel_map.get(metric, metric.title()))
+                ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+                fig.autofmt_xdate()
+                ax.grid(True, linestyle='--', alpha=0.6)
+                ax.legend()
+                fig.tight_layout()
+
+                st.pyplot(fig)
+                plt.close(fig)
+
+                # Show data tables
+                with st.expander("Prediction Data"):
+                    st.dataframe(df_pred, hide_index=True)
+                if not df_actual.empty:
+                    with st.expander("Actual Data"):
+                        st.dataframe(df_actual, hide_index=True)
+
+        db.close_interface()
+
+    except Exception as e:
+        st.error(f"Error loading prediction visualization: {e}")
+        logging.getLogger('ui.analysis').exception("Prediction visualization error")
