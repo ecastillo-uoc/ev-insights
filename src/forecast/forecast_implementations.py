@@ -386,7 +386,7 @@ class LightGBMModelStrategy(ModelStrategy):
                 if isinstance(subset.index, pd.DatetimeIndex):
                     subset_dates = subset.index
                 elif 'plug_in_datetime' in subset.columns:
-                    subset_dates = pd.to_datetime(subset['plug_in_datetime'])
+                    subset_dates = pd.DatetimeIndex(subset['plug_in_datetime'])
                 else:
                     subset_dates = None
 
@@ -574,7 +574,7 @@ class XGBoostModelStrategy(ModelStrategy):
                     if isinstance(subset.index, pd.DatetimeIndex):
                         subset_dates = subset.index
                     elif 'plug_in_datetime' in subset.columns:
-                        subset_dates = pd.to_datetime(subset['plug_in_datetime'])
+                        subset_dates = pd.DatetimeIndex(subset['plug_in_datetime'])
                     else:
                         subset_dates = None
 
