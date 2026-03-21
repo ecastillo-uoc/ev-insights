@@ -536,15 +536,54 @@ class XGBoostModelStrategy(ModelStrategy):
             model = model_objects
 
             # Resolve feature names from the model when feature_columns is empty
-            if not feature_columns:
-                if hasattr(model, 'feature_name'):
-                    # LightGBM Booster
-                    feature_columns = model.feature_name()
-                elif hasattr(model, 'feature_names_in_'):
-                    # scikit-learn / XGBoost sklearn API
-                    feature_columns = list(model.feature_names_in_)
-                elif hasattr(model, 'get_booster') and hasattr(model.get_booster(), 'feature_names'):
-                    feature_columns = model.get_booster().feature_names or []
+            # OR override feature_columns with the model's own features to avoid mismatch
+            model_feature_names = None
+            if hasattr(model, 'feature_names_in_'):
+                model_feature_names = list(model.feature_names_in_)
+            elif hasattr(model, 'get_booster') and hasattr(model.get_booster(), 'feature_names'):
+                model_feature_names = model.get_booster().feature_names or []
+
+            if model_feature_names:
+                self.logger.info(f"DEBUG [XGBoost.predict] Using model feature names: {model_feature_names}")
+                feature_columns = model_feature_names
+            elif not feature_columns:
+                self.logger.warning("DEBUG [XGBoost.predict] No feature_columns and no model feature names")
+
+            # Determine if model expects one-hot weekday columns
+            _weekday_ohe_cols = [f'plug_in_weekday_{i}' for i in range(7)]
+            _model_expects_ohe = model_feature_names and any(c in model_feature_names for c in _weekday_ohe_cols)
+            # Raw columns to select from df (before one-hot expansion)
+            _raw_cols = []
+            if feature_columns:
+                for c in feature_columns:
+                    if c.startswith('plug_in_weekday_') and c not in df.columns:
+                        # This is a one-hot column from the model; we need the raw plug_in_weekday
+                        if 'plug_in_weekday' not in _raw_cols and 'plug_in_weekday' in df.columns:
+                            _raw_cols.append('plug_in_weekday')
+                    elif c in df.columns:
+                        _raw_cols.append(c)
+                # Deduplicate while preserving order
+                _raw_cols = list(dict.fromkeys(_raw_cols))
+
+            def _prepare_features(subset_df):
+                """Select raw columns, one-hot encode weekday, reorder to model features."""
+                if _raw_cols:
+                    feats = subset_df[_raw_cols].copy()
+                else:
+                    feats = subset_df.select_dtypes(include='number').copy()
+                # One-hot encode plug_in_weekday if the model expects it
+                if 'plug_in_weekday' in feats.columns and _model_expects_ohe:
+                    weekday_series = feats['plug_in_weekday']
+                    dums = pd.get_dummies(weekday_series, prefix='plug_in_weekday')
+                    dums = dums.reindex(columns=_weekday_ohe_cols, fill_value=0)
+                    feats = feats.drop('plug_in_weekday', axis=1).join(dums)
+                # Final column selection to match model exactly
+                if model_feature_names:
+                    missing = [c for c in model_feature_names if c not in feats.columns]
+                    if missing:
+                        self.logger.warning(f"DEBUG [XGBoost.predict] Columns missing after prep: {missing}")
+                    feats = feats.reindex(columns=model_feature_names, fill_value=0)
+                return feats
 
             for dataset_name in dataset_names:
                 if submode == 'schedule':
@@ -553,13 +592,7 @@ class XGBoostModelStrategy(ModelStrategy):
                         continue
                     
                     input_row = subset.iloc[[-1]].copy()
-                    features = input_row[feature_columns].copy() if feature_columns else input_row.select_dtypes(include='number').copy()
-                    
-                    if 'plug_in_weekday' in features.columns:
-                        weekday_val = features['plug_in_weekday'].iloc[0]
-                        features = features.drop('plug_in_weekday', axis=1)
-                        for i in range(7):
-                            features[f'plug_in_weekday_{i}'] = 1 if i == weekday_val else 0
+                    features = _prepare_features(input_row)
 
                     prediction = model.predict(features)
                     val = float(prediction[0])
@@ -583,15 +616,7 @@ class XGBoostModelStrategy(ModelStrategy):
                     else:
                         subset_dates = None
 
-                    features = subset[feature_columns].copy() if feature_columns else subset.select_dtypes(include='number').copy()
-
-                    if 'plug_in_weekday' in features.columns:
-                        weekday_series = features['plug_in_weekday']
-                        dums = pd.get_dummies(weekday_series, prefix='plug_in_weekday')
-                        weekday_cols = [f'plug_in_weekday_{i}' for i in range(7)]
-                        dums = dums.reindex(columns=weekday_cols, fill_value=0)
-                        features = features.drop('plug_in_weekday', axis=1)
-                        features = features.join(dums)
+                    features = _prepare_features(subset)
 
                     prediction = model.predict(features)
                     dates_list = subset_dates.strftime('%Y-%m-%d').tolist() if subset_dates is not None else None
