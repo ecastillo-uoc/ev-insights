@@ -96,6 +96,23 @@ class File(Interface):
         """
         return
 
+    def init_db(self):
+        pass  # File interface does not manage a database
+
+    def delete_dataset(self, dataset_name):
+        raise NotImplementedError("File interface does not support delete_dataset")
+
+    def get_model(self, algo, model_name, models_dir=None):
+        """Delegate model loading to model_persistence."""
+        from src.forecast.model_persistence import load_model
+        if models_dir is None:
+            return None, None, None
+        model = load_model(algo=algo, model_name=model_name, models_dir=models_dir)
+        return None, None, model
+
+    def save_forecast_prediction(self, forecaster_name, actor, model, experiment_id, run_id, results, algo):
+        raise NotImplementedError("File interface does not support save_forecast_prediction")
+
     def sort_list(self, file_path):
         """
         Sorts a list of files based on a priority map.
@@ -650,95 +667,10 @@ class File(Interface):
         return new_datasets
 
     def save_forecast_model(self, forecaster_name, results, file_path, algo=None):
-        """
-        Saves the forecast model outputs to a file.
-
-        Args:
-            forecaster_name (str): The name of the forecaster.
-            results (dict): A dictionary containing the training results, where each key is a model name
-                            and the value is a dictionary with model details.
-            file_path (str): The base file path where the model files will be saved.
-            algo (str, optional): The algorithm used for forecasting.
-
-        Workflow:
-            1. Iterates through the models in the training results.
-            2. Constructs a unique filename for each model.
-            3. If a file with the same name already exists, renames the old file with a timestamp.
-            4. Saves the model to the specified file path.
-        """
-        import joblib
-        for model_name, output in results['train'].items():
-            custom_path = Path(file_path).parent
-            custom_path.mkdir(parents=True, exist_ok=True)
-            model = output['model']
-
-            # LSTM/Keras models are stored as dicts with 'keras_model' and 'scaler'
-            if isinstance(model, dict) and 'keras_model' in model:
-                keras_path = custom_path / f"{model_name}.keras"
-                scaler_path = custom_path / f"{model_name}_scaler.pkl"
-                meta_path = custom_path / f"{model_name}_meta.pkl"
-                model['keras_model'].save(str(keras_path))
-                joblib.dump(model['scaler'], str(scaler_path))
-                joblib.dump({'look_back': model.get('look_back', 30)}, str(meta_path))
-                print(f"Saved LSTM model {forecaster_name} to {keras_path}")
-            else:
-                model_filename = f"{model_name}.ubj"
-                custom_file_path_name = custom_path / model_filename
-                # Rename existing files, if present, to keep track old models
-                if custom_file_path_name.exists():
-                    path = custom_file_path_name.parent
-                    new_file_name = f'{custom_file_path_name.name}.{datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]}'
-                    new_file_path_name = path / new_file_name
-                    custom_file_path_name.rename(new_file_path_name)
-                # Save model to file
-                s = str(custom_file_path_name)
-                model.save_model(s)
-                print(f"Saved forecast model {forecaster_name} to {s}")
-
-        return
-
-    def get_model(self, algo, model_name, models_dir=None):
-        """
-        Load a trained model from the models directory.
-        Returns (None, None, model) to match MLflow interface signature.
-        """
-        import joblib
-        if models_dir is None:
-            return None, None, None
-
-        models_path = Path(models_dir).parent
-
-        # Try LSTM/Keras first
-        keras_path = models_path / f"{model_name}.keras"
-        if keras_path.exists():
-            from keras.models import load_model as keras_load_model
-            scaler_path = models_path / f"{model_name}_scaler.pkl"
-            meta_path = models_path / f"{model_name}_meta.pkl"
-            keras_model = keras_load_model(str(keras_path))
-            scaler = joblib.load(str(scaler_path)) if scaler_path.exists() else None
-            meta = joblib.load(str(meta_path)) if meta_path.exists() else {}
-            model = {
-                'keras_model': keras_model,
-                'scaler': scaler,
-                'look_back': meta.get('look_back', 30),
-            }
-            return None, None, model
-
-        # Try .ubj (LightGBM / XGBoost)
-        ubj_path = models_path / f"{model_name}.ubj"
-        if ubj_path.exists():
-            if algo == 'lightgbm':
-                import lightgbm as lgb
-                model = lgb.Booster(model_file=str(ubj_path))
-            elif algo == 'xgboost':
-                import xgboost as xgb
-                model = xgb.XGBRegressor()
-                model.load_model(str(ubj_path))
-            else:
-                raise ValueError(f"Unknown algo '{algo}' for .ubj model file")
-            return None, None, model
-
-        return None, None, None
+        """Delegate to model_persistence (kept for backward compatibility)."""
+        from src.forecast.model_persistence import save_model
+        save_model(forecaster_name=forecaster_name, results=results,
+                   models_dir=str(Path(file_path).parent), algo=algo)
 
 
     @property

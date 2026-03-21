@@ -50,17 +50,9 @@ def get_mlflow_models():
 
 
 def get_local_models(models_dir="../../data/input/forecast_models/"):
-    """Scan models directory for locally saved model files (.ubj, .keras)."""
-    models = []
-    models_path = Path(models_dir)
-    if not models_path.exists():
-        return models
-    for f in models_path.iterdir():
-        if f.suffix == '.ubj':
-            models.append(f.stem)
-        elif f.suffix == '.keras':
-            models.append(f.stem)
-    return sorted(set(models))
+    """Scan models directory for locally saved model files."""
+    from src.forecast.model_persistence import list_models
+    return list_models(models_dir)
 
 def render_forecast_page():
     st.title("📈 Forecast Service")

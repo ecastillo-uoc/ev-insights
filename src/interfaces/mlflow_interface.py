@@ -125,9 +125,45 @@ class MLflow(Interface):
 
     def save_model(self, run_id, algo, model, model_name):
         self.logger.info(f"Saving model: run_id={run_id} algo={algo} model_name={model_name}")
-        algo_module = getattr(mlflow, algo)
-        algo_module.log_model(model, artifact_path="xgboost_model", registered_model_name=model_name, run_id=run_id)
+        artifact_path = f"{algo}_model"
+
+        # LSTM/Keras: model is a dict with keras_model, scaler, look_back
+        if isinstance(model, dict) and 'keras_model' in model:
+            import joblib, tempfile, os
+            mlflow.keras.log_model(model['keras_model'], artifact_path=artifact_path,
+                                   registered_model_name=model_name, run_id=run_id)
+            # Save scaler and metadata as extra artifacts
+            with tempfile.TemporaryDirectory() as tmpdir:
+                if model.get('scaler') is not None:
+                    scaler_path = os.path.join(tmpdir, 'scaler.pkl')
+                    joblib.dump(model['scaler'], scaler_path)
+                    self.client.log_artifact(run_id, scaler_path, artifact_path=artifact_path)
+                meta = {'look_back': model.get('look_back', 30)}
+                meta_path = os.path.join(tmpdir, 'meta.pkl')
+                joblib.dump(meta, meta_path)
+                self.client.log_artifact(run_id, meta_path, artifact_path=artifact_path)
+        else:
+            mlflow_module = self._get_mlflow_module(algo)
+            mlflow_module.log_model(model, artifact_path=artifact_path,
+                                    registered_model_name=model_name, run_id=run_id)
         return
+
+    @staticmethod
+    def _get_mlflow_module(algo):
+        """Map algo name to the corresponding mlflow module."""
+        mapping = {
+            'xgboost': mlflow.xgboost,
+            'lightgbm': mlflow.lightgbm,
+            'keras': mlflow.keras,
+            'lstm': mlflow.keras,
+        }
+        module = mapping.get(algo)
+        if module is None:
+            # Fallback: try getattr on mlflow
+            module = getattr(mlflow, algo, None)
+        if module is None:
+            raise ValueError(f"No MLflow module found for algo '{algo}'")
+        return module
 
     def save_params(self, run_id, params):
         self.logger.info(f"Saving params: run_id={run_id} params={params}")
@@ -186,34 +222,60 @@ class MLflow(Interface):
 
         return
 
-    def get_model(self, algo, model_name):
+    def get_model(self, algo, model_name, models_dir=None):
         """
         Loads a machine learning model from an MLflow experiment.
 
         Args:
-            algo (str): The algorithm module name registered in MLflow (e.g., "sklearn", "pytorch", "xgboost", ...).
+            algo (str): The algorithm name (e.g., "xgboost", "lightgbm", "lstm").
             model_name (str): The name of the model registered in MLflow.
+            models_dir (str, optional): Not used for MLflow (present for interface compatibility).
 
         Returns:
-            object: The loaded model instance.
-
-        Raises:
-            Exception: If the model could not be found or loaded.
-
-        Logs:
-            Logs the process of loading the model, including the `model_name`, `run_id`, and `experiment_id`.
+            tuple: (experiment_id, run_id, model)
         """
         run_id = self.get_current_run_id_from_model_name(model_name=model_name)
         experiment = mlflow.get_experiment_by_name(model_name)
-        algo_module = getattr(mlflow, algo)
+        artifact_path = f"{algo}_model"
         self.logger.info(f"Loading model_name: {model_name}, run_id: {run_id}, experiment_id: {experiment.experiment_id}")
-        model_uri = f"mlflow-artifacts:/{experiment.experiment_id}/{run_id}/artifacts/{algo}_model"
-        # loaded_model = mlflow.pyfunc.load_model(model_uri)
-        model = algo_module.load_model(model_uri=model_uri)
+        model_uri = f"mlflow-artifacts:/{experiment.experiment_id}/{run_id}/artifacts/{artifact_path}"
+
+        # LSTM/Keras: load keras model + scaler + metadata
+        if algo in ('lstm', 'keras'):
+            import joblib, tempfile, os
+            keras_model = mlflow.keras.load_model(model_uri=model_uri)
+            # Download scaler and meta artifacts
+            artifacts_dir = self.client.download_artifacts(run_id, artifact_path)
+            scaler_path = os.path.join(artifacts_dir, 'scaler.pkl')
+            meta_path = os.path.join(artifacts_dir, 'meta.pkl')
+            scaler = joblib.load(scaler_path) if os.path.exists(scaler_path) else None
+            meta = joblib.load(meta_path) if os.path.exists(meta_path) else {}
+            model = {
+                'keras_model': keras_model,
+                'scaler': scaler,
+                'look_back': meta.get('look_back', 30),
+            }
+        else:
+            mlflow_module = self._get_mlflow_module(algo)
+            model = mlflow_module.load_model(model_uri=model_uri)
 
         if model is not None:
-            self.logger.info(f"Model loaded: {model}")
+            self.logger.info(f"Model loaded: {type(model)}")
         else:
             raise Exception("Model not found")
 
         return experiment.experiment_id, run_id, model
+
+    # --- Stubs for Interface abstract methods not applicable to MLflow ---
+
+    def get_data(self, data_selection: dict):
+        raise NotImplementedError("MLflow interface does not support get_data")
+
+    def init_db(self):
+        pass  # MLflow manages its own DB schema
+
+    def delete_dataset(self, dataset_name):
+        raise NotImplementedError("MLflow interface does not support delete_dataset")
+
+    def save_forecast_prediction(self, forecaster_name, actor, model, experiment_id, run_id, results, algo):
+        raise NotImplementedError("MLflow interface does not support save_forecast_prediction")

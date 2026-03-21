@@ -3,6 +3,7 @@ from pathlib import Path
 from pprint import pprint
 from src.services.service import Service
 from src.forecast.forecast import init_forecast
+from src.forecast import model_persistence
 
 
 class ForecastService(Service):
@@ -51,7 +52,7 @@ class ForecastService(Service):
                     # Data gathering from input interface
                     df = self.input_interface.get_data(data_selection=forecast.data_selection)
 
-                    # Data gathering from input interface or mlflow interface
+                    # Load model for prediction or previous prediction from DB
                     model = None
                     prediction = None
                     experiment_id = None
@@ -61,15 +62,14 @@ class ForecastService(Service):
                             experiment_id, run_id, model = self.mlflow_interface.get_model(algo=forecast.algo,
                                                                                            model_name=forecast.model_name)
                         else:
-                            # Try loading model from file first
+                            # Load model from filesystem (interface-agnostic)
                             try:
-                                experiment_id, run_id, model = self.output_interface.get_model(
+                                model = model_persistence.load_model(
                                     algo=forecast.algo,
                                     model_name=forecast.model_name,
                                     models_dir=self.models_dir)
                                 self.logger.info(f"Loaded model from file: {forecast.model_name}")
-                            except (FileNotFoundError, NotImplementedError):
-                                # Fall back to loading a previous prediction from the database
+                            except FileNotFoundError:
                                 self.logger.info(f"No model file found, loading prediction from database")
                                 prediction = self.input_interface.get_prediction(actor=forecast.actor,
                                                                                  actor_id=forecast.actor_id,
@@ -95,10 +95,12 @@ class ForecastService(Service):
                                                                           algo=forecast.algo,
                                                                           results=forecast.results)
                             else:
-                                self.output_interface.save_forecast_model(forecaster_name=forecast.name,
-                                                                          results=forecast.results,
-                                                                          file_path=self.models_dir,
-                                                                          algo=forecast.algo)
+                                # Save model to filesystem (interface-agnostic)
+                                model_persistence.save_model(
+                                    forecaster_name=forecast.name,
+                                    results=forecast.results,
+                                    models_dir=self.models_dir,
+                                    algo=forecast.algo)
                         elif forecast.mode == 'predict':
                             self.output_interface.save_forecast_prediction(forecaster_name=forecast.name,
                                                                            actor=forecast.actor,
