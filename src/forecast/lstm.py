@@ -3,9 +3,9 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
 from pathlib import Path
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
-from tensorflow.keras.optimizers import Adam
+from keras.models import Sequential
+from keras.layers import LSTM, Dense, Dropout
+from keras.optimizers import Adam
 from src.forecast.forecast import Forecast
 
 class LSTMForecast(Forecast):

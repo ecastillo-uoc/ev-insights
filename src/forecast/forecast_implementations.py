@@ -7,9 +7,9 @@ import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from datetime import datetime
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM as KerasLSTM, Dense, Dropout
-from tensorflow.keras.optimizers import Adam
+from keras.models import Sequential
+from keras.layers import LSTM as KerasLSTM, Dense, Dropout
+from keras.optimizers import Adam
 
 from src.utils.logger import Colors
 from src.utils.date_utils import utc_to_decimal_hours_minutes
