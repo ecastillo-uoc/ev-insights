@@ -122,14 +122,43 @@ def _load_keras(model_name: str, models_path: Path):
 
 
 def _load_native(algo: str, ubj_path: Path):
+    """Load a LightGBM or XGBoost model from a .ubj file.
+    
+    Tries the requested algo first, then falls back to the other one,
+    since the file extension doesn't distinguish between the two formats.
+    """
+    loaders = []
     if algo == 'lightgbm':
-        import lightgbm as lgb
-        model = lgb.Booster(model_file=str(ubj_path))
+        loaders = [('lightgbm', _load_lgb), ('xgboost', _load_xgb)]
     elif algo == 'xgboost':
-        import xgboost as xgb
-        model = xgb.XGBRegressor()
-        model.load_model(str(ubj_path))
+        loaders = [('xgboost', _load_xgb), ('lightgbm', _load_lgb)]
     else:
-        raise ValueError(f"Unknown algo '{algo}' for .ubj model file")
-    logger.info(f"Loaded {algo} model from {ubj_path}")
+        # Unknown algo: try both
+        loaders = [('lightgbm', _load_lgb), ('xgboost', _load_xgb)]
+
+    last_err = None
+    for loader_algo, loader_fn in loaders:
+        try:
+            model = loader_fn(ubj_path)
+            logger.info(f"Loaded {loader_algo} model from {ubj_path}")
+            return model
+        except Exception as e:
+            last_err = e
+            logger.debug(f"Failed to load {ubj_path} as {loader_algo}: {e}")
+
+    raise ValueError(
+        f"Could not load model from {ubj_path} (tried: {[a for a,_ in loaders]}). "
+        f"Last error: {last_err}"
+    )
+
+
+def _load_lgb(ubj_path: Path):
+    import lightgbm as lgb
+    return lgb.Booster(model_file=str(ubj_path))
+
+
+def _load_xgb(ubj_path: Path):
+    import xgboost as xgb
+    model = xgb.XGBRegressor()
+    model.load_model(str(ubj_path))
     return model
