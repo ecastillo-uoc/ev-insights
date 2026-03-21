@@ -346,11 +346,64 @@ class LightGBMModelStrategy(ModelStrategy):
         return output_dict
 
     def predict(self, df, feature_columns, target_column, model_objects, context_date, dataset_names=None, submode=None):
+        output_dict = {'predict': {}}
         try:
-            return {'predict': {}}
+            self.logger.info(f"DEBUG [LightGBM.predict] Starting predict: "
+                            f"df.shape={df.shape if df is not None else None}, "
+                            f"feature_columns={feature_columns}, "
+                            f"target_column={target_column}, "
+                            f"model_objects type={type(model_objects).__name__}, "
+                            f"context_date={context_date}, "
+                            f"dataset_names={dataset_names}, "
+                            f"submode={submode}")
+
+            model = model_objects
+            if model is None:
+                self.logger.error("DEBUG [LightGBM.predict] model_objects is None – cannot predict")
+                return output_dict
+
+            for dataset_name in (dataset_names or []):
+                self.logger.info(f"DEBUG [LightGBM.predict] Processing dataset: {dataset_name}")
+                subset = df.loc[df['dataset_name'] == dataset_name]
+                self.logger.info(f"DEBUG [LightGBM.predict] Subset rows: {len(subset)}")
+
+                if subset.empty:
+                    self.logger.warning(f"DEBUG [LightGBM.predict] Empty subset for {dataset_name}, skipping")
+                    continue
+
+                if submode == 'schedule':
+                    # Take the last row as input for a single-step forecast
+                    input_row = subset.iloc[[-1]].copy()
+                    X = input_row[feature_columns]
+                    self.logger.info(f"DEBUG [LightGBM.predict] Schedule mode, input_row features: {X.columns.tolist()}, values: {X.values.tolist()}")
+                else:
+                    # Use all rows
+                    X = subset[feature_columns]
+                    self.logger.info(f"DEBUG [LightGBM.predict] Full mode, X.shape={X.shape}")
+
+                prediction = model.predict(X, num_iteration=model.best_iteration if hasattr(model, 'best_iteration') else None)
+                self.logger.info(f"DEBUG [LightGBM.predict] Raw prediction: {prediction}")
+
+                if submode == 'schedule':
+                    val = float(prediction[0])
+                    output_dict['predict'].update({
+                        'value': val,
+                        'date': context_date if context_date else datetime.now(),
+                        'created_at': datetime.now()
+                    })
+                else:
+                    output_dict['predict'].update({
+                        'values': prediction.tolist(),
+                        'date': context_date if context_date else datetime.now(),
+                        'created_at': datetime.now()
+                    })
+
+            self.logger.info(f"DEBUG [LightGBM.predict] Final output keys: {list(output_dict['predict'].keys())}")
         except Exception as e:
             self.logger.error(f"LightGBM predict failed: {e}\n{traceback.format_exc()}")
             raise
+
+        return output_dict
 
 
 class XGBoostModelStrategy(ModelStrategy):
