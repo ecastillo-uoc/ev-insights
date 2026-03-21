@@ -707,6 +707,7 @@ class File(Interface):
             'BeLib': self.prepare_dataset_belib,
             'ACN_Caltech': self.prepare_dataset_ACN,
             'ACN_JPL': self.prepare_dataset_ACN,
+            'ACN_Office001': self.prepare_dataset_ACN,
             'Norway_12loc': self.prepare_dataset_Norway_12loc,
             'Elaad': self.prepare_dataset_Elaad,
             'Harvard_dataverse': self.prepare_dataset_harvard_dataverse,
