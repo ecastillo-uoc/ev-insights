@@ -204,6 +204,7 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
         from src.forecast.generic_forecast import GenericForecast
         from src.forecast.strategies import (
             PredictionTarget, get_prediction_target_strategy,
+            PREDICTION_TARGET_REGISTRY,
             ModelStrategyType, get_model_strategy
         )
 
@@ -279,6 +280,31 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
         logger.info(f"DEBUG [init_forecast] Strategy resolution result: "
                     f"data_strategy={type(data_strategy).__name__ if data_strategy else None}, "
                     f"model_strategy={type(model_strategy).__name__ if model_strategy else None}")
+
+        # --- Merge registry defaults into empty config fields ---
+        if prediction_target_key:
+            try:
+                target_info = PREDICTION_TARGET_REGISTRY[PredictionTarget(prediction_target_key)]
+                registry_defaults = target_info.default_params
+            except (ValueError, KeyError):
+                registry_defaults = {}
+
+            # Merge default fields into data_selection if empty
+            ds = config.get('data_selection', {})
+            if not ds.get('fields'):
+                default_fields = registry_defaults.get('fields', {})
+                if default_fields:
+                    ds['fields'] = dict(default_fields)  # copy
+                    config['data_selection'] = ds
+                    logger.info(f"DEBUG [init_forecast] Merged default fields from registry: {list(default_fields.keys())}")
+
+            # Merge default custom_params if empty
+            cp = config.get('custom_params', {})
+            if not cp:
+                default_cp = registry_defaults.get('custom_params', {})
+                if default_cp:
+                    config['custom_params'] = dict(default_cp)  # copy
+                    logger.info(f"DEBUG [init_forecast] Merged default custom_params from registry: {list(default_cp.keys())}")
 
         if data_strategy and model_strategy and config.get("enabled", False):
             forecast = GenericForecast(
