@@ -5,7 +5,11 @@ import logging
 import lightgbm as lgb
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
 from datetime import datetime
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM as KerasLSTM, Dense, Dropout
+from tensorflow.keras.optimizers import Adam
 
 from src.utils.logger import Colors
 from src.utils.date_utils import utc_to_decimal_hours_minutes
@@ -459,6 +463,164 @@ class XGBoostModelStrategy(ModelStrategy):
                 })
         return output_dict
 
+class LSTMModelStrategy(ModelStrategy):
+    def __init__(self, output_key: str = 'prediction'):
+        self.output_key = output_key
+        self.logger = logging.getLogger(__name__)
+
+    def build_model(self, input_shape, learning_rate=0.001, activation='relu', dropout_rate=0.2):
+        """
+        Builds the LSTM model using the defined hyperparameters.
+        """
+        model = Sequential()
+        
+        # First LSTM layer with Dropout
+        model.add(KerasLSTM(units=50, activation=activation, return_sequences=True, input_shape=input_shape))
+        model.add(Dropout(dropout_rate))
+        
+        # Second LSTM layer with Dropout
+        model.add(KerasLSTM(units=50, activation=activation))
+        model.add(Dropout(dropout_rate))
+        
+        # Output layer
+        model.add(Dense(1))
+        
+        # Optimizer
+        optimizer = Adam(learning_rate=learning_rate)
+        
+        # Error metrics: MAE, MSE
+        model.compile(optimizer=optimizer, loss='mse', metrics=['mae', 'mse'])
+        
+        return model
+
+    def train(self, 
+              df: pd.DataFrame, 
+              feature_columns: List[str], 
+              target_column: str, 
+              dataset_names: List[str], 
+              model_name_prefix: str) -> Dict[str, Any]:
+        
+        output_dict = {'train': {}}
+
+        # For LSTM, we look for custom parameters or use defaults
+        # We can extract these from dataframe attrs if passed, or fallback
+        lstm_params = getattr(df, 'attrs', {}).get('lstm_params', {})
+        epochs = lstm_params.get('epochs', 100)
+        batch_size = lstm_params.get('batch_size', 32)
+        learning_rate = lstm_params.get('learning_rate', 0.001)
+        activation = lstm_params.get('activation', 'relu')
+        dropout_rate = lstm_params.get('dropout_rate', 0.2)
+        look_back = lstm_params.get('look_back', 30)
+
+        for dataset_name in dataset_names:
+            self.logger.info(f"{dataset_name} - LSTM Forecast ({target_column}) - Model training")
+            
+            subset_df = df.loc[df['dataset_name'] == dataset_name].copy()
+
+            if target_column not in subset_df.columns:
+                self.logger.error(f"Target column {target_column} not found in dataframe")
+                continue
+
+            data = subset_df[[target_column]].values
+            
+            scaler = MinMaxScaler()
+            scaled_data = scaler.fit_transform(data)
+            
+            X, y = [], []
+            for i in range(len(scaled_data) - look_back):
+                X.append(scaled_data[i:(i + look_back), 0])
+                y.append(scaled_data[i + look_back, 0])
+                
+            X = np.array(X)
+            y = np.array(y)
+            
+            if len(X) == 0:
+                self.logger.warning("Not enough data to train LSTM with current look_back.")
+                continue
+
+            X = np.reshape(X, (X.shape[0], X.shape[1], 1))
+            
+            input_shape = (X.shape[1], 1)
+            model = self.build_model(input_shape, learning_rate, activation, dropout_rate)
+            
+            self.logger.info(f"Training LSTM model for {epochs} epochs, batch size {batch_size}...")
+            model.fit(X, y, epochs=epochs, batch_size=batch_size, verbose=0)
+            
+            pilot_name = f"{model_name_prefix}_{dataset_name}"
+            
+            output_dict['train'][pilot_name] = {
+                'params': lstm_params,
+                'model': {
+                    'keras_model': model,
+                    'scaler': scaler,
+                    'look_back': look_back
+                },
+                'metrics': {},
+                'artifacts': {}
+            }
+            
+        return output_dict
+
+    def predict(self, 
+                df: pd.DataFrame, 
+                feature_columns: List[str],
+                target_column: str,
+                model_objects: Any, 
+                context_date: Any,
+                dataset_names: List[str],
+                submode: str) -> Dict[str, Any]:
+        
+        output_dict = {'predict': {}}
+        
+        # We expect model_objects to be our dict with keras_model, scaler, etc.
+        # But generic_forecast sometimes just passes the model or model dict
+        if isinstance(model_objects, dict) and 'keras_model' in model_objects:
+            model = model_objects['keras_model']
+            scaler = model_objects['scaler']
+            look_back = model_objects.get('look_back', 30)
+            lstm_params = model_objects.get('params', {})
+        else:
+            self.logger.error("LSTMModelStrategy requires a dict with keras_model and scaler.")
+            return output_dict
+
+        prediction_days = lstm_params.get('prediction_days', 30)
+
+        for dataset_name in dataset_names:
+            if submode == 'schedule':
+                subset = df.loc[df['dataset_name'] == dataset_name]
+                if subset.empty:
+                    continue
+                
+                if len(subset) < look_back:
+                    self.logger.warning(f"Not enough data for {dataset_name} to fulfill look_back of {look_back}")
+                    continue
+
+                data = subset[[target_column]].values[-look_back:]
+                scaled_data = scaler.transform(data)
+                
+                current_seq = scaled_data.copy()
+                predictions = []
+                
+                for _ in range(prediction_days):
+                    pred = model.predict(current_seq[np.newaxis, :, :], verbose=0)
+                    predictions.append(pred[0, 0])
+                    
+                    current_seq = np.roll(current_seq, -1, axis=0)
+                    current_seq[-1, 0] = pred[0, 0]
+                
+                predictions_unscaled = scaler.inverse_transform(np.array(predictions).reshape(-1, 1))
+                predictions_series = predictions_unscaled.flatten().tolist()
+                
+                # We save the predicted array to results, UI can process it
+                output_dict['predict'].update({
+                    self.output_key: predictions_series,
+                    'value': predictions_series[0] if predictions_series else 0,
+                    'date': datetime.now(),
+                    'created_at': datetime.now()
+                })
+
+        return output_dict
+
 # --- Forecast Definitions ---
 
 from src.forecast.generic_forecast import GenericForecast
@@ -492,5 +654,13 @@ class lightgbm_station_energy(GenericForecast):
         super().__init__(
             data_strategy=StationEnergyDataStrategy(),
             model_strategy=LightGBMModelStrategy(),
+            **kwargs
+        )
+
+class lstm_station_energy(GenericForecast):
+    def __init__(self, **kwargs):
+        super().__init__(
+            data_strategy=StationEnergyDataStrategy(),
+            model_strategy=LSTMModelStrategy(output_key='energy'),
             **kwargs
         )
