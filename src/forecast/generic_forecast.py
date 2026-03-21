@@ -1,5 +1,5 @@
-from src.forecast.forecast import Forecast
-from src.forecast.strategies.interfaces import PredictionTargetStrategy, ModelStrategy
+from .forecast import Forecast
+from .strategies.interfaces import PredictionTargetStrategy, ModelStrategy
 
 import logging
 

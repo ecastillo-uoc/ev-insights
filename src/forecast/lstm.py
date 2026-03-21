@@ -6,7 +6,9 @@ from pathlib import Path
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Dropout
 from keras.optimizers import Adam
-from src.forecast.forecast import Forecast
+
+
+from .forecast import Forecast
 
 class LSTMForecast(Forecast):
     def __init__(self, id, name, algo, info, actor, actor_id, date, enabled, full_custom_mode, mode, submode, models_dir, model_name,

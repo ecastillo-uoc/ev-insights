@@ -2,8 +2,8 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Type, Dict, Any, Callable
 
-from src.forecast.strategies.interfaces import PredictionTargetStrategy
-from src.forecast.forecast_implementations import (
+from .strategies.interfaces import PredictionTargetStrategy
+from .forecast_implementations import (
     SessionDataStrategy,
     StationChargesDataStrategy,
     StationEnergyDataStrategy

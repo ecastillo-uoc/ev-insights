@@ -2,8 +2,8 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Type, Dict, Any
 
-from src.forecast.strategies.interfaces import ModelStrategy
-from src.forecast.forecast_implementations import (
+from .strategies.interfaces import ModelStrategy
+from .forecast_implementations import (
     LightGBMModelStrategy,
     XGBoostModelStrategy,
     LSTMModelStrategy

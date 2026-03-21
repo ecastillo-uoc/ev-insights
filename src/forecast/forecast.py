@@ -11,23 +11,15 @@ from abc import abstractmethod
 from src.interfaces.interface import Interface
 from src.utils.logger import Colors
 
-# Retrieve the names of forecasts from the source, ensuring the list updates automatically whenever a new forecast is added.
-# New logic: check forecast_implementations.py for subclasses of GenericForecast or Forecast explicitly
-try:
-    import src.forecast.forecast_implementations as forecast_impl
-    from src.forecast.generic_forecast import GenericForecast
-    import inspect
-    
-    FORECAST = []
-    # Dynamic discovery from module
-    for name, obj in inspect.getmembers(forecast_impl):
-        if inspect.isclass(obj) and issubclass(obj, (Forecast, GenericForecast)) and obj is not Forecast and obj is not GenericForecast:
-             FORECAST.append(name)
-except ImportError:
-    # Fallback to file based if module not found (legacy support)
-    FORECAST = [p.stem for p in Path(__file__).parent.glob("*.py")
-            if p.name not in ["forecast.py", "_sample_forecast.py", "__init__.py", "generic_forecast.py", "forecast_implementations.py"]]
 
+from .prediction_target_registry import (
+    PredictionTarget, get_prediction_target_strategy,
+    PREDICTION_TARGET_REGISTRY
+)
+
+from .model_registry import (
+    ModelStrategyType, get_model_strategy
+)
 
 class Forecast:
     def __init__(self, id: int, name: str, algo: str, info: str, actor: str, actor_id: int, date: datetime.date, enabled: bool,
@@ -201,12 +193,8 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
     logger.info(f"DEBUG [init_forecast] All config keys: {list(config.keys())}")
 
     if prediction_target_key or model_strategy_key:
-        from src.forecast.generic_forecast import GenericForecast
-        from src.forecast.strategies import (
-            PredictionTarget, get_prediction_target_strategy,
-            PREDICTION_TARGET_REGISTRY,
-            ModelStrategyType, get_model_strategy
-        )
+        from .generic_forecast import GenericForecast
+
 
         # Resolve data strategy: from override or fall back to config name
         data_strategy = None
@@ -394,8 +382,8 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
             # Try to infer strategies from the forecast name pattern: {algo}_{target}
             # e.g. "lightgbm_session_energy" → model=lightgbm, target=session_energy
             logger.info(f"Class not found for '{forecast_name}', attempting name-based strategy inference")
-            from src.forecast.generic_forecast import GenericForecast as _GF
-            from src.forecast.strategies import (
+            from .generic_forecast import GenericForecast as GenericForecast
+            from .strategies import (
                 PredictionTarget as _PT,
                 get_prediction_target_strategy as _get_pts,
                 PREDICTION_TARGET_REGISTRY as _PTR,
@@ -448,7 +436,7 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
                         config['custom_params'] = dict(default_cp)
                         logger.info(f"Merged default custom_params from name-based inference")
 
-                forecast = _GF(
+                forecast = GenericForecast(
                     data_strategy=inferred_data,
                     model_strategy=inferred_model,
                     id=config.get('id', 1),
@@ -476,6 +464,24 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
                 )
                 logger.info(f"Created GenericForecast via name-based inference: {forecast_name}")
             else:
+
+                # Retrieve the names of forecasts from the source, ensuring the list updates automatically whenever a new forecast is added.
+                # New logic: check forecast_implementations.py for subclasses of GenericForecast or Forecast explicitly
+                try:
+                    import forecast_implementations as forecast_impl
+                    from .generic_forecast import GenericForecast
+                    import inspect
+                    
+                    FORECAST = []
+                    # Dynamic discovery from module
+                    for name, obj in inspect.getmembers(forecast_impl):
+                        if inspect.isclass(obj) and issubclass(obj, (Forecast, GenericForecast)) and obj is not Forecast and obj is not GenericForecast:
+                            FORECAST.append(name)
+                except ImportError:
+                    # Fallback to file based if module not found (legacy support)
+                    FORECAST = [p.stem for p in Path(__file__).parent.glob("*.py")
+                            if p.name not in ["forecast.py", "_sample_forecast.py", "__init__.py", "generic_forecast.py", "forecast_implementations.py"]]
+
                 raise Exception(f'Forecast {config["name"]} does not exist or class not found in {FORECAST}')
 
     return forecast

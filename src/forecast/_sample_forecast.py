@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import plotly.express as px
 from pprint import pprint
-from src.forecast.forecast import Forecast
+from .forecast import Forecast
 
 
 class _sample_forecast(Forecast):

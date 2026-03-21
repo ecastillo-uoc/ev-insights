@@ -2,7 +2,9 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 import seaborn as sns
-from src.forecast.forecast import Forecast
+
+
+from .forecast import Forecast
 
 class LightGBMForecast(Forecast):
     def add_lags(self, df_, lag_col, lags, lag_windows=None):
