@@ -20,7 +20,7 @@ def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'times
     # Optional sorting if not already sorted
     dataset = dataset.sort_values(by=time_col)
     
-    plt.plot(dataset[time_col], dataset[energy_col], marker='.', linestyle='-', linewidth=1, alpha=0.8)
+    plt.plot(dataset[time_col], dataset[energy_col], linestyle='-', linewidth=1, alpha=0.8)
     plt.title('Energy Consumption Trends Over Time')
     plt.xlabel('Timestamp')
     plt.ylabel('Energy Provided (kWh)')
@@ -40,13 +40,15 @@ def fetch_and_plot_dataset_trends(dataset_name: str, db_config: dict, fig_dir: P
     
     query = """
     SELECT 
-        cs.plug_out_datetime as timestamp, 
-        cs.energy_supplied as energy_kwh
+        DATE(cs.plug_out_datetime) as timestamp, 
+        SUM(cs.energy_supplied) as energy_kwh
     FROM 
         evinsights."ChargingSession" cs
     JOIN evinsights."Dataset" d 
         ON cs.fk_dataset_id = d.id
     WHERE d.name = %(dataset_name)s
+    GROUP BY DATE(cs.plug_out_datetime)
+    ORDER BY timestamp
     """
     
     try:
