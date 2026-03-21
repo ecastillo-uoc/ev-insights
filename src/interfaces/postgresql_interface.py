@@ -491,6 +491,16 @@ class PostgreSql(Interface):
             df_columns.append(key)
         df = pd.DataFrame(data, columns=df_columns)
 
+        # Convert columns with Decimal values (from PostgreSQL numeric types) to float
+        for col in df.columns:
+            if df[col].dtype == object:
+                converted = pd.to_numeric(df[col], errors='coerce')
+                if converted.notna().any() and df[col].notna().any():
+                    # Only convert if the column is genuinely numeric (not strings like dataset_name)
+                    non_null = df[col].dropna()
+                    if len(non_null) > 0 and not isinstance(non_null.iloc[0], str):
+                        df[col] = converted
+
         if 'plug_in_datetime' in df.columns:
             df = df.sort_values(by=['dataset_name', 'plug_in_datetime'])
 

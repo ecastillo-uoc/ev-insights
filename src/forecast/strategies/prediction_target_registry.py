@@ -32,7 +32,7 @@ PREDICTION_TARGET_REGISTRY: Dict[PredictionTarget, PredictionTargetInfo] = {
         description="Forecast total energy delivered for a session.",
         strategy_class=SessionDataStrategy,
         default_params={}, 
-        init_params={"target_column": "Energy (kWh)"}
+        init_params={"target_column": "energy_supplied"}
     ),
     PredictionTarget.SESSION_DURATION: PredictionTargetInfo(
         name=PredictionTarget.SESSION_DURATION.value,
@@ -40,7 +40,7 @@ PREDICTION_TARGET_REGISTRY: Dict[PredictionTarget, PredictionTargetInfo] = {
         description="Forecast total duration of a charging session.",
         strategy_class=SessionDataStrategy,
         default_params={},
-        init_params={"target_column": "Charge Duration (min)"}
+        init_params={"target_column": "plug_duration"}
     ),
     PredictionTarget.STATION_CHARGES: PredictionTargetInfo(
         name=PredictionTarget.STATION_CHARGES.value,

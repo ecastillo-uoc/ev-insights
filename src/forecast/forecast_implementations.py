@@ -2,6 +2,7 @@ from typing import List, Dict, Any, Optional, Tuple
 import pandas as pd
 import numpy as np
 import logging
+import traceback
 import lightgbm as lgb
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
@@ -276,71 +277,80 @@ class LightGBMModelStrategy(ModelStrategy):
         output_dict = {'train': {}}
         params = {'random_state': 16, 'test_size': 0.20}
         
-        for dataset_name in dataset_names:
-            subset_df = df.loc[df['dataset_name'] == dataset_name]
-            
-            X = subset_df[feature_columns]
-            y = subset_df[target_column]
-            
-            n_rows = len(subset_df)
-            train_size = int(n_rows * 0.9)
-            
-            X_train, X_test = X.iloc[:train_size, :], X.iloc[train_size:, :]
-            y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]
-            
-            lgb_params = {
-                'num_leaves': 10,
-                'learning_rate': 0.02,
-                'max_depth': 5,
-                'verbose': 0,
-                'early_stopping_rounds': 200,
-                'nthread': -1
-            }
-            
-            lgbtrain = lgb.Dataset(data=X_train, label=y_train, feature_name=feature_columns)
-            lgbtest = lgb.Dataset(data=X_test, label=y_test, reference=lgbtrain, feature_name=feature_columns)
-            
-            lgbm_m = lgb.train(
-                lgb_params,
-                lgbtrain,
-                valid_sets=[lgbtrain, lgbtest],
-                callbacks=[lgb.early_stopping(lgb_params['early_stopping_rounds'])]
-            )
-            
-            y_pred_test = lgbm_m.predict(X_test, num_iteration=lgbm_m.best_iteration)
-            
-            errors = abs(y_pred_test - y_test)
-            
-            non_zero_indices = y_test != 0
-            filtered_errors = errors[non_zero_indices]
-            filtered_test_labels = y_test[non_zero_indices]
-            
-            if len(filtered_test_labels) > 0:
-                mape = 100 * np.mean(np.abs(filtered_errors / filtered_test_labels))
-            else:
-                mape = 0
+        try:
+
+            for dataset_name in dataset_names:
+                subset_df = df.loc[df['dataset_name'] == dataset_name]
                 
-            accuracy = 100 - np.mean(mape)
-            smape_val = smape(np.expm1(y_pred_test), np.expm1(y_test)) 
-            
-            model_name = Forecast.get_model_name(prefix=model_name_prefix, pilot=dataset_name)
-            
-            output_dict['train'].update({
-                model_name: {
-                    'params': params,
-                    'model': lgbm_m,
-                    'metrics': {
-                        'smape': round(smape_val, 2),
-                        'mape': round(mape, 2),
-                        'accuracy': round(accuracy, 2)
-                    }
+                X = subset_df[feature_columns]
+                y = subset_df[target_column]
+                
+                n_rows = len(subset_df)
+                train_size = int(n_rows * 0.9)
+                
+                X_train, X_test = X.iloc[:train_size, :], X.iloc[train_size:, :]
+                y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]
+                
+                lgb_params = {
+                    'num_leaves': 10,
+                    'learning_rate': 0.02,
+                    'max_depth': 5,
+                    'verbose': 0,
+                    'early_stopping_rounds': 200,
+                    'nthread': -1
                 }
-            })
-            
+                
+                lgbtrain = lgb.Dataset(data=X_train, label=y_train, feature_name=feature_columns)
+                lgbtest = lgb.Dataset(data=X_test, label=y_test, reference=lgbtrain, feature_name=feature_columns)
+                
+                lgbm_m = lgb.train(
+                    lgb_params,
+                    lgbtrain,
+                    valid_sets=[lgbtrain, lgbtest],
+                    callbacks=[lgb.early_stopping(lgb_params['early_stopping_rounds'])]
+                )
+                
+                y_pred_test = lgbm_m.predict(X_test, num_iteration=lgbm_m.best_iteration)
+                
+                errors = abs(y_pred_test - y_test)
+                
+                non_zero_indices = y_test != 0
+                filtered_errors = errors[non_zero_indices]
+                filtered_test_labels = y_test[non_zero_indices]
+                
+                if len(filtered_test_labels) > 0:
+                    mape = 100 * np.mean(np.abs(filtered_errors / filtered_test_labels))
+                else:
+                    mape = 0
+                    
+                accuracy = 100 - np.mean(mape)
+                smape_val = smape(np.expm1(y_pred_test), np.expm1(y_test)) 
+                
+                model_name = Forecast.get_model_name(prefix=model_name_prefix, pilot=dataset_name)
+                
+                output_dict['train'].update({
+                    model_name: {
+                        'params': params,
+                        'model': lgbm_m,
+                        'metrics': {
+                            'smape': round(smape_val, 2),
+                            'mape': round(mape, 2),
+                            'accuracy': round(accuracy, 2)
+                        }
+                    }
+                })
+        except Exception as e:
+            self.logger.error(f"LightGBM train failed: {e}\n{traceback.format_exc()}")
+            raise
+
         return output_dict
 
     def predict(self, df, feature_columns, target_column, model_objects, context_date, dataset_names=None, submode=None):
-        return {'predict': {}}
+        try:
+            return {'predict': {}}
+        except Exception as e:
+            self.logger.error(f"LightGBM predict failed: {e}\n{traceback.format_exc()}")
+            raise
 
 
 class XGBoostModelStrategy(ModelStrategy):
@@ -358,67 +368,72 @@ class XGBoostModelStrategy(ModelStrategy):
         output_dict = {'train': {}}
         params = {'random_state': 16, 'test_size': 0.20}
 
-        for dataset_name in dataset_names:
-            self.logger.info(f"{dataset_name} - XGBoost Forecast ({target_column}) - Model training")
-            
-            subset_df = df.loc[df['dataset_name'] == dataset_name].copy()
-            X = subset_df[feature_columns].copy() if feature_columns else subset_df.copy()
-            
-            if 'plug_in_weekday' in X.columns:
-                weekday_series = X['plug_in_weekday']
-                dums = pd.get_dummies(weekday_series, prefix='plug_in_weekday')
-                weekday_cols = [f'plug_in_weekday_{i}' for i in range(7)]
-                dums = dums.reindex(columns=weekday_cols, fill_value=0)
-                X = X.drop('plug_in_weekday', axis=1)
-                X = X.join(dums)
-            
-            if target_column in X.columns:
-                X = X.drop(target_column, axis=1)
+        try:
+            for dataset_name in dataset_names:
+                self.logger.info(f"{dataset_name} - XGBoost Forecast ({target_column}) - Model training")
+                
+                subset_df = df.loc[df['dataset_name'] == dataset_name].copy()
+                X = subset_df[feature_columns].copy() if feature_columns else subset_df.copy()
+                
+                if 'plug_in_weekday' in X.columns:
+                    weekday_series = X['plug_in_weekday']
+                    dums = pd.get_dummies(weekday_series, prefix='plug_in_weekday')
+                    weekday_cols = [f'plug_in_weekday_{i}' for i in range(7)]
+                    dums = dums.reindex(columns=weekday_cols, fill_value=0)
+                    X = X.drop('plug_in_weekday', axis=1)
+                    X = X.join(dums)
+                
+                if target_column in X.columns:
+                    X = X.drop(target_column, axis=1)
 
-            if target_column not in subset_df.columns:
-                self.logger.error(f"Target column {target_column} not found in dataframe")
-                continue
+                if target_column not in subset_df.columns:
+                    self.logger.error(f"Target column {target_column} not found in dataframe")
+                    continue
 
-            y = subset_df[target_column].astype(float)
-            
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=params['test_size'], random_state=params['random_state']
-            )
-            
-            model = xgb.XGBRegressor(objective="reg:squarederror", random_state=params['random_state'])
-            model.fit(X_train, y_train)
-            
-            preds = model.predict(X_test)
-            errors = abs(preds - y_test)
-            mae = np.mean(errors)
-            
-            non_zero = y_test != 0
-            if np.any(non_zero):
-                mape = 100 * np.mean(np.abs(errors[non_zero] / y_test[non_zero]))
-                accuracy = 100 - np.mean(mape)
-            else:
-                accuracy = 100
-            
-            self.logger.info(f'Mean Absolute Error: {round(mae, 2)}')
-            self.logger.info(f'Accuracy: {round(accuracy, 2)} %.')
-            
-            pilot_name = f"{model_name_prefix}_{dataset_name}"
-            
-            output_dict['train'][pilot_name] = {
-                'params': params,
-                'shapes': {
-                    'training_features_shape': X_train.shape,
-                    'training_labels_shape': y_train.shape,
-                    'testing_features_shape': X_test.shape,
-                    'testing_labels_shape': y_test.shape,
-                },
-                'model': model,
-                'metrics': {
-                    'mae': round(mae, 2),
-                    'accuracy': round(accuracy, 2),
-                },
-                'artifacts': {}
-            }
+                y = subset_df[target_column].astype(float)
+                
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X, y, test_size=params['test_size'], random_state=params['random_state']
+                )
+                
+                model = xgb.XGBRegressor(objective="reg:squarederror", random_state=params['random_state'])
+                model.fit(X_train, y_train)
+                
+                preds = model.predict(X_test)
+                errors = abs(preds - y_test)
+                mae = np.mean(errors)
+                
+                non_zero = y_test != 0
+                if np.any(non_zero):
+                    mape = 100 * np.mean(np.abs(errors[non_zero] / y_test[non_zero]))
+                    accuracy = 100 - np.mean(mape)
+                else:
+                    accuracy = 100
+                
+                self.logger.info(f'Mean Absolute Error: {round(mae, 2)}')
+                self.logger.info(f'Accuracy: {round(accuracy, 2)} %.')
+                
+                pilot_name = f"{model_name_prefix}_{dataset_name}"
+                
+                output_dict['train'][pilot_name] = {
+                    'params': params,
+                    'shapes': {
+                        'training_features_shape': X_train.shape,
+                        'training_labels_shape': y_train.shape,
+                        'testing_features_shape': X_test.shape,
+                        'testing_labels_shape': y_test.shape,
+                    },
+                    'model': model,
+                    'metrics': {
+                        'mae': round(mae, 2),
+                        'accuracy': round(accuracy, 2),
+                    },
+                    'artifacts': {}
+                }
+
+        except Exception as e:
+            self.logger.error(f"XGBoost train failed: {e}\n{traceback.format_exc()}")
+            raise
             
         return output_dict
 
@@ -433,34 +448,39 @@ class XGBoostModelStrategy(ModelStrategy):
         
         output_dict = {'predict': {}}
         
-        # Ensure model_objects is consistent (GenericForecast passes self.model)
-        # In original code it was expecting 'model'
-        model = model_objects
+        try:
+            # Ensure model_objects is consistent (GenericForecast passes self.model)
+            # In original code it was expecting 'model'
+            model = model_objects
 
-        for dataset_name in dataset_names:
-            if submode == 'schedule':
-                subset = df.loc[df['dataset_name'] == dataset_name]
-                if subset.empty:
-                    continue
-                
-                input_row = subset.iloc[[-1]].copy()
-                features = input_row[feature_columns].copy() if feature_columns else input_row.copy()
-                
-                if 'plug_in_weekday' in features.columns:
-                     weekday_val = features['plug_in_weekday'].iloc[0]
-                     features = features.drop('plug_in_weekday', axis=1)
-                     for i in range(7):
-                         features[f'plug_in_weekday_{i}'] = 1 if i == weekday_val else 0
+            for dataset_name in dataset_names:
+                if submode == 'schedule':
+                    subset = df.loc[df['dataset_name'] == dataset_name]
+                    if subset.empty:
+                        continue
+                    
+                    input_row = subset.iloc[[-1]].copy()
+                    features = input_row[feature_columns].copy() if feature_columns else input_row.copy()
+                    
+                    if 'plug_in_weekday' in features.columns:
+                        weekday_val = features['plug_in_weekday'].iloc[0]
+                        features = features.drop('plug_in_weekday', axis=1)
+                        for i in range(7):
+                            features[f'plug_in_weekday_{i}'] = 1 if i == weekday_val else 0
 
-                prediction = model.predict(features)
-                val = float(prediction[0])
-                
-                output_dict['predict'].update({
-                    self.output_key: val,
-                    'value': val,
-                    'date': datetime.now(),
-                    'created_at': datetime.now()
-                })
+                    prediction = model.predict(features)
+                    val = float(prediction[0])
+                    
+                    output_dict['predict'].update({
+                        self.output_key: val,
+                        'value': val,
+                        'date': datetime.now(),
+                        'created_at': datetime.now()
+                    })
+        except Exception as e:
+            self.logger.error(f"XGBoost predict failed: {e}\n{traceback.format_exc()}")
+            raise
+
         return output_dict
 
 class LSTMModelStrategy(ModelStrategy):
@@ -502,62 +522,67 @@ class LSTMModelStrategy(ModelStrategy):
         
         output_dict = {'train': {}}
 
-        # For LSTM, we look for custom parameters or use defaults
-        # We can extract these from dataframe attrs if passed, or fallback
-        lstm_params = getattr(df, 'attrs', {}).get('lstm_params', {})
-        epochs = lstm_params.get('epochs', 100)
-        batch_size = lstm_params.get('batch_size', 32)
-        learning_rate = lstm_params.get('learning_rate', 0.001)
-        activation = lstm_params.get('activation', 'relu')
-        dropout_rate = lstm_params.get('dropout_rate', 0.2)
-        look_back = lstm_params.get('look_back', 30)
+        try:
+            # For LSTM, we look for custom parameters or use defaults
+            # We can extract these from dataframe attrs if passed, or fallback
+            lstm_params = getattr(df, 'attrs', {}).get('lstm_params', {})
+            epochs = lstm_params.get('epochs', 100)
+            batch_size = lstm_params.get('batch_size', 32)
+            learning_rate = lstm_params.get('learning_rate', 0.001)
+            activation = lstm_params.get('activation', 'relu')
+            dropout_rate = lstm_params.get('dropout_rate', 0.2)
+            look_back = lstm_params.get('look_back', 30)
 
-        for dataset_name in dataset_names:
-            self.logger.info(f"{dataset_name} - LSTM Forecast ({target_column}) - Model training")
-            
-            subset_df = df.loc[df['dataset_name'] == dataset_name].copy()
-
-            if target_column not in subset_df.columns:
-                self.logger.error(f"Target column {target_column} not found in dataframe")
-                continue
-
-            data = subset_df[[target_column]].values
-            
-            scaler = MinMaxScaler()
-            scaled_data = scaler.fit_transform(data)
-            
-            X, y = [], []
-            for i in range(len(scaled_data) - look_back):
-                X.append(scaled_data[i:(i + look_back), 0])
-                y.append(scaled_data[i + look_back, 0])
+            for dataset_name in dataset_names:
+                self.logger.info(f"{dataset_name} - LSTM Forecast ({target_column}) - Model training")
                 
-            X = np.array(X)
-            y = np.array(y)
-            
-            if len(X) == 0:
-                self.logger.warning("Not enough data to train LSTM with current look_back.")
-                continue
+                subset_df = df.loc[df['dataset_name'] == dataset_name].copy()
 
-            X = np.reshape(X, (X.shape[0], X.shape[1], 1))
-            
-            input_shape = (X.shape[1], 1)
-            model = self.build_model(input_shape, learning_rate, activation, dropout_rate)
-            
-            self.logger.info(f"Training LSTM model for {epochs} epochs, batch size {batch_size}...")
-            model.fit(X, y, epochs=epochs, batch_size=batch_size, verbose=0)
-            
-            pilot_name = f"{model_name_prefix}_{dataset_name}"
-            
-            output_dict['train'][pilot_name] = {
-                'params': lstm_params,
-                'model': {
-                    'keras_model': model,
-                    'scaler': scaler,
-                    'look_back': look_back
-                },
-                'metrics': {},
-                'artifacts': {}
-            }
+                if target_column not in subset_df.columns:
+                    self.logger.error(f"Target column {target_column} not found in dataframe")
+                    continue
+
+                data = subset_df[[target_column]].values
+                
+                scaler = MinMaxScaler()
+                scaled_data = scaler.fit_transform(data)
+                
+                X, y = [], []
+                for i in range(len(scaled_data) - look_back):
+                    X.append(scaled_data[i:(i + look_back), 0])
+                    y.append(scaled_data[i + look_back, 0])
+                    
+                X = np.array(X)
+                y = np.array(y)
+                
+                if len(X) == 0:
+                    self.logger.warning("Not enough data to train LSTM with current look_back.")
+                    continue
+
+                X = np.reshape(X, (X.shape[0], X.shape[1], 1))
+                
+                input_shape = (X.shape[1], 1)
+                model = self.build_model(input_shape, learning_rate, activation, dropout_rate)
+                
+                self.logger.info(f"Training LSTM model for {epochs} epochs, batch size {batch_size}...")
+                model.fit(X, y, epochs=epochs, batch_size=batch_size, verbose=0)
+                
+                pilot_name = f"{model_name_prefix}_{dataset_name}"
+                
+                output_dict['train'][pilot_name] = {
+                    'params': lstm_params,
+                    'model': {
+                        'keras_model': model,
+                        'scaler': scaler,
+                        'look_back': look_back
+                    },
+                    'metrics': {},
+                    'artifacts': {}
+                }
+
+        except Exception as e:
+            self.logger.error(f"LSTM train failed: {e}\n{traceback.format_exc()}")
+            raise
             
         return output_dict
 
@@ -572,52 +597,57 @@ class LSTMModelStrategy(ModelStrategy):
         
         output_dict = {'predict': {}}
         
-        # We expect model_objects to be our dict with keras_model, scaler, etc.
-        # But generic_forecast sometimes just passes the model or model dict
-        if isinstance(model_objects, dict) and 'keras_model' in model_objects:
-            model = model_objects['keras_model']
-            scaler = model_objects['scaler']
-            look_back = model_objects.get('look_back', 30)
-            lstm_params = model_objects.get('params', {})
-        else:
-            self.logger.error("LSTMModelStrategy requires a dict with keras_model and scaler.")
-            return output_dict
+        try:
+            # We expect model_objects to be our dict with keras_model, scaler, etc.
+            # But generic_forecast sometimes just passes the model or model dict
+            if isinstance(model_objects, dict) and 'keras_model' in model_objects:
+                model = model_objects['keras_model']
+                scaler = model_objects['scaler']
+                look_back = model_objects.get('look_back', 30)
+                lstm_params = model_objects.get('params', {})
+            else:
+                self.logger.error("LSTMModelStrategy requires a dict with keras_model and scaler.")
+                return output_dict
 
-        prediction_days = lstm_params.get('prediction_days', 30)
+            prediction_days = lstm_params.get('prediction_days', 30)
 
-        for dataset_name in dataset_names:
-            if submode == 'schedule':
-                subset = df.loc[df['dataset_name'] == dataset_name]
-                if subset.empty:
-                    continue
-                
-                if len(subset) < look_back:
-                    self.logger.warning(f"Not enough data for {dataset_name} to fulfill look_back of {look_back}")
-                    continue
-
-                data = subset[[target_column]].values[-look_back:]
-                scaled_data = scaler.transform(data)
-                
-                current_seq = scaled_data.copy()
-                predictions = []
-                
-                for _ in range(prediction_days):
-                    pred = model.predict(current_seq[np.newaxis, :, :], verbose=0)
-                    predictions.append(pred[0, 0])
+            for dataset_name in dataset_names:
+                if submode == 'schedule':
+                    subset = df.loc[df['dataset_name'] == dataset_name]
+                    if subset.empty:
+                        continue
                     
-                    current_seq = np.roll(current_seq, -1, axis=0)
-                    current_seq[-1, 0] = pred[0, 0]
-                
-                predictions_unscaled = scaler.inverse_transform(np.array(predictions).reshape(-1, 1))
-                predictions_series = predictions_unscaled.flatten().tolist()
-                
-                # We save the predicted array to results, UI can process it
-                output_dict['predict'].update({
-                    self.output_key: predictions_series,
-                    'value': predictions_series[0] if predictions_series else 0,
-                    'date': datetime.now(),
-                    'created_at': datetime.now()
-                })
+                    if len(subset) < look_back:
+                        self.logger.warning(f"Not enough data for {dataset_name} to fulfill look_back of {look_back}")
+                        continue
+
+                    data = subset[[target_column]].values[-look_back:]
+                    scaled_data = scaler.transform(data)
+                    
+                    current_seq = scaled_data.copy()
+                    predictions = []
+                    
+                    for _ in range(prediction_days):
+                        pred = model.predict(current_seq[np.newaxis, :, :], verbose=0)
+                        predictions.append(pred[0, 0])
+                        
+                        current_seq = np.roll(current_seq, -1, axis=0)
+                        current_seq[-1, 0] = pred[0, 0]
+                    
+                    predictions_unscaled = scaler.inverse_transform(np.array(predictions).reshape(-1, 1))
+                    predictions_series = predictions_unscaled.flatten().tolist()
+                    
+                    # We save the predicted array to results, UI can process it
+                    output_dict['predict'].update({
+                        self.output_key: predictions_series,
+                        'value': predictions_series[0] if predictions_series else 0,
+                        'date': datetime.now(),
+                        'created_at': datetime.now()
+                    })
+
+        except Exception as e:
+            self.logger.error(f"LSTM predict failed: {e}\n{traceback.format_exc()}")
+            raise
 
         return output_dict
 
