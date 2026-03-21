@@ -530,6 +530,17 @@ class XGBoostModelStrategy(ModelStrategy):
             # In original code it was expecting 'model'
             model = model_objects
 
+            # Resolve feature names from the model when feature_columns is empty
+            if not feature_columns:
+                if hasattr(model, 'feature_name'):
+                    # LightGBM Booster
+                    feature_columns = model.feature_name()
+                elif hasattr(model, 'feature_names_in_'):
+                    # scikit-learn / XGBoost sklearn API
+                    feature_columns = list(model.feature_names_in_)
+                elif hasattr(model, 'get_booster') and hasattr(model.get_booster(), 'feature_names'):
+                    feature_columns = model.get_booster().feature_names or []
+
             for dataset_name in dataset_names:
                 if submode == 'schedule':
                     subset = df.loc[df['dataset_name'] == dataset_name]
@@ -537,7 +548,7 @@ class XGBoostModelStrategy(ModelStrategy):
                         continue
                     
                     input_row = subset.iloc[[-1]].copy()
-                    features = input_row[feature_columns].copy() if feature_columns else input_row.copy()
+                    features = input_row[feature_columns].copy() if feature_columns else input_row.select_dtypes(include='number').copy()
                     
                     if 'plug_in_weekday' in features.columns:
                         weekday_val = features['plug_in_weekday'].iloc[0]
@@ -567,7 +578,7 @@ class XGBoostModelStrategy(ModelStrategy):
                     else:
                         subset_dates = None
 
-                    features = subset[feature_columns].copy() if feature_columns else subset.copy()
+                    features = subset[feature_columns].copy() if feature_columns else subset.select_dtypes(include='number').copy()
 
                     if 'plug_in_weekday' in features.columns:
                         weekday_series = features['plug_in_weekday']
