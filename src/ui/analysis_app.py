@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import glob
+import logging
 from pathlib import Path
 
 from src.__main__ import main as run_service
@@ -79,6 +80,13 @@ def render_analysis_page():
     
     # --- Execution ---
     if st.button("🚀 Run Analysis", type="primary", disabled=not (selected_config_file and selected_analysis_names)):
+        logging.getLogger('ui.analysis').info(
+            f"[UI][Analysis] Button pressed. config={selected_config_file}, "
+            f"selected_tasks={selected_analysis_names}, "
+            f"datasets={selected_datasets if selected_datasets else 'defaults'}, "
+            f"countries={selected_countries if selected_countries else 'all'}, "
+            f"years={selected_years if selected_years else 'all'}, "
+            f"types={selected_types if selected_types else 'all'}")
         st.info("Starting analysis process...")
         
         result_placeholder = st.empty()

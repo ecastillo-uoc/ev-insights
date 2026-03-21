@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import glob
+import logging
 import psycopg2
 from pathlib import Path
 from src.__main__ import main as run_ingestion
@@ -51,6 +52,8 @@ def render_db_manager_page():
             password = st.text_input("Password", value=default_pass, type="password")
         
         if st.button("Test Connection"):
+            logging.getLogger('ui.db_manager').info(
+                f"[UI][DB Manager] Test Connection pressed. host={host}, port={port}, database={database}, user={user}")
             try:
                 conn = psycopg2.connect(
                     host=host,
@@ -146,6 +149,8 @@ def render_db_manager_page():
                     run_allowed = False
 
             if st.button("🚀 Execute Admin Task", type="primary", disabled=not run_allowed):
+                logging.getLogger('ui.db_manager').info(
+                    f"[UI][DB Manager] Execute Admin Task pressed. task={task_name}, config={selected_admin_config}")
                 st.info(f"Executing {task_name}...")
                 with st.spinner("Processing... check terminal for real-time logs"):
                     try:

@@ -1,8 +1,11 @@
 import streamlit as st
 import json
 import glob
+import logging
 from pathlib import Path
 from src.__main__ import main as run_ingestion
+
+logger = logging.getLogger('ui.ingestion')
 
 def render_ingestion_page():
     st.title("⚡ EV Insights Ingestion")
@@ -109,6 +112,9 @@ def render_ingestion_page():
         if not selected_config_file:
             st.error("Please select a configuration file.")
         else:
+            logger.info(f"[UI][Ingestion] Button pressed. type={ingestion_type}, "
+                        f"config={selected_config_file}, details={selected_details_file}, "
+                        f"datasets={selected_datasets or 'defaults'}")
             st.info("Starting process...")
             
             with st.spinner("Processing... check terminal for real-time logs"):

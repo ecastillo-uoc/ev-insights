@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import glob
+import logging
 from pathlib import Path
 
 from src.__main__ import main as run_service
@@ -185,6 +186,14 @@ def render_forecast_page():
 
     # --- Execution ---
     if st.button(f"🚀 Run Forecast {mode}", type="primary", disabled=not selected_config_file):
+        logging.getLogger('ui.forecast').info(
+            f"[UI][Forecast] Button pressed. mode={mode}, config={selected_config_file}, "
+            f"prediction_target={selected_target_key}, model_strategy={selected_model_strategy_key}, "
+            f"mlflow_model={selected_mlflow_model}, "
+            f"datasets={selected_datasets if selected_datasets else 'defaults'}, "
+            f"countries={selected_countries if selected_countries else 'all'}, "
+            f"years={selected_years if selected_years else 'all'}, "
+            f"charging_points={selected_charging_points if selected_charging_points else 'all'}")
         st.info(f"Starting {mode} process...")
         
         with st.spinner("Processing... check terminal for real-time logs"):
