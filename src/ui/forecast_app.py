@@ -15,6 +15,8 @@ import mlflow
 
 def get_mlflow_models():
     """Fetch registered models from MLflow."""
+    import requests
+    import traceback
     try:
         # Try to load config
         config_path = "conf/cli/conf_mlflow_server.json"
@@ -26,12 +28,23 @@ def get_mlflow_models():
             tracking_uri = f"http://{host}:{port}"
         else:
             tracking_uri = "http://localhost:5000"
+            
+        # Quick network check to prevent MLflowClient from hanging
+        try:
+            # Short timeout to see if the port is even responding
+            response = requests.get(tracking_uri, timeout=2.0)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as req_e:
+            st.error(f"MLflow tracking server unreachable at {tracking_uri}: {req_e}")
+            traceback.print_exc()
+            return []
         
         client = mlflow.MlflowClient(tracking_uri=tracking_uri)
         models = client.search_registered_models()
         return [m.name for m in models]
     except Exception as e:
-        # st.warning(f"Could not fetch MLflow models: {e}")
+        st.error(f"Exception while connecting to MLFlow: {e}")
+        traceback.print_exc()
         return []
 
 def render_forecast_page():
