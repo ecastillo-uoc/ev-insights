@@ -42,7 +42,8 @@ class number_of_charges_by_weekday(Analysis):
 
             df = self.df.loc[self.df['dataset_name'] == dataset_name]
 
-            weekday_order = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+            # weekday_order = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+            weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
             grouped_df = df.groupby('plug_in_weekday')['energy_supplied'].count().reset_index()
             grouped_df['plug_in_weekday'] = pd.Categorical(grouped_df['plug_in_weekday'], categories=weekday_order, ordered=True)
             # Sort the DataFrame by the 'weekday' column
