@@ -30,3 +30,6 @@ nvidia-cufft-cu12
 nvidia-cusparse-cu12
 nvidia-cusolver-cu12
 nvidia-curand-cu12
+
+# Time Series
+statsmodels>=0.14.0
