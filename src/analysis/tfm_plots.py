@@ -7,6 +7,11 @@ import matplotlib.pyplot as plt
 from sqlalchemy import create_engine
 import psycopg2
 
+
+# Series temporales
+from statsmodels.tsa.stattools import adfuller
+import statsmodels.api as sm
+
 def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', fig_dir: Path = None, dataset_name: str = None):
     """
     Plots the trends of energy consumption over time.
@@ -433,6 +438,61 @@ def fetch_and_plot_covid_patterns(dataset_name: str, db_config: dict, fig_dir: P
     else:
         print(f"No data found for the {dataset_name} dataset in the database.")
 
+def fetch_and_plot_time_serie_decomposition(dataset_name: str, db_config: dict, fig_dir: Path):
+    
+    # 1. Fetch data already grouped by day
+    dataset = fetch_dataset_energy_trends(dataset_name, db_config)
+    
+    if dataset.empty:
+        print(f"No data for {dataset_name}")
+        return
+
+    # 2. Set the datetime index and sort
+    dataset['timestamp'] = pd.to_datetime(dataset['timestamp'])
+    dataset.set_index('timestamp', inplace=True)
+    dataset.sort_index(inplace=True)
+
+    # 3. Run decomposition on the specific target column with a meaningful period
+    time_serie_decomposition = sm.tsa.seasonal_decompose(
+        x=dataset['energy_kwh'].dropna(),
+        model='additive',
+        period=7  # 7 days for a weekly pattern
+    )
+
+    fig, axes = plt.subplots(4, 1, figsize=(14, 12), sharex=True)
+    
+    axes[0].plot(time_serie_decomposition.observed, label='Observed', color='blue')
+    axes[0].set_ylabel('Observed')
+    axes[0].legend(loc='upper left')
+    axes[0].set_title(f'Time Series Decomposition - {dataset_name}')
+    axes[0].grid(True, linestyle='--', alpha=0.3)
+    
+    axes[1].plot(time_serie_decomposition.trend, label='Trend', color='orange')
+    axes[1].set_ylabel('Trend')
+    axes[1].legend(loc='upper left')
+    axes[1].grid(True, linestyle='--', alpha=0.3)
+    
+    axes[2].plot(time_serie_decomposition.seasonal, label='Seasonal', color='green')
+    axes[2].set_ylabel('Seasonal')
+    axes[2].legend(loc='upper left')
+    axes[2].grid(True, linestyle='--', alpha=0.3)
+    
+    axes[3].scatter(time_serie_decomposition.resid.index, time_serie_decomposition.resid, label='Residual', color='red', alpha=0.5, s=10)
+    axes[3].plot(time_serie_decomposition.resid, color='red', alpha=0.3)
+    axes[3].set_ylabel('Residual')
+    axes[3].set_xlabel('Time')
+    axes[3].legend(loc='upper left')
+    axes[3].grid(True, linestyle='--', alpha=0.3)
+    
+    plt.tight_layout()
+    
+    save_path = fig_dir / f'{dataset_name}_ts_decomposition.png'
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(str(save_path))
+    
+    plt.show()
+
+
 
 def main():
     """
@@ -465,7 +525,8 @@ def main():
         # fetch_and_plot_charges_by_weekday(ds, db_config, FIG_DIR)
         # fetch_and_plot_energy_by_weekday(ds, db_config, FIG_DIR)
         # fetch_and_plot_energy_by_month(ds, db_config, FIG_DIR)
-        fetch_and_plot_covid_patterns(ds, db_config, FIG_DIR)
+        # fetch_and_plot_covid_patterns(ds, db_config, FIG_DIR)
+        fetch_and_plot_time_serie_decomposition(ds,db_config, FIG_DIR)
 
 if __name__ == '__main__':
     main()
