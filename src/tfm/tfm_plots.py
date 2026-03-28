@@ -13,8 +13,7 @@ from statsmodels.tsa.stattools import adfuller
 import statsmodels.api as sm
 
 from src.tfm.tfm_data_fetcher import fetch_dataset_energy_trends, fetch_dataset_charges_trends, fetch_dataset_plug_ins
-
-from tfm_constants import COVID_START, COVID_END
+from src.tfm.tfm_constants import COVID_START, COVID_END
 
 def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', fig_dir: Path = None, dataset_name: str = None):
     """
@@ -50,7 +49,8 @@ def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'times
         
     plt.show()
 
-def plot_multiple_energy_consumption_trends(datasets: dict, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', fig_dir: Path = None, plot_name: str = 'combined_datasets'):
+def plot_multiple_energy_consumption_trends(datasets: dict, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', 
+                                            fig_dir: Path = None, plot_name: str = 'combined_datasets'):
     """
     Plots the trends of energy consumption over time for multiple datasets in a single figure.
     
@@ -82,7 +82,7 @@ def plot_multiple_energy_consumption_trends(datasets: dict, time_col: str = 'tim
     plt.ylabel('Energy Provided (kWh)')
     
     # Highlight the specific gap (COVID-19 alterations)
-    gap_start = pd.to_datetime(COVID_START )
+    gap_start = pd.to_datetime(COVID_START)
     gap_end = pd.to_datetime(COVID_END)
     plt.axvspan(gap_start, gap_end, color='red', alpha=0.2, label='COVID-19 Data Gap')
     

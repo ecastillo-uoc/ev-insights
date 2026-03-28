@@ -676,11 +676,11 @@ class LSTMModelStrategy(ModelStrategy):
         model.add(Input(shape=input_shape))
         
         # First LSTM layer with Dropout
-        model.add(KerasLSTM(units=50, activation=activation, return_sequences=True))
+        model.add(KerasLSTM(units=64, activation=activation, return_sequences=True))
         model.add(Dropout(dropout_rate))
         
         # Second LSTM layer with Dropout
-        model.add(KerasLSTM(units=50, activation=activation))
+        model.add(KerasLSTM(units=32, activation=activation))
         model.add(Dropout(dropout_rate))
         
         # Output layer
@@ -724,11 +724,28 @@ class LSTMModelStrategy(ModelStrategy):
                     self.logger.error(f"Target column {target_column} not found in dataframe")
                     continue
 
-                if split_date is not None and isinstance(subset_df.index, pd.DatetimeIndex):
-                    # For LSTM, we slice the data based on the split date
-                    train_mask = subset_df.index <= split_date
+                if isinstance(subset_df.index, pd.DatetimeIndex):
+                    train_mask = pd.Series(True, index=subset_df.index)
+                    # Support explicit range matching tfm_forecast config
+                    train_range = lstm_params.get('train_range')
+                    if train_range:
+                        start_date, end_date = train_range
+                        if start_date:
+                            train_mask &= (subset_df.index >= pd.to_datetime(start_date))
+                        if end_date:
+                            train_mask &= (subset_df.index <= pd.to_datetime(end_date))
+                    else:
+                        # Fallback behavior
+                        train_start_date = lstm_params.get('train_start_date')
+                        if train_start_date:
+                            train_mask &= (subset_df.index >= pd.to_datetime(train_start_date))
+                        
+                        train_end_boundary = split_date or lstm_params.get('train_split_date')
+                        if train_end_boundary:
+                            train_mask &= (subset_df.index <= pd.to_datetime(train_end_boundary))
+                        
                     train_data = subset_df[train_mask][[target_column]].values
-                    data = train_data # the rest of the logic expects `data` to be the training data
+                    data = train_data
                 else:
                     data = subset_df[[target_column]].values
                 
@@ -798,13 +815,32 @@ class LSTMModelStrategy(ModelStrategy):
                 return output_dict
 
             prediction_days = lstm_params.get('prediction_days', 30)
+            
+            # Prediction boundaries if defined in params
+            predict_start_date = lstm_params.get('predict_start_date')
+            predict_end_date = lstm_params.get('predict_end_date')
+            test_range = lstm_params.get('test_range', None)
+            
+            if test_range:
+                predict_start_date = test_range[0] or predict_start_date
+                predict_end_date = test_range[1] or predict_end_date
 
             for dataset_name in dataset_names:
                 if submode == 'schedule':
-                    subset = df.loc[df['dataset_name'] == dataset_name]
+                    subset = df.loc[df['dataset_name'] == dataset_name].copy()
                     if subset.empty:
                         continue
                     
+                    # Apply specific boundaries if provided, otherwise respect the df explicitly given
+                    if predict_start_date or predict_end_date:
+                        if isinstance(subset.index, pd.DatetimeIndex):
+                            mask = pd.Series(True, index=subset.index)
+                            if predict_start_date:
+                                mask = mask & (subset.index >= pd.to_datetime(predict_start_date))
+                            if predict_end_date:
+                                mask = mask & (subset.index <= pd.to_datetime(predict_end_date))
+                            subset = subset[mask]
+                            
                     if len(subset) < look_back:
                         self.logger.warning(f"Not enough data for {dataset_name} to fulfill look_back of {look_back}")
                         continue

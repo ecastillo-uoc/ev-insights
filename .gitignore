@@ -4,3 +4,9 @@ src/dist/
 __pycache__
 //home/ecastillo/dev/data/output/
 \/home/ecastillo/dev/data/output
+*.png
+*.pkl
+src/tfm/tfm_plots.py
+output_models
+output_plots
+*.csv
