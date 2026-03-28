@@ -8,5 +8,4 @@ from . import plug_duration
 from . import plug_duration_by_plugin_hour
 from . import predictions
 from . import stats
-from . import tfm_plots
 from . import total_energy_supplied_by_weekday
