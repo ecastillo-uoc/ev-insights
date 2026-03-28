@@ -14,6 +14,8 @@ import statsmodels.api as sm
 
 from src.tfm.tfm_data_fetcher import fetch_dataset_energy_trends, fetch_dataset_charges_trends, fetch_dataset_plug_ins
 
+from tfm_constants import COVID_START, COVID_END
+
 def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', fig_dir: Path = None, dataset_name: str = None):
     """
     Plots the trends of energy consumption over time.
@@ -80,8 +82,8 @@ def plot_multiple_energy_consumption_trends(datasets: dict, time_col: str = 'tim
     plt.ylabel('Energy Provided (kWh)')
     
     # Highlight the specific gap (COVID-19 alterations)
-    gap_start = pd.to_datetime('2020-08-01')
-    gap_end = pd.to_datetime('2020-11-20')
+    gap_start = pd.to_datetime(COVID_START )
+    gap_end = pd.to_datetime(COVID_END)
     plt.axvspan(gap_start, gap_end, color='red', alpha=0.2, label='COVID-19 Data Gap')
     
     plt.legend(loc='best')
@@ -330,7 +332,7 @@ def tag_covid_period(dataset: pd.DataFrame) -> pd.DataFrame:
     Using March 1st, 2020 as the pivot for global COVID-19 behavioral changes.
     """
     dataset['plug_in_datetime'] = pd.to_datetime(dataset['plug_in_datetime'])
-    covid_start = pd.to_datetime('2020-03-01')
+    covid_start = pd.to_datetime(COVID_START)
     dataset['covid_period'] = 'Pre-COVID'
     dataset.loc[dataset['plug_in_datetime'] >= covid_start, 'covid_period'] = 'Post-COVID'
     return dataset

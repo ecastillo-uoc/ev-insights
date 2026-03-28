@@ -273,7 +273,7 @@ class LightGBMModelStrategy(ModelStrategy):
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
-    def train(self, df, feature_columns, target_column, dataset_names, model_name_prefix):
+    def train(self, df, feature_columns, target_column, dataset_names, model_name_prefix, split_date=None):
         from .forecast import Forecast
         output_dict = {'train': {}}
         params = {'random_state': 16, 'test_size': 0.20}
@@ -286,11 +286,26 @@ class LightGBMModelStrategy(ModelStrategy):
                 X = subset_df[feature_columns]
                 y = subset_df[target_column]
                 
-                n_rows = len(subset_df)
-                train_size = int(n_rows * 0.9)
-                
-                X_train, X_test = X.iloc[:train_size, :], X.iloc[train_size:, :]
-                y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]
+                if split_date is not None:
+                    # Filter by date string assuming daily index or split column
+                    if isinstance(subset_df.index, pd.DatetimeIndex):
+                        train_mask = subset_df.index <= split_date
+                        test_mask = subset_df.index > split_date
+                    else:
+                        # Fallback if no datetime index
+                        n_rows = len(subset_df)
+                        train_size = int(n_rows * 0.9)
+                        train_mask = np.arange(n_rows) < train_size
+                        test_mask = np.arange(n_rows) >= train_size
+                    
+                    X_train, X_test = X[train_mask], X[test_mask]
+                    y_train, y_test = y[train_mask], y[test_mask]
+                else:
+                    n_rows = len(subset_df)
+                    train_size = int(n_rows * 0.9)
+                    
+                    X_train, X_test = X.iloc[:train_size, :], X.iloc[train_size:, :]
+                    y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]
                 
                 lgb_params = {
                     'num_leaves': 10,
@@ -440,12 +455,13 @@ class XGBoostModelStrategy(ModelStrategy):
         self.output_key = output_key
         self.logger = logging.getLogger(__name__)
 
-    def train(self, 
-              df: pd.DataFrame, 
-              feature_columns: List[str], 
-              target_column: str, 
-              dataset_names: List[str], 
-              model_name_prefix: str) -> Dict[str, Any]:
+    def train(self,
+              df: pd.DataFrame,
+              feature_columns: List[str],
+              target_column: str,
+              dataset_names: List[str],
+              model_name_prefix: str,
+              split_date: str = None) -> Dict[str, Any]:
         
         output_dict = {'train': {}}
         params = {'random_state': 16, 'test_size': 0.20}
@@ -474,9 +490,20 @@ class XGBoostModelStrategy(ModelStrategy):
 
                 y = subset_df[target_column].astype(float)
                 
-                X_train, X_test, y_train, y_test = train_test_split(
-                    X, y, test_size=params['test_size'], random_state=params['random_state']
-                )
+                if split_date is not None:
+                    if isinstance(subset_df.index, pd.DatetimeIndex):
+                        train_mask = subset_df.index <= split_date
+                        test_mask = subset_df.index > split_date
+                        X_train, X_test = X[train_mask], X[test_mask]
+                        y_train, y_test = y[train_mask], y[test_mask]
+                    else:
+                        X_train, X_test, y_train, y_test = train_test_split(
+                            X, y, test_size=params['test_size'], random_state=params['random_state']
+                        )
+                else:
+                    X_train, X_test, y_train, y_test = train_test_split(
+                        X, y, test_size=params['test_size'], random_state=params['random_state']
+                    )
                 
                 model = xgb.XGBRegressor(objective="reg:squarederror", random_state=params['random_state'])
                 model.fit(X_train, y_train)
@@ -667,12 +694,13 @@ class LSTMModelStrategy(ModelStrategy):
         
         return model
 
-    def train(self, 
-              df: pd.DataFrame, 
-              feature_columns: List[str], 
-              target_column: str, 
-              dataset_names: List[str], 
-              model_name_prefix: str) -> Dict[str, Any]:
+    def train(self,
+              df: pd.DataFrame,
+              feature_columns: List[str],
+              target_column: str,
+              dataset_names: List[str],
+              model_name_prefix: str,
+              split_date: str = None) -> Dict[str, Any]:
         
         output_dict = {'train': {}}
 
@@ -696,7 +724,13 @@ class LSTMModelStrategy(ModelStrategy):
                     self.logger.error(f"Target column {target_column} not found in dataframe")
                     continue
 
-                data = subset_df[[target_column]].values
+                if split_date is not None and isinstance(subset_df.index, pd.DatetimeIndex):
+                    # For LSTM, we slice the data based on the split date
+                    train_mask = subset_df.index <= split_date
+                    train_data = subset_df[train_mask][[target_column]].values
+                    data = train_data # the rest of the logic expects `data` to be the training data
+                else:
+                    data = subset_df[[target_column]].values
                 
                 scaler = MinMaxScaler()
                 scaled_data = scaler.fit_transform(data)
