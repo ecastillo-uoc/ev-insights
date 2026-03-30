@@ -1,0 +1,138 @@
+{
+
+   "python.linting.pylintEnabled": true,
+    "python.pythonPath": "/usr/bin/python3",
+    "git.ignoreLimitWarning": true,
+    "esbonio.server.enabled": true,
+    "search.useIgnoreFiles": false,
+    "search.exclude": {
+        "**/__pycache__": true,
+
+    },
+    "files.exclude": {
+        "**/__pycache__": true,
+
+    },
+    "python.analysis.typeCheckingMode": "basic",
+    "search.followSymlinks": false,
+    "git.repositoryScanMaxDepth": 9,
+    "terminal.integrated.scrollback": 10000,
+    "python.analysis.extraPaths": [
+        //"./code/PYT/9.0",
+
+    ],
+
+    "remote.restoreForwardedPorts": true,
+    "remote.SSH.enableX11Forwarding": false,
+    "remote.SSH.localServerDownload": "always",
+    "remote.SSH.remoteServerListenOnSocket": true,
+    "remote.extensionKind": {
+        "vscode.typescript-language-features": "ui"
+    },
+
+
+    "typescript.tsserver.maxTsServerMemory": 256,
+    "typescript.disableAutomaticTypeAcquisition": true,
+    "files.maxMemoryForLargeFilesMB": 384,
+
+    //"git.terminalAuthentication": false,
+
+    "git.repositoryScanIgnoredFolders": [
+        //"node_modules",
+
+    ],
+    "sqltools.connections": [
+        {
+            "mysqlOptions": {
+                "authProtocol": "default",
+                "enableSsl": "Disabled"
+            },
+            "previewLimit": 50,
+            "server": "10.1.152.106",
+            "port": 3306,
+            "driver": "MySQL",
+            "name": "MDC_SE",
+            "group": "MDC",
+            "database": "nbs_data",
+            "username": "NearbySensor"
+        }
+    ], 
+
+   "github.copilot.enable": {
+        "*": true,
+        "plaintext": true,
+        "markdown": false,
+        "scminput": false,
+        "python": true,
+        "js": true,
+        "sql": true,
+        "yaml": true,
+        "*.md": true,
+        "*.sql": true,
+        "php": true
+    },
+    "github.copilot.advanced": {
+
+        "debug.overrideEngine": "copilot-chat",
+        "debug.testOverrideProxyUrl": "",
+        "debug.overrideProxyUrl": "",
+        "listCount": 10,
+        "inlineSuggestCount": 3
+     },
+    "files.associations": {
+        "*.py": "python"
+    },
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/node_modules/*/**": true,
+        "**/__pycache__/**": true
+    },
+    
+    "security.workspace.trust.enabled": true,
+    "security.workspace.trust.startupPrompt": "once",
+    "security.workspace.trust.banner": "once",
+    "github.copilot.chat.enabled": true,
+    "github.copilot.nextEditSuggestions.enabled": false,
+    "continue.telemetryEnabled": false,
+    "editor.insertSpaces": true,
+    "editor.tabSize": 4,
+
+    // LaTeX Workshop configuration
+    "latex-workshop.latex.rootFile.doNotPrompt": true,
+    "latex-workshop.latex.rootFile.useSubFile": false,
+    "latex-workshop.latex.search.rootFiles.include": [
+        "tfm/doc/vf/TFM_ECastillo.tex"
+    ],
+    "latex-workshop.latex.tools": [
+        {
+            "name": "xelatex",
+            "command": "xelatex",
+            "args": [
+                "-synctex=1",
+                "-interaction=nonstopmode",
+                "-file-line-error",
+                "%DOC%"
+            ]
+        },
+        {
+            "name": "biber",
+            "command": "biber",
+            "args": [
+                "%DOCFILE%"
+            ]
+        }
+    ],
+    "latex-workshop.latex.recipes": [
+        {
+            "name": "xelatex -> biber -> xelatex x2",
+            "tools": [
+                "xelatex",
+                "biber",
+                "xelatex",
+                "xelatex"
+            ]
+        }
+    ],
+    "latex-workshop.latex.outDir": "%DIR%"
+}

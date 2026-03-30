@@ -1,0 +1,142 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "group": "EV Insight",
+            "name": "Streamlit App",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "streamlit",
+            "args": [
+                "run",
+                "src/ui/app.py"
+            ],
+            "cwd": "${workspaceFolder}/ev-insights",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/ev-insights:${env:PYTHONPATH}"
+            }
+        },
+        {
+            "group": "EV Insight",
+            "name": "Ingestion Bulk",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/ev-insights/src/__main__.py",
+            "args": [
+                "-c",
+                "conf/cli/conf_cli_ingestion_bulk.json"
+            ],
+            "cwd": "${workspaceFolder}/ev-insights",
+            "console": "integratedTerminal",
+            "env": {
+                "SERVICE_ENVIRONMENT": "dev",
+                "SERVICE_PORT": "51012",
+                "SERVICE_SCHEDULE_ENABLED": "True",
+                "PYTHONPATH": "${workspaceFolder}/ev-insights:${env:PYTHONPATH}"
+            }
+        },
+        {
+            "group": "TFM",
+            "name": "TFM Plots",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/ev-insights/src/tfm/tfm_plots.py",
+            "cwd": "${workspaceFolder}/ev-insights",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/ev-insights:${env:PYTHONPATH}"
+            }
+        },
+        {
+            "group": "TFM",
+            "name": "TFM forecast",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/tfm/tfm_forecast.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"
+            }
+        },
+        {
+            "group": "EV Insight",
+            "name": "EV Insights: API ACN",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/ev-insights/src/interfaces/api_acn.py",
+            "cwd": "${workspaceFolder}/ev-insights",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/ev-insights:${env:PYTHONPATH}"
+            }
+        },
+
+        //
+        // Datasets fetch
+        //
+        {
+            "group": "Datasets",
+            "name": "Belib download historical transactions",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tfm/utils/dal_belib.py",
+            "args" : [
+                "--mode", "historical",
+                "--historical-kind", "transactions",
+                "--output_dir", "/home/ecastillo/dev/data/input/public_datasets/BeLib/"
+            ],
+            "cwd": "${workspaceFolder}/tfm/utils",
+            "console": "integratedTerminal"
+        },
+        {
+            "group": "Datasets",
+            "name": "Kaggle",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tfm/utils/dal_kaggle.py",
+            "args" : [
+                "--output_dir", "/home/ecastillo/dev/data/input/public_datasets/EV/"
+            ],
+            "cwd": "${workspaceFolder}/tfm/utils",
+            "console": "integratedTerminal"
+        },
+        {
+            "group": "Datasets",
+            "name": "AMB Charging points",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tfm/utils/dal_amb.py",
+            "args" : [
+                "--output_dir", "/home/ecastillo/dev/data/input/public_datasets/AMB/"
+            ],
+            "cwd": "${workspaceFolder}/tfm/utils",
+            "console": "integratedTerminal"
+        },
+        {
+            "group": "tools",
+            "name": "TFM: Generate PDF",
+            "type": "bashdb",
+            "request": "launch",
+            "program": "${workspaceFolder}/tfm/scripts/generate_pdf.sh",
+            "cwd": "${workspaceFolder}/tfm/scripts",
+            "terminalKind": "integrated"
+        },
+        {
+            "group": "tools",
+            "name": "Listen for Xdebug - no map",
+            "type": "php",
+            "request": "launch",
+            "port": 9000,
+            "xdebugSettings": {
+              "max_children": 512,
+              "max_data": 8000,
+              "max_depth": 20
+            }
+        },
+    ]
+}
