@@ -905,7 +905,10 @@ class TransformerModelStrategy(ModelStrategy):
     def transformer_encoder(self, inputs, head_size, num_heads, ff_dim, dropout=0):
         # Normalization and Attention
         x = LayerNormalization(epsilon=1e-6)(inputs)
-        x = MultiHeadAttention(key_dim=head_size, num_heads=num_heads, dropout=dropout)(x, x)
+        x = MultiHeadAttention(key_dim=head_size, 
+                               num_heads=num_heads, 
+                               dropout=dropout
+                               )(x, x)
         x = Dropout(dropout)(x)
         res = Add()([x, inputs])
 

@@ -12,7 +12,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
 
-from src.forecast.forecast_implementations import LSTMModelStrategy
+from src.forecast.forecast_implementations import LSTMModelStrategy, TransformerModelStrategy
 from src.forecast.model_persistence import save_model, load_model
 from src.forecast.strategies.utils_ts import smape
 
@@ -70,7 +70,7 @@ def plot_test_vs_predict(test, predictions, dataset_name, model_name, test_size)
     plt.close()
     logging.info(f"Actual vs Predict plot saved to {plot_path}")
 
-def run_forecast_pipeline(datasets, strategy_params, split_date_str):
+def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type="lstm"):
     
     models_dir = 'output_models'
     os.makedirs(models_dir, exist_ok=True)
@@ -124,21 +124,27 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str):
             else:
                 train_df = df[df.index <= split_date].copy()
             
-            # 2. Train model using LSTMModelStrategy
-            strategy = LSTMModelStrategy()
-            model_name_prefix = f"lstm_{lag_size_days}d"
-            
-            # Parameters dictionary (if omitted, falls back to defaults natively inside train)
-
-            
-            # Format full df to pass to train() so it applies the split_date internally
-            df_model = df.copy()
-            df_model['dataset_name'] = dataset
-            df_model.attrs['lstm_params'] = strategy_params
-            
-            # Format train_df for predict() call later
-            train_df['dataset_name'] = dataset
-            train_df.attrs['lstm_params'] = strategy_params
+            # 2. Train model using appropriate ModelStrategy
+            if model_type == "transformer":
+                strategy = TransformerModelStrategy()
+                model_name_prefix = f"transformer_{lag_size_days}d"
+                
+                df_model = df.copy()
+                df_model['dataset_name'] = dataset
+                df_model.attrs['transformer_params'] = strategy_params
+                
+                train_df['dataset_name'] = dataset
+                train_df.attrs['transformer_params'] = strategy_params
+            else:
+                strategy = LSTMModelStrategy()
+                model_name_prefix = f"lstm_{lag_size_days}d"
+                
+                df_model = df.copy()
+                df_model['dataset_name'] = dataset
+                df_model.attrs['lstm_params'] = strategy_params
+                
+                train_df['dataset_name'] = dataset
+                train_df.attrs['lstm_params'] = strategy_params
             
             logging.info(f"Training model with split_date={split_date_str}...")
             trained_models_dict = strategy.train(
@@ -200,13 +206,9 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str):
     summary_df.to_csv('forecast_metrics_summary.csv', index=False)
     logging.info("Metrics saved to forecast_metrics_summary.csv")
 
-if __name__ == "__main__":
-
+def execute_lstm(datsets, prediction_lag_days): 
     # fetch and plot
-    # li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
-    datasets = ['ACN_Caltech', 'ACN_JPL']
     split_date_str = "2021-01-01"
-    prediction_lag_days = [30, 120, 240]
     strategy_params_lstm = {
         'epochs': 100, 
         'batch_size': 32,
@@ -239,3 +241,56 @@ if __name__ == "__main__":
     strategy_params_lstm_caltech = {**strategy_params_lstm, **strategy_caltech}
 
     run_forecast_pipeline(['ACN_Caltech'], strategy_params_lstm_caltech, split_date_str)
+
+def execute_transformer(datasets, prediction_lag_days):
+    split_date_str = "2021-01-01"
+    strategy_params_transformer = {
+        'epochs': 100, 
+        'batch_size': 32,
+        'look_back': 14,
+        'prediction_lag_days': prediction_lag_days,
+        'learning_rate': 0.001,
+        'head_size': 128,
+        'num_heads': 4,
+        'ff_dim': 4,
+        'num_transformer_blocks': 2,
+        'dropout': 0.1,
+        'mlp_dropout': 0.1,
+    }
+
+    strategy_jpl = {
+        'train_range': ('2019-01-01', '2019-09-30'), 
+        'test_range': ('2019-10-01', '2020-03-01'), 
+        'zoom_range': ('2019-10-01', '2020-03-01') 
+    }
+
+    strategy_params_transformer_jpl = {**strategy_params_transformer, **strategy_jpl}
+
+    # Only run if ACN_JPL is in datasets
+    if 'ACN_JPL' in datasets:
+        run_forecast_pipeline(['ACN_JPL'], strategy_params_transformer_jpl, split_date_str, model_type="transformer")
+
+    strategy_caltech = {
+        'train_range': ('2019-01-01', '2019-06-30'),
+        'test_range': ('2019-07-01', '2019-12-15'), 
+        'zoom_range': ('2019-07-01', '2019-12-15') 
+    }
+
+    strategy_params_transformer_caltech = {**strategy_params_transformer, **strategy_caltech}
+
+    # Only run if ACN_Caltech is in datasets
+    if 'ACN_Caltech' in datasets:
+        run_forecast_pipeline(['ACN_Caltech'], strategy_params_transformer_caltech, split_date_str, model_type="transformer")
+
+if __name__ == "__main__":
+    
+    # li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
+    # datasets = ['ACN_Caltech', 'ACN_JPL']
+    # prediction_lag_days = [30, 120, 240]
+    datasets = ['ACN_JPL']
+    prediction_lag_days = [30]
+
+    # execute_lstm(datasets, prediction_lag_days)
+    execute_transformer(datasets, prediction_lag_days)
+
+
