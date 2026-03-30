@@ -178,10 +178,20 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df['dataset_name'] = dataset
                 train_df.attrs['lstm_params'] = strategy_params
             
+            feature_cols = []
+            if model_type in ["xgboost", "lightgbm"]:
+                for i in range(1, lag_size_days + 1):
+                    col_name = f'lag_{i}'
+                    df_model[col_name] = df_model['y'].shift(i)
+                    train_df[col_name] = train_df['y'].shift(i)
+                    feature_cols.append(col_name)
+                df_model = df_model.dropna()
+                train_df = train_df.dropna()
+
             logging.info(f"Training model with split_date={split_date_str}...")
             trained_models_dict = strategy.train(
                 df=df_model, 
-                feature_columns=[], 
+                feature_columns=feature_cols, 
                 target_column='y', 
                 dataset_names=[dataset], 
                 model_name_prefix=model_name_prefix,
@@ -196,14 +206,30 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             
             # 4. Predict
             logging.info("Generating predictions...")
+            
+            # For LSTM/Transformer models we do autoregressive rolling forecast using the train data
+            # For tree-based models we predict directly on the test data which already has the lag features
+            if model_type in ["xgboost", "lightgbm"]:
+                predict_df = test_df.copy()
+                predict_df['dataset_name'] = dataset
+                # Ensure lag features are computed properly on test_df by relying on the full df_model shifts
+                for i in range(1, lag_size_days + 1):
+                    predict_df[f'lag_{i}'] = df_model.loc[predict_df.index, f'lag_{i}']
+                predict_df = predict_df.dropna()
+                
+                predict_mode = None
+            else:
+                predict_df = train_df
+                predict_mode = 'schedule'
+
             predict_dict = strategy.predict(
-                df=train_df, 
-                feature_columns=[], 
+                df=predict_df, 
+                feature_columns=feature_cols, 
                 target_column='y', 
                 model_objects=trained_model_objects, 
                 context_date=None, 
                 dataset_names=[dataset], 
-                submode='schedule'
+                submode=predict_mode
             )
             predictions = predict_dict['predict']['values']
             
@@ -377,20 +403,6 @@ def execute_xgboost(datasets, prediction_lag_days):
     if 'ACN_Caltech' in datasets:
         run_forecast_pipeline(['ACN_Caltech'], strategy_params_xgb_caltech, split_date_str, model_type="xgboost")
 
-if __name__ == "__main__":
-    
-    # li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
-    # datasets = ['ACN_Caltech', 'ACN_JPL']
-    # prediction_lag_days = [30, 120, 240]
-    datasets = ['ACN_JPL']
-    prediction_lag_days = [1]
-
-    execute_lstm(datasets, prediction_lag_days)
-    execute_transformer(datasets, prediction_lag_days)
-    execute_lightgbm(datasets, prediction_lag_days)
-    execute_xgboost(datasets, prediction_lag_days)
-
-
 
 def execute_hybrid(datasets, prediction_lag_days):
     split_date_str = "2021-01-01"
@@ -428,7 +440,7 @@ def execute_hybrid(datasets, prediction_lag_days):
 
     if 'ACN_Caltech' in datasets:
         run_forecast_pipeline(['ACN_Caltech'], strategy_params_hybrid_caltech, split_date_str, model_type="hybrid")
-        run_forecast_pipeline(['ACN_Caltech'], strategy_params_xgb_caltech, split_date_str, model_type="xgboost")
+
 
 if __name__ == "__main__":
     
@@ -438,7 +450,10 @@ if __name__ == "__main__":
     datasets = ['ACN_JPL']
     prediction_lag_days = [1]
 
-    execute_lstm(datasets, prediction_lag_days)
-    execute_transformer(datasets, prediction_lag_days)
+    # tree based
     execute_lightgbm(datasets, prediction_lag_days)
-    execute_hybrid(datasets, prediction_lag_days)
+    execute_xgboost(datasets, prediction_lag_days)
+
+    # execute_lstm(datasets, prediction_lag_days)
+    # execute_transformer(datasets, prediction_lag_days)
+    # execute_hybrid(datasets, prediction_lag_days)

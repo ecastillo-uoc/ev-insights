@@ -292,7 +292,13 @@ class LightGBMModelStrategy(ModelStrategy):
             for dataset_name in dataset_names:
                 subset_df = df.loc[df['dataset_name'] == dataset_name]
                 
-                X = subset_df[feature_columns]
+                if feature_columns:
+                    X = subset_df[feature_columns].copy()
+                else:
+                    X = subset_df.copy()
+                    cols_to_drop = [target_column, 'dataset_name', 'date', 'split_date', 'plug_in_datetime']
+                    X = X.drop(columns=[c for c in cols_to_drop if c in X.columns], errors='ignore')
+                
                 y = subset_df[target_column]
                 
                 if split_date is not None:
@@ -316,6 +322,14 @@ class LightGBMModelStrategy(ModelStrategy):
                     X_train, X_test = X.iloc[:train_size, :], X.iloc[train_size:, :]
                     y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]
                 
+                print(f"X_train shape: {X_train.shape}")
+                print(f"X_train dtypes:\n{X_train.dtypes}")
+                
+                # Exclude object/string features which LightGBM can't handle natively
+                X_train = X_train.select_dtypes(exclude=['object', 'string'])
+                X_test = X_test.select_dtypes(exclude=['object', 'string'])
+                features_to_use = list(X_train.columns)
+
                 lgb_params = {
                     'num_leaves': 10,
                     'learning_rate': 0.02,
@@ -325,8 +339,10 @@ class LightGBMModelStrategy(ModelStrategy):
                     'nthread': -1
                 }
                 
-                lgbtrain = lgb.Dataset(data=X_train, label=y_train, feature_name=feature_columns)
-                lgbtest = lgb.Dataset(data=X_test, label=y_test, reference=lgbtrain, feature_name=feature_columns)
+                features_to_use = list(X_train.columns)
+
+                lgbtrain = lgb.Dataset(data=X_train, label=y_train, feature_name=features_to_use)
+                lgbtest = lgb.Dataset(data=X_test, label=y_test, reference=lgbtrain, feature_name=features_to_use)
                 
                 lgbm_m = lgb.train(
                     lgb_params,
@@ -480,7 +496,12 @@ class XGBoostModelStrategy(ModelStrategy):
                 self.logger.info(f"{dataset_name} - XGBoost Forecast ({target_column}) - Model training")
                 
                 subset_df = df.loc[df['dataset_name'] == dataset_name].copy()
-                X = subset_df[feature_columns].copy() if feature_columns else subset_df.copy()
+                if feature_columns:
+                    X = subset_df[feature_columns].copy()
+                else:
+                    X = subset_df.copy()
+                    cols_to_drop = [target_column, 'dataset_name', 'date', 'split_date', 'plug_in_datetime']
+                    X = X.drop(columns=[c for c in cols_to_drop if c in X.columns], errors='ignore')
                 
                 if 'plug_in_weekday' in X.columns:
                     weekday_series = X['plug_in_weekday']
