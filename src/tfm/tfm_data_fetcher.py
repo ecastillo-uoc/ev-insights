@@ -108,3 +108,62 @@ def fetch_daily_energy_for_forecast(dataset_name: str, db_config: dict = None) -
     df = df.asfreq('D', fill_value=0)
     
     return df
+
+def fetch_dataset_energy_trends_by_location(dataset_name: str, db_config: dict = None) -> pd.DataFrame:
+    """
+    Fetches the dataset by name from the database and returns the energy trends, grouped by location (station prefix).
+    """
+    query = """
+    SELECT 
+        DATE(cs.plug_out_datetime) as timestamp, 
+        SUBSTRING(st.orig_id FROM '^(OSL_1|OSL_2|OSL_S|OSL_T|BAR_2|TRO_R|ASK|BAR|BER|BOD|KRO|TRO)') AS location,
+        SUM(cs.energy_supplied) as energy_kwh
+    FROM 
+        evinsights."ChargingSession" cs
+    JOIN evinsights."Dataset" d 
+        ON cs.fk_dataset_id = d.id
+    JOIN evinsights."ChargingStation" st
+        ON cs.fk_charging_station_id = st.id
+    WHERE d.name = %(dataset_name)s
+    GROUP BY DATE(cs.plug_out_datetime), SUBSTRING(st.orig_id FROM '^(OSL_1|OSL_2|OSL_S|OSL_T|BAR_2|TRO_R|ASK|BAR|BER|BOD|KRO|TRO)')
+    ORDER BY timestamp
+    """
+    try:       
+        engine = get_engine(db_config)
+        with engine.connect() as conn:
+            dataset = pd.read_sql(query, conn, params={'dataset_name': dataset_name})
+        return dataset
+    except Exception as e:
+        print(f"An error occurred while fetching by location for {dataset_name}: Query: {query}\n -- {e}")
+        return pd.DataFrame()
+
+def fetch_dataset_charges_trends_by_location(dataset_name: str, db_config: dict = None) -> pd.DataFrame:
+    """
+    Fetches the dataset by name from the database and returns the daily session 
+    counts grouped by location (station prefix).
+    """
+    query = """
+    SELECT 
+        DATE(cs.plug_in_datetime) as timestamp, 
+        SUBSTRING(st.orig_id FROM '^(OSL_1|OSL_2|OSL_S|OSL_T|BAR_2|TRO_R|ASK|BAR|BER|BOD|KRO|TRO)') AS location,
+        COUNT(cs.id) as sessions_count
+    FROM 
+        evinsights."ChargingSession" cs
+    JOIN evinsights."Dataset" d 
+        ON cs.fk_dataset_id = d.id
+    JOIN evinsights."ChargingStation" st
+        ON cs.fk_charging_station_id = st.id
+    WHERE d.name = %(dataset_name)s
+    GROUP BY DATE(cs.plug_in_datetime), SUBSTRING(st.orig_id FROM '^(OSL_1|OSL_2|OSL_S|OSL_T|BAR_2|TRO_R|ASK|BAR|BER|BOD|KRO|TRO)')
+    ORDER BY timestamp
+    """
+    try:       
+        engine = get_engine(db_config)
+        with engine.connect() as conn:
+            dataset = pd.read_sql(query, conn, params={'dataset_name': dataset_name})
+        return dataset
+    except Exception as e:
+        print(f"An error occurred while fetching charges by location for {dataset_name}: Query: {query}\n -- {e}")
+        return pd.DataFrame()
+
+

@@ -12,7 +12,7 @@ import psycopg2
 from statsmodels.tsa.stattools import adfuller
 import statsmodels.api as sm
 
-from src.tfm.tfm_data_fetcher import fetch_dataset_energy_trends, fetch_dataset_charges_trends, fetch_dataset_plug_ins
+from src.tfm.tfm_data_fetcher import fetch_dataset_energy_trends, fetch_dataset_charges_trends, fetch_dataset_plug_ins, fetch_dataset_energy_trends_by_location, fetch_dataset_charges_trends_by_location
 from src.tfm.tfm_constants import COVID_START, COVID_END
 
 def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', fig_dir: Path = None, dataset_name: str = None):
@@ -110,6 +110,45 @@ def fetch_and_plot_dataset_trends(dataset_name: str, db_config: dict, fig_dir: P
         print(f"No data found for the {dataset_name} dataset in the database.")
 
 
+def plot_energy_consumption_trends_by_location(dataset: pd.DataFrame, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', location_col: str = 'location', fig_dir: Path = None, dataset_name: str = None):
+    """
+    Plots the trends of energy consumption over time separated by location.
+    """
+    save_path = fig_dir / f'{dataset_name}_energy_trends_by_location.png'
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    save_path_str = str(save_path)
+
+    plt.figure(figsize=(14, 7))
+    dataset[time_col] = pd.to_datetime(dataset[time_col])
+    
+    locations = dataset[location_col].unique()
+    for loc in locations:
+        loc_data = dataset[dataset[location_col] == loc].sort_values(by=time_col)
+        plt.plot(loc_data[time_col], loc_data[energy_col], linestyle='-', linewidth=1.5, alpha=0.8, label=loc)
+        
+    plt.title(f"'{dataset_name}' Energy over time by Location")
+    plt.xlabel('Timestamp')
+    plt.ylabel('Energy Provided (kWh)')
+    plt.legend(title='Location', loc='best')
+    plt.grid(True, linestyle='--', alpha=0.4)
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path_str)
+        
+    plt.show()
+
+def fetch_and_plot_energy_trends_by_location(dataset_name: str, db_config: dict, fig_dir: Path):
+    """
+    Fetches the dataset by location from the database and plots the energy trends.
+    """
+    dataset = fetch_dataset_energy_trends_by_location(dataset_name, db_config)
+    
+    if not dataset.empty:
+        plot_energy_consumption_trends_by_location(dataset, time_col='timestamp', energy_col='energy_kwh', location_col='location', fig_dir=fig_dir, dataset_name=dataset_name)
+    else:
+        print(f"No data found for the {dataset_name} dataset in the database.")
+
 def plot_charges_trends(dataset: pd.DataFrame, time_col: str = 'timestamp', count_col: str = 'sessions_count', fig_dir: Path = None, dataset_name: str = None):
     save_path = fig_dir / f'{dataset_name}_sessions_trends.png'
     save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -141,6 +180,45 @@ def fetch_and_plot_dataset_charges_trends(dataset_name: str, db_config: dict, fi
     else:
         print(f"No data found for the {dataset_name} dataset in the database.")
 
+
+def plot_charges_trends_by_location(dataset: pd.DataFrame, time_col: str = 'timestamp', count_col: str = 'sessions_count', location_col: str = 'location', fig_dir: Path = None, dataset_name: str = None):
+    """
+    Plots the trends of charging sessions over time separated by location.
+    """
+    save_path = fig_dir / f'{dataset_name}_sessions_trends_by_location.png'
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    save_path_str = str(save_path)
+
+    plt.figure(figsize=(14, 7))
+    dataset[time_col] = pd.to_datetime(dataset[time_col])
+    
+    locations = dataset[location_col].unique()
+    for loc in locations:
+        loc_data = dataset[dataset[location_col] == loc].sort_values(by=time_col)
+        plt.plot(loc_data[time_col], loc_data[count_col], linestyle='-', linewidth=1.5, alpha=0.8, label=loc)
+        
+    plt.title(f"'{dataset_name}' Number of Daily Sessions over time by Location")
+    plt.xlabel('Timestamp')
+    plt.ylabel('Number of Sessions')
+    plt.legend(title='Location', loc='best')
+    plt.grid(True, linestyle='--', alpha=0.4)
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path_str)
+        
+    plt.show()
+
+def fetch_and_plot_charges_trends_by_location(dataset_name: str, db_config: dict, fig_dir: Path):
+    """
+    Fetches the dataset by location from the database and plots the charging sessions trends.
+    """
+    dataset = fetch_dataset_charges_trends_by_location(dataset_name, db_config)
+    
+    if not dataset.empty:
+        plot_charges_trends_by_location(dataset, time_col='timestamp', count_col='sessions_count', location_col='location', fig_dir=fig_dir, dataset_name=dataset_name)
+    else:
+        print(f"No data found for the {dataset_name} dataset in the database.")
 
 def fetch_and_plot_multiple_datasets_trends(dataset_names: list, db_config: dict, fig_dir: Path, plot_name: str = 'combined'):
     """
@@ -586,17 +664,21 @@ def main():
     # fetch_and_plot_multiple_datasets_trends(['ACN_Caltech', 'ACN_JPL', 'ACN_Office001'], db_config, FIG_DIR, plot_name='COVID-19 data gap and pattern disturbance')
 
     # fetch and plot
-    li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
+    # li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
+    li_ds = ['Norway_12loc']
     for ds in li_ds:
         # Energy
         fetch_and_plot_dataset_trends(ds, db_config, FIG_DIR)
+        fetch_and_plot_energy_trends_by_location(ds, db_config, FIG_DIR)
         fetch_and_plot_energy_by_weekday(ds, db_config, FIG_DIR)
         fetch_and_plot_energy_by_month(ds, db_config, FIG_DIR)
         fetch_and_plot_time_serie_decomposition(ds,db_config, FIG_DIR)
         
         # Sessions / Charges
         fetch_and_plot_dataset_charges_trends(ds, db_config, FIG_DIR)
+        fetch_and_plot_charges_trends_by_location(ds, db_config, FIG_DIR)
         fetch_and_plot_charges_by_weekday(ds, db_config, FIG_DIR)
+
         fetch_and_plot_charges_by_month(ds, db_config, FIG_DIR)
         fetch_and_plot_charges_time_serie_decomposition(ds, db_config, FIG_DIR)
         
