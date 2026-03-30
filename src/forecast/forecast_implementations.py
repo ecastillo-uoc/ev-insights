@@ -16,7 +16,7 @@ import xgboost as xgb
 # Keras
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
-from keras.layers import Input, LSTM as KerasLSTM, Dense, Dropout
+from keras.layers import Input, LSTM as KerasLSTM, Dense, Dropout, Flatten
 from keras.layers import MultiHeadAttention, LayerNormalization, Add, GlobalAveragePooling1D, Reshape
 
 # Own modules
@@ -1136,6 +1136,230 @@ class TransformerModelStrategy(ModelStrategy):
 
         except Exception as e:
             self.logger.error(f"Transformer predict failed: {e}\n{traceback.format_exc()}")
+            raise
+
+        return output_dict
+class HybridTransformerLSTMModelStrategy(ModelStrategy):
+    def __init__(self, output_key: str = 'prediction'):
+        self.output_key = output_key
+        self.logger = logging.getLogger(__name__)
+
+    def build_model(
+        self,
+        input_shape,
+        d_model=128,
+        num_heads=4,
+        dropout=0.1,
+        learning_rate=0.001
+    ):
+        inputs = Input(shape=input_shape)
+        
+        # Encoder: Single LSTM layer processing the sequence
+        lstm_enc = KerasLSTM(units=d_model, return_sequences=True)(inputs)
+        
+        # Multi-Head Attention, followed by Layer Normalization and Dropout
+        attn_enc = MultiHeadAttention(key_dim=d_model, num_heads=num_heads, dropout=dropout)(lstm_enc, lstm_enc)
+        enc_add = Add()([attn_enc, lstm_enc])
+        enc_out = LayerNormalization(epsilon=1e-6)(enc_add)
+        
+        # Decoder: Extra LSTM layer extracting from the encoder output sequence context
+        lstm_dec = KerasLSTM(units=d_model, return_sequences=True)(enc_out)
+        
+        # Multi-Head Attention
+        attn_dec = MultiHeadAttention(key_dim=d_model, num_heads=num_heads, dropout=dropout)(lstm_dec, lstm_dec)
+        dec_add = Add()([attn_dec, lstm_dec])
+        dec_out = LayerNormalization(epsilon=1e-6)(dec_add)
+        
+        # A flattened layer is used to predict the output sequence
+        flat = Flatten()(dec_out)
+        outputs = Dense(1)(flat)
+        
+        model = Model(inputs, outputs)
+        optimizer = Adam(learning_rate=learning_rate)
+        model.compile(optimizer=optimizer, loss="mse", metrics=["mae", "mse"])
+        return model
+
+    def train(self,
+              df: pd.DataFrame,
+              feature_columns: List[str],
+              target_column: str,
+              dataset_names: List[str],
+              model_name_prefix: str,
+              split_date: str = None) -> Dict[str, Any]:
+        output_dict = {'train': {}}
+
+        try:
+            hybrid_params = getattr(df, 'attrs', {}).get('hybrid_params', {})
+            epochs = hybrid_params.get('epochs', 100)
+            batch_size = hybrid_params.get('batch_size', 32)
+            learning_rate = hybrid_params.get('learning_rate', 0.001)
+            look_back = hybrid_params.get('look_back', 30)
+
+            d_model = hybrid_params.get('d_model', 128)
+            num_heads = hybrid_params.get('num_heads', 4)
+            dropout = hybrid_params.get('dropout', 0.1)
+
+            for dataset_name in dataset_names:
+                self.logger.info(f"{dataset_name} - Hybrid Transformer-LSTM Forecast ({target_column}) - Model training")
+                subset_df = df.loc[df['dataset_name'] == dataset_name].copy()
+
+                if target_column not in subset_df.columns:
+                    self.logger.error(f"Target column {target_column} not found in dataframe")
+                    continue
+
+                if isinstance(subset_df.index, pd.DatetimeIndex):
+                    train_mask = pd.Series(True, index=subset_df.index)
+                    train_range = hybrid_params.get('train_range')
+                    if train_range:
+                        start_date, end_date = train_range
+                        if start_date:
+                            train_mask &= (subset_df.index >= pd.to_datetime(start_date))
+                        if end_date:
+                            train_mask &= (subset_df.index <= pd.to_datetime(end_date))
+                    else:
+                        train_start_date = hybrid_params.get('train_start_date')
+                        if train_start_date:
+                            train_mask &= (subset_df.index >= pd.to_datetime(train_start_date))
+                        train_end_boundary = split_date or hybrid_params.get('train_split_date')
+                        if train_end_boundary:
+                            train_mask &= (subset_df.index <= pd.to_datetime(train_end_boundary))
+                        
+                    train_data = subset_df[train_mask][[target_column]].values
+                    data = train_data
+                else:
+                    data = subset_df[[target_column]].values
+                
+                scaler = MinMaxScaler()
+                scaled_data = scaler.fit_transform(data)
+                
+                X, y = [], []
+                for i in range(len(scaled_data) - look_back):
+                    X.append(scaled_data[i:(i + look_back), 0])
+                    y.append(scaled_data[i + look_back, 0])
+                    
+                X = np.array(X)
+                y = np.array(y)
+                
+                if len(X) == 0:
+                    self.logger.warning("Not enough data to train Hybrid Transformer-LSTM with current look_back.")
+                    continue
+
+                X = np.reshape(X, (X.shape[0], X.shape[1], 1))
+                input_shape = (X.shape[1], X.shape[2])
+                
+                model = self.build_model(
+                    input_shape=input_shape,
+                    d_model=d_model,
+                    num_heads=num_heads,
+                    dropout=dropout,
+                    learning_rate=learning_rate
+                )
+                
+                self.logger.info(f"Training Hybrid Transformer-LSTM model for {epochs} epochs, batch size {batch_size}...")
+                model.fit(X, y, epochs=epochs, batch_size=batch_size, verbose=0)
+                
+                pilot_name = f"{model_name_prefix}_{dataset_name}"
+                
+                output_dict['train'][pilot_name] = {
+                    'params': hybrid_params,
+                    'model': {
+                        'keras_model': model,
+                        'scaler': scaler,
+                        'look_back': look_back
+                    },
+                    'metrics': {},
+                    'artifacts': {}
+                }
+
+        except Exception as e:
+            self.logger.error(f"Hybrid Transformer-LSTM train failed: {e}\n{traceback.format_exc()}")
+            raise
+            
+        return output_dict
+
+    def predict(self, 
+                df: pd.DataFrame, 
+                feature_columns: List[str],
+                target_column: str,
+                model_objects: Any, 
+                context_date: Any,
+                dataset_names: List[str],
+                submode: str) -> Dict[str, Any]:
+        
+        output_dict = {'predict': {}}
+        
+        try:
+            if isinstance(model_objects, dict) and 'keras_model' in model_objects:
+                model = model_objects['keras_model']
+                scaler = model_objects['scaler']
+                look_back = model_objects.get('look_back', 30)
+                hybrid_params = model_objects.get('params', {})
+            else:
+                self.logger.error("HybridTransformerLSTMModelStrategy requires a dict with keras_model and scaler.")
+                return output_dict
+
+            prediction_days = hybrid_params.get('prediction_days', 30)
+            predict_start_date = hybrid_params.get('predict_start_date')
+            predict_end_date = hybrid_params.get('predict_end_date')
+            test_range = hybrid_params.get('test_range', None)
+            
+            if test_range:
+                predict_start_date = test_range[0] or predict_start_date
+                predict_end_date = test_range[1] or predict_end_date
+
+            for dataset_name in dataset_names:
+                if submode == 'schedule':
+                    subset = df.loc[df['dataset_name'] == dataset_name].copy()
+                    if subset.empty:
+                        continue
+                    
+                    if predict_start_date or predict_end_date:
+                        if isinstance(subset.index, pd.DatetimeIndex):
+                            mask = pd.Series(True, index=subset.index)
+                            if predict_start_date:
+                                mask = mask & (subset.index >= pd.to_datetime(predict_start_date))
+                            if predict_end_date:
+                                mask = mask & (subset.index <= pd.to_datetime(predict_end_date))
+                            subset = subset[mask]
+                            
+                    if len(subset) < look_back:
+                        self.logger.warning(f"Not enough data for {dataset_name} to fulfill look_back of {look_back}")
+                        continue
+
+                    data = subset[[target_column]].values[-look_back:]
+                    scaled_data = scaler.transform(data)
+                    
+                    current_seq = scaled_data.copy()
+                    predictions = []
+                    
+                    for _ in range(prediction_days):
+                        pred = model.predict(current_seq[np.newaxis, :, :], verbose=0)
+                        predictions.append(pred[0, 0])
+                        current_seq = np.roll(current_seq, -1, axis=0)
+                        current_seq[-1, 0] = pred[0, 0]
+                    
+                    predictions_unscaled = scaler.inverse_transform(np.array(predictions).reshape(-1, 1))
+                    predictions_series = predictions_unscaled.flatten().tolist()
+                    
+                    if isinstance(subset.index, pd.DatetimeIndex):
+                        last_date = subset.index[-1]
+                    elif 'plug_in_datetime' in subset.columns:
+                        last_date = pd.to_datetime(subset['plug_in_datetime']).iloc[-1]
+                    else:
+                        last_date = pd.Timestamp.now()
+                    future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=prediction_days, freq='D')
+
+                    output_dict['predict'].update({
+                        self.output_key: predictions_series,
+                        'values': predictions_series,
+                        'dates': future_dates.strftime('%Y-%m-%d').tolist(),
+                        'value': predictions_series[0] if predictions_series else 0,
+                        'date': datetime.now(),
+                        'created_at': datetime.now()
+                    })
+
+        except Exception as e:
+            self.logger.error(f"Hybrid Transformer-LSTM predict failed: {e}\n{traceback.format_exc()}")
             raise
 
         return output_dict

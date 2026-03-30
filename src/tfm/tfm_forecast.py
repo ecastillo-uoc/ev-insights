@@ -12,7 +12,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
 
-from src.forecast.forecast_implementations import LSTMModelStrategy, TransformerModelStrategy
+from src.forecast.forecast_implementations import LSTMModelStrategy, TransformerModelStrategy, LightGBMModelStrategy, XGBoostModelStrategy, HybridTransformerLSTMModelStrategy
 from src.forecast.model_persistence import save_model, load_model
 from src.forecast.strategies.utils_ts import smape
 
@@ -94,7 +94,9 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 logging.warning(f"Not enough data for test size {lag_size_days}. Skipping.")
                 continue
                 
+
             # Apply the explicit test_range boundaries for predictions if provided, else use default split_date rules
+            split_date = pd.to_datetime(split_date_str)
             test_range = strategy_params.get('test_range', None)
             if test_range:
                 test_start, test_end = test_range
@@ -135,6 +137,36 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 
                 train_df['dataset_name'] = dataset
                 train_df.attrs['transformer_params'] = strategy_params
+            elif model_type == "lightgbm":
+                strategy = LightGBMModelStrategy()
+                model_name_prefix = f"lightgbm_{lag_size_days}d"
+                
+                df_model = df.copy()
+                df_model['dataset_name'] = dataset
+                df_model.attrs['lgbm_params'] = strategy_params
+                
+                train_df['dataset_name'] = dataset
+                train_df.attrs['lgbm_params'] = strategy_params
+            elif model_type == "xgboost":
+                strategy = XGBoostModelStrategy()
+                model_name_prefix = f"xgboost_{lag_size_days}d"
+                
+                df_model = df.copy()
+                df_model['dataset_name'] = dataset
+                df_model.attrs['xgb_params'] = strategy_params
+                
+                train_df['dataset_name'] = dataset
+                train_df.attrs['xgb_params'] = strategy_params
+            elif model_type == "hybrid":
+                strategy = HybridTransformerLSTMModelStrategy()
+                model_name_prefix = f"hybrid_{lag_size_days}d"
+                
+                df_model = df.copy()
+                df_model['dataset_name'] = dataset
+                df_model.attrs['hybrid_params'] = strategy_params
+                
+                train_df['dataset_name'] = dataset
+                train_df.attrs['hybrid_params'] = strategy_params
             else:
                 strategy = LSTMModelStrategy()
                 model_name_prefix = f"lstm_{lag_size_days}d"
@@ -282,15 +314,131 @@ def execute_transformer(datasets, prediction_lag_days):
     if 'ACN_Caltech' in datasets:
         run_forecast_pipeline(['ACN_Caltech'], strategy_params_transformer_caltech, split_date_str, model_type="transformer")
 
+def execute_lightgbm(datasets, prediction_lag_days):
+    split_date_str = "2021-01-01"
+    strategy_params_lgbm = {
+        'prediction_lag_days': prediction_lag_days,
+        # Default LightGBM specific params can be passed here
+        'num_leaves': 10,
+        'learning_rate': 0.02,
+        'max_depth': 5,
+        'early_stopping_rounds': 200,
+    }
+
+    strategy_jpl = {
+        'train_range': ('2019-01-01', '2019-09-30'), 
+        'test_range': ('2019-10-01', '2020-03-01'), 
+        'zoom_range': ('2019-10-01', '2020-03-01') 
+    }
+
+    strategy_params_lgbm_jpl = {**strategy_params_lgbm, **strategy_jpl}
+
+    if 'ACN_JPL' in datasets:
+        run_forecast_pipeline(['ACN_JPL'], strategy_params_lgbm_jpl, split_date_str, model_type="lightgbm")
+
+    strategy_caltech = {
+        'train_range': ('2019-01-01', '2019-06-30'),
+        'test_range': ('2019-07-01', '2019-12-15'), 
+        'zoom_range': ('2019-07-01', '2019-12-15') 
+    }
+
+    strategy_params_lgbm_caltech = {**strategy_params_lgbm, **strategy_caltech}
+
+    if 'ACN_Caltech' in datasets:
+        run_forecast_pipeline(['ACN_Caltech'], strategy_params_lgbm_caltech, split_date_str, model_type="lightgbm")
+
+def execute_xgboost(datasets, prediction_lag_days):
+    split_date_str = "2021-01-01"
+    strategy_params_xgb = {
+        'prediction_lag_days': prediction_lag_days,
+        'random_state': 16,
+        'test_size': 0.20
+    }
+
+    strategy_jpl = {
+        'train_range': ('2019-01-01', '2019-09-30'), 
+        'test_range': ('2019-10-01', '2020-03-01'), 
+        'zoom_range': ('2019-10-01', '2020-03-01') 
+    }
+
+    strategy_params_xgb_jpl = {**strategy_params_xgb, **strategy_jpl}
+
+    if 'ACN_JPL' in datasets:
+        run_forecast_pipeline(['ACN_JPL'], strategy_params_xgb_jpl, split_date_str, model_type="xgboost")
+
+    strategy_caltech = {
+        'train_range': ('2019-01-01', '2019-06-30'),
+        'test_range': ('2019-07-01', '2019-12-15'), 
+        'zoom_range': ('2019-07-01', '2019-12-15') 
+    }
+
+    strategy_params_xgb_caltech = {**strategy_params_xgb, **strategy_caltech}
+
+    if 'ACN_Caltech' in datasets:
+        run_forecast_pipeline(['ACN_Caltech'], strategy_params_xgb_caltech, split_date_str, model_type="xgboost")
+
 if __name__ == "__main__":
     
     # li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
     # datasets = ['ACN_Caltech', 'ACN_JPL']
     # prediction_lag_days = [30, 120, 240]
     datasets = ['ACN_JPL']
-    prediction_lag_days = [30]
+    prediction_lag_days = [1]
 
-    # execute_lstm(datasets, prediction_lag_days)
+    execute_lstm(datasets, prediction_lag_days)
     execute_transformer(datasets, prediction_lag_days)
+    execute_lightgbm(datasets, prediction_lag_days)
+    execute_xgboost(datasets, prediction_lag_days)
 
 
+
+def execute_hybrid(datasets, prediction_lag_days):
+    split_date_str = "2021-01-01"
+    strategy_params_hybrid = {
+        'epochs': 100, 
+        'batch_size': 32,
+        'look_back': 14,
+        'prediction_lag_days': prediction_lag_days,
+        'learning_rate': 0.001,
+        'prediction_lag_days': prediction_lag_days,
+        'learning_rate': 0.001,
+        'd_model': 128,
+        'num_heads': 4,
+        'dropout': 0.1,
+    }
+
+    strategy_jpl = {
+        'train_range': ('2019-01-01', '2019-09-30'), 
+        'test_range': ('2019-10-01', '2020-03-01'), 
+        'zoom_range': ('2019-10-01', '2020-03-01') 
+    }
+
+    strategy_params_hybrid_jpl = {**strategy_params_hybrid, **strategy_jpl}
+
+    if 'ACN_JPL' in datasets:
+        run_forecast_pipeline(['ACN_JPL'], strategy_params_hybrid_jpl, split_date_str, model_type="hybrid")
+
+    strategy_caltech = {
+        'train_range': ('2019-01-01', '2019-06-30'),
+        'test_range': ('2019-07-01', '2019-12-15'), 
+        'zoom_range': ('2019-07-01', '2019-12-15') 
+    }
+
+    strategy_params_hybrid_caltech = {**strategy_params_hybrid, **strategy_caltech}
+
+    if 'ACN_Caltech' in datasets:
+        run_forecast_pipeline(['ACN_Caltech'], strategy_params_hybrid_caltech, split_date_str, model_type="hybrid")
+        run_forecast_pipeline(['ACN_Caltech'], strategy_params_xgb_caltech, split_date_str, model_type="xgboost")
+
+if __name__ == "__main__":
+    
+    # li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
+    # datasets = ['ACN_Caltech', 'ACN_JPL']
+    # prediction_lag_days = [30, 120, 240]
+    datasets = ['ACN_JPL']
+    prediction_lag_days = [1]
+
+    execute_lstm(datasets, prediction_lag_days)
+    execute_transformer(datasets, prediction_lag_days)
+    execute_lightgbm(datasets, prediction_lag_days)
+    execute_hybrid(datasets, prediction_lag_days)
