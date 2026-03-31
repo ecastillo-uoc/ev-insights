@@ -25,18 +25,18 @@
             "name": "Ingestion Bulk",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/ev-insights/src/__main__.py",
+            "program": "${workspaceFolder}/src/__main__.py",
             "args": [
                 "-c",
                 "conf/cli/conf_cli_ingestion_bulk.json"
             ],
-            "cwd": "${workspaceFolder}/ev-insights",
+            "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
             "env": {
                 "SERVICE_ENVIRONMENT": "dev",
                 "SERVICE_PORT": "51012",
                 "SERVICE_SCHEDULE_ENABLED": "True",
-                "PYTHONPATH": "${workspaceFolder}/ev-insights:${env:PYTHONPATH}"
+                "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"
             }
         },
         {
@@ -45,7 +45,7 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/src/tfm/tfm_plots.py",
-            "cwd": "${workspaceFolder}/ev-insights",
+            "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"
@@ -68,11 +68,11 @@
             "name": "EV Insights: API ACN",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/ev-insights/src/interfaces/api_acn.py",
-            "cwd": "${workspaceFolder}/ev-insights",
+            "program": "${workspaceFolder}/src/interfaces/api_acn.py",
+            "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/ev-insights:${env:PYTHONPATH}"
+                "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"
             }
         },
 
