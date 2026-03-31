@@ -14,10 +14,10 @@
                 "run",
                 "src/ui/app.py"
             ],
-            "cwd": "${workspaceFolder}/ev-insights",
+            "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/ev-insights:${env:PYTHONPATH}"
+                "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"
             }
         },
         {
@@ -44,11 +44,11 @@
             "name": "TFM Plots",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/ev-insights/src/tfm/tfm_plots.py",
+            "program": "${workspaceFolder}/src/tfm/tfm_plots.py",
             "cwd": "${workspaceFolder}/ev-insights",
             "console": "integratedTerminal",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/ev-insights:${env:PYTHONPATH}"
+                "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"
             }
         },
         {
