@@ -12,7 +12,7 @@ import psycopg2
 from statsmodels.tsa.stattools import adfuller
 import statsmodels.api as sm
 
-from src.tfm.tfm_data_fetcher import fetch_dataset_energy_trends, fetch_dataset_charges_trends, fetch_dataset_plug_ins, fetch_dataset_energy_trends_by_location, fetch_dataset_charges_trends_by_location
+from src.tfm.tfm_data_fetcher import fetch_dataset_energy_trends, fetch_dataset_charges_trends, fetch_dataset_plug_ins, fetch_dataset_energy_trends_by_site, fetch_dataset_charges_trends_by_site, fetch_dataset_session_details_by_site
 from src.tfm.tfm_constants import COVID_START, COVID_END
 
 def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', fig_dir: Path = None, dataset_name: str = None):
@@ -110,26 +110,26 @@ def fetch_and_plot_dataset_trends(dataset_name: str, db_config: dict, fig_dir: P
         print(f"No data found for the {dataset_name} dataset in the database.")
 
 
-def plot_energy_consumption_trends_by_location(dataset: pd.DataFrame, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', location_col: str = 'location', fig_dir: Path = None, dataset_name: str = None):
+def plot_energy_consumption_trends_by_site(dataset: pd.DataFrame, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', site_col: str = 'site', fig_dir: Path = None, dataset_name: str = None):
     """
-    Plots the trends of energy consumption over time separated by location.
+    Plots the trends of energy consumption over time separated by site.
     """
-    save_path = fig_dir / f'{dataset_name}_energy_trends_by_location.png'
+    save_path = fig_dir / f'{dataset_name}_energy_trends_by_site.png'
     save_path.parent.mkdir(parents=True, exist_ok=True)
     save_path_str = str(save_path)
 
     plt.figure(figsize=(14, 7))
     dataset[time_col] = pd.to_datetime(dataset[time_col])
     
-    locations = dataset[location_col].unique()
-    for loc in locations:
-        loc_data = dataset[dataset[location_col] == loc].sort_values(by=time_col)
+    sites = sorted(dataset[site_col].dropna().unique())
+    for loc in sites:
+        loc_data = dataset[dataset[site_col] == loc].sort_values(by=time_col)
         plt.plot(loc_data[time_col], loc_data[energy_col], linestyle='-', linewidth=1.5, alpha=0.8, label=loc)
         
-    plt.title(f"'{dataset_name}' Energy over time by Location")
+    plt.title(f"'{dataset_name}' Energy over time by site")
     plt.xlabel('Timestamp')
     plt.ylabel('Energy Provided (kWh)')
-    plt.legend(title='Location', loc='best')
+    plt.legend(title='site', loc='best')
     plt.grid(True, linestyle='--', alpha=0.4)
     plt.tight_layout()
     
@@ -138,14 +138,14 @@ def plot_energy_consumption_trends_by_location(dataset: pd.DataFrame, time_col: 
         
     plt.show()
 
-def fetch_and_plot_energy_trends_by_location(dataset_name: str, db_config: dict, fig_dir: Path):
+def fetch_and_plot_energy_trends_by_site(dataset_name: str, db_config: dict, fig_dir: Path):
     """
-    Fetches the dataset by location from the database and plots the energy trends.
+    Fetches the dataset by site from the database and plots the energy trends.
     """
-    dataset = fetch_dataset_energy_trends_by_location(dataset_name, db_config)
+    dataset = fetch_dataset_energy_trends_by_site(dataset_name, db_config)
     
     if not dataset.empty:
-        plot_energy_consumption_trends_by_location(dataset, time_col='timestamp', energy_col='energy_kwh', location_col='location', fig_dir=fig_dir, dataset_name=dataset_name)
+        plot_energy_consumption_trends_by_site(dataset, time_col='timestamp', energy_col='energy_kwh', site_col='site', fig_dir=fig_dir, dataset_name=dataset_name)
     else:
         print(f"No data found for the {dataset_name} dataset in the database.")
 
@@ -181,26 +181,26 @@ def fetch_and_plot_dataset_charges_trends(dataset_name: str, db_config: dict, fi
         print(f"No data found for the {dataset_name} dataset in the database.")
 
 
-def plot_charges_trends_by_location(dataset: pd.DataFrame, time_col: str = 'timestamp', count_col: str = 'sessions_count', location_col: str = 'location', fig_dir: Path = None, dataset_name: str = None):
+def plot_charges_trends_by_site(dataset: pd.DataFrame, time_col: str = 'timestamp', count_col: str = 'sessions_count', site_col: str = 'site', fig_dir: Path = None, dataset_name: str = None):
     """
-    Plots the trends of charging sessions over time separated by location.
+    Plots the trends of charging sessions over time separated by site.
     """
-    save_path = fig_dir / f'{dataset_name}_sessions_trends_by_location.png'
+    save_path = fig_dir / f'{dataset_name}_sessions_trends_by_site.png'
     save_path.parent.mkdir(parents=True, exist_ok=True)
     save_path_str = str(save_path)
 
     plt.figure(figsize=(14, 7))
     dataset[time_col] = pd.to_datetime(dataset[time_col])
     
-    locations = dataset[location_col].unique()
-    for loc in locations:
-        loc_data = dataset[dataset[location_col] == loc].sort_values(by=time_col)
+    sites = sorted(dataset[site_col].dropna().unique())
+    for loc in sites:
+        loc_data = dataset[dataset[site_col] == loc].sort_values(by=time_col)
         plt.plot(loc_data[time_col], loc_data[count_col], linestyle='-', linewidth=1.5, alpha=0.8, label=loc)
         
-    plt.title(f"'{dataset_name}' Number of Daily Sessions over time by Location")
+    plt.title(f"'{dataset_name}' Number of Daily Sessions over time by site")
     plt.xlabel('Timestamp')
     plt.ylabel('Number of Sessions')
-    plt.legend(title='Location', loc='best')
+    plt.legend(title='site', loc='best')
     plt.grid(True, linestyle='--', alpha=0.4)
     plt.tight_layout()
     
@@ -209,14 +209,14 @@ def plot_charges_trends_by_location(dataset: pd.DataFrame, time_col: str = 'time
         
     plt.show()
 
-def fetch_and_plot_charges_trends_by_location(dataset_name: str, db_config: dict, fig_dir: Path):
+def fetch_and_plot_charges_trends_by_site(dataset_name: str, db_config: dict, fig_dir: Path):
     """
-    Fetches the dataset by location from the database and plots the charging sessions trends.
+    Fetches the dataset by site from the database and plots the charging sessions trends.
     """
-    dataset = fetch_dataset_charges_trends_by_location(dataset_name, db_config)
+    dataset = fetch_dataset_charges_trends_by_site(dataset_name, db_config)
     
     if not dataset.empty:
-        plot_charges_trends_by_location(dataset, time_col='timestamp', count_col='sessions_count', location_col='location', fig_dir=fig_dir, dataset_name=dataset_name)
+        plot_charges_trends_by_site(dataset, time_col='timestamp', count_col='sessions_count', site_col='site', fig_dir=fig_dir, dataset_name=dataset_name)
     else:
         print(f"No data found for the {dataset_name} dataset in the database.")
 
@@ -641,6 +641,55 @@ def fetch_and_plot_charges_time_serie_decomposition(dataset_name: str, db_config
     
     plt.show()
 
+def plot_session_boxplots_by_site(dataset: pd.DataFrame, dataset_name: str, fig_dir: Path):
+    """
+    Plots boxplots of session energy and duration by site.
+    """
+    # Calculate duration in hours
+    dataset['plug_in_datetime'] = pd.to_datetime(dataset['plug_in_datetime'])
+    dataset['plug_out_datetime'] = pd.to_datetime(dataset['plug_out_datetime'])
+    dataset['duration_hours'] = (dataset['plug_out_datetime'] - dataset['plug_in_datetime']).dt.total_seconds() / 3600.0
+    
+    # Filter reasonable durations (e.g. drop negative or wildly huge durations > 7 days) if needed
+    dataset = dataset[(dataset['duration_hours'] >= 0) & (dataset['duration_hours'] < 24 * 7)]
+    dataset = dataset[dataset['energy_supplied'] >= 0]
+    
+    # Sort sites alphabetically for consistency
+    dataset = dataset.dropna(subset=['site'])
+    dataset['site'] = pd.Categorical(dataset['site'], categories=sorted(dataset['site'].unique()), ordered=True)
+
+    fig, axes = plt.subplots(2, 1, figsize=(14, 12))
+    
+    # Energy Boxplot
+    dataset.boxplot(column='energy_supplied', by='site', ax=axes[0], grid=True, rot=45)
+    axes[0].set_title(f'Session Energy Distribution by Site\nDataset: {dataset_name}')
+    axes[0].set_ylabel('Energy Supplied (kWh)')
+    axes[0].set_xlabel('Site')
+    
+    # Duration Boxplot
+    dataset.boxplot(column='duration_hours', by='site', ax=axes[1], grid=True, rot=45)
+    axes[1].set_title(f'Session Duration Distribution by Site\nDataset: {dataset_name}')
+    axes[1].set_ylabel('Duration (Hours)')
+    axes[1].set_xlabel('Site')
+    
+    plt.suptitle("")  # Clear auto-generated suptitle from pandas boxplot
+    plt.tight_layout()
+    
+    save_path = fig_dir / f'{dataset_name}_boxplots_by_site.png'
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(str(save_path))
+    
+    plt.show()
+
+def fetch_and_plot_session_boxplots_by_site(dataset_name: str, db_config: dict, fig_dir: Path):
+    """
+    Fetches the session details by site and generates the energy and duration boxplots.
+    """
+    dataset = fetch_dataset_session_details_by_site(dataset_name, db_config)
+    if not dataset.empty:
+        plot_session_boxplots_by_site(dataset, dataset_name, fig_dir)
+    else:
+        print(f"No session details found for the {dataset_name} dataset in the database.")
 
 
 def main():
@@ -668,22 +717,25 @@ def main():
     li_ds = ['Norway_12loc']
     for ds in li_ds:
         # Energy
-        fetch_and_plot_dataset_trends(ds, db_config, FIG_DIR)
-        fetch_and_plot_energy_trends_by_location(ds, db_config, FIG_DIR)
-        fetch_and_plot_energy_by_weekday(ds, db_config, FIG_DIR)
-        fetch_and_plot_energy_by_month(ds, db_config, FIG_DIR)
-        fetch_and_plot_time_serie_decomposition(ds,db_config, FIG_DIR)
+        # fetch_and_plot_dataset_trends(ds, db_config, FIG_DIR)
+        # fetch_and_plot_energy_trends_by_site(ds, db_config, FIG_DIR)
+        # fetch_and_plot_energy_by_weekday(ds, db_config, FIG_DIR)
+        # fetch_and_plot_energy_by_month(ds, db_config, FIG_DIR)
+        # fetch_and_plot_time_serie_decomposition(ds,db_config, FIG_DIR)
         
         # Sessions / Charges
-        fetch_and_plot_dataset_charges_trends(ds, db_config, FIG_DIR)
-        fetch_and_plot_charges_trends_by_location(ds, db_config, FIG_DIR)
-        fetch_and_plot_charges_by_weekday(ds, db_config, FIG_DIR)
+        # fetch_and_plot_dataset_charges_trends(ds, db_config, FIG_DIR)
+        # fetch_and_plot_charges_trends_by_site(ds, db_config, FIG_DIR)
+        # fetch_and_plot_charges_by_weekday(ds, db_config, FIG_DIR)
 
-        fetch_and_plot_charges_by_month(ds, db_config, FIG_DIR)
-        fetch_and_plot_charges_time_serie_decomposition(ds, db_config, FIG_DIR)
+        # fetch_and_plot_charges_by_month(ds, db_config, FIG_DIR)
+        # fetch_and_plot_charges_time_serie_decomposition(ds, db_config, FIG_DIR)
+        
+        # Site specific boxplots
+        fetch_and_plot_session_boxplots_by_site(ds, db_config, FIG_DIR)
         
         # COVID Patterns (contains both energy and sessions)
-        fetch_and_plot_covid_patterns(ds, db_config, FIG_DIR)
+        # fetch_and_plot_covid_patterns(ds, db_config, FIG_DIR)
 
 if __name__ == '__main__':
     main()
