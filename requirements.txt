@@ -33,3 +33,4 @@ nvidia-curand-cu12
 
 # Time Series
 statsmodels>=0.14.0
+seaborn==0.13.2

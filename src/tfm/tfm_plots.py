@@ -4,18 +4,22 @@ import importlib
 import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
+import seaborn as sns
+
 from sqlalchemy import create_engine
 import psycopg2
 
 
-# Series temporales
+# Time series
 from statsmodels.tsa.stattools import adfuller
 import statsmodels.api as sm
 
-from src.tfm.tfm_data_fetcher import fetch_dataset_energy_trends, fetch_dataset_charges_trends, fetch_dataset_plug_ins, fetch_dataset_energy_trends_by_site, fetch_dataset_charges_trends_by_site, fetch_dataset_session_details_by_site
+# own modules
+from tfm_data_fetcher import fetch_dataset_session_details_by_specific_site, fetch_dataset_energy_trends, fetch_dataset_charges_trends, fetch_dataset_plug_ins, fetch_dataset_energy_trends_by_site, fetch_dataset_charges_trends_by_site, fetch_dataset_session_details_by_site
 from src.tfm.tfm_constants import COVID_START, COVID_END
 
-def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', fig_dir: Path = None, dataset_name: str = None):
+def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', 
+                                   fig_dir: Path = None, dataset_name: str = None):
     """
     Plots the trends of energy consumption over time.
     
@@ -658,38 +662,47 @@ def plot_session_boxplots_by_site(dataset: pd.DataFrame, dataset_name: str, fig_
     dataset = dataset.dropna(subset=['site'])
     dataset['site'] = pd.Categorical(dataset['site'], categories=sorted(dataset['site'].unique()), ordered=True)
 
-    fig, axes = plt.subplots(2, 1, figsize=(14, 12))
-    
-    # Energy Boxplot
-    dataset.boxplot(column='energy_supplied', by='site', ax=axes[0], grid=True, rot=45)
-    axes[0].set_title(f'Session Energy Distribution by Site\nDataset: {dataset_name}')
-    axes[0].set_ylabel('Energy Supplied (kWh)')
-    axes[0].set_xlabel('Site')
-    
-    # Duration Boxplot
-    dataset.boxplot(column='duration_hours', by='site', ax=axes[1], grid=True, rot=45)
-    axes[1].set_title(f'Session Duration Distribution by Site\nDataset: {dataset_name}')
-    axes[1].set_ylabel('Duration (Hours)')
-    axes[1].set_xlabel('Site')
-    
-    plt.suptitle("")  # Clear auto-generated suptitle from pandas boxplot
+  
+
+    # 1. Energy Boxplot
+    plt.figure(figsize=(12, 6))
+    sns.boxplot(data=dataset, x='site', y='energy_supplied', order=sorted(dataset['site'].unique()), palette='husl')
+    plt.title(f'Session Energy Distribution by Site\nDataset: {dataset_name}', fontsize=14)
+    plt.ylabel('Energy Supplied (kWh)', fontsize=12)
+    plt.xlabel('Site', fontsize=12)
+    plt.xticks(rotation=45)
+    plt.grid(True, axis='y', linestyle='--', alpha=0.7)
     plt.tight_layout()
     
-    save_path = fig_dir / f'{dataset_name}_boxplots_by_site.png'
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(str(save_path))
-    
+    save_path_energy = fig_dir / f'{dataset_name}_boxplot_energy_by_site.png'
+    save_path_energy.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(str(save_path_energy))
     plt.show()
 
-def fetch_and_plot_session_boxplots_by_site(dataset_name: str, db_config: dict, fig_dir: Path):
+    # 2. Duration Boxplot
+    plt.figure(figsize=(12, 6))
+    sns.boxplot(data=dataset, x='site', y='duration_hours', order=sorted(dataset['site'].unique()), palette='husl')
+    plt.title(f'Session Duration Distribution by Site\nDataset: {dataset_name}', fontsize=14)
+    plt.ylabel('Duration (Hours)', fontsize=12)
+    plt.xlabel('Site', fontsize=12)
+    plt.xticks(rotation=45)
+    plt.grid(True, axis='y', linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    
+    save_path_duration = fig_dir / f'{dataset_name}_boxplot_duration_by_site.png'
+    save_path_duration.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(str(save_path_duration))
+    plt.show()
+
+def fetch_and_plot_session_boxplots_by_specific_site(dataset_name: str, site_name: str, db_config: dict, fig_dir: Path):
     """
-    Fetches the session details by site and generates the energy and duration boxplots.
+    Fetches the session details by a specific dataset and site then generates the energy and duration boxplots.
     """
-    dataset = fetch_dataset_session_details_by_site(dataset_name, db_config)
+    dataset = fetch_dataset_session_details_by_specific_site(dataset_name, site_name, db_config)
     if not dataset.empty:
-        plot_session_boxplots_by_site(dataset, dataset_name, fig_dir)
+        plot_session_boxplots_by_site(dataset, f"{dataset_name} ({site_name})", fig_dir)
     else:
-        print(f"No session details found for the {dataset_name} dataset in the database.")
+        print(f"No session details found for the {dataset_name} dataset at site {site_name} in the database.")
 
 
 def main():
@@ -714,11 +727,11 @@ def main():
 
     # fetch and plot
     # li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
-    li_ds = ['Norway_12loc']
-    for ds in li_ds:
+    li_ds = [('Norway_12loc', 'OSL_T'), ('Norway_12loc', 'OSL_S')]
+    for ds, site in li_ds:
         # Energy
         # fetch_and_plot_dataset_trends(ds, db_config, FIG_DIR)
-        # fetch_and_plot_energy_trends_by_site(ds, db_config, FIG_DIR)
+        fetch_and_plot_energy_trends_by_site(ds, db_config, FIG_DIR)
         # fetch_and_plot_energy_by_weekday(ds, db_config, FIG_DIR)
         # fetch_and_plot_energy_by_month(ds, db_config, FIG_DIR)
         # fetch_and_plot_time_serie_decomposition(ds,db_config, FIG_DIR)
@@ -732,7 +745,7 @@ def main():
         # fetch_and_plot_charges_time_serie_decomposition(ds, db_config, FIG_DIR)
         
         # Site specific boxplots
-        fetch_and_plot_session_boxplots_by_site(ds, db_config, FIG_DIR)
+        fetch_and_plot_session_boxplots_by_specific_site(ds, site, db_config, FIG_DIR)
         
         # COVID Patterns (contains both energy and sessions)
         # fetch_and_plot_covid_patterns(ds, db_config, FIG_DIR)

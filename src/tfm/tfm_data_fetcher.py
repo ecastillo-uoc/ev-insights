@@ -118,6 +118,36 @@ def fetch_dataset_session_details_by_site(dataset_name: str, db_config: dict = N
         print(f"An error occurred while fetching session details for {dataset_name}: Query: {query}\n -- {e}")
         return pd.DataFrame()
 
+def fetch_dataset_session_details_by_specific_site(dataset_name: str, site_name: str, db_config: dict = None) -> pd.DataFrame:
+    """
+    Fetches the dataset by name and specific site from the database and returns session details.
+    """
+    query = """
+    SELECT 
+        cs.plug_in_datetime, 
+        cs.plug_out_datetime,
+        cs.energy_supplied,
+        cs.plug_in_soc,
+        st.site_name AS site,
+        st.station_name,
+        d.name AS dataset_name
+    FROM 
+        evinsights."ChargingSession" cs
+    JOIN evinsights."Dataset" d 
+        ON cs.fk_dataset_id = d.id
+    JOIN evinsights."ChargingStation" st
+        ON cs.fk_charging_station_id = st.id
+    WHERE d.name = %(dataset_name)s AND st.site_name = %(site_name)s
+    """
+    try:
+        engine = get_engine(db_config)
+        with engine.connect() as conn:
+            dataset = pd.read_sql(query, conn, params={'dataset_name': dataset_name, 'site_name': site_name})
+        return dataset
+    except Exception as e:
+        print(f"An error occurred while fetching specific site details for {dataset_name} at {site_name}: Query: {query}\n -- {e}")
+        return pd.DataFrame()
+
 def fetch_daily_energy_for_forecast(dataset_name: str, db_config: dict = None) -> pd.DataFrame:
     """
     Fetches daily energy demand data and formats it for forecasting models (Prophet/LSTM).
