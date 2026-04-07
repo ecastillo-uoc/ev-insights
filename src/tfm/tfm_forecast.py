@@ -10,6 +10,8 @@ from datetime import timedelta
 # Add src to python path if not present
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Own modules
+from src.utils.logger import Colors
 
 # forecast
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
@@ -77,7 +79,7 @@ def plot_test_vs_predict(test, predictions, dataset_name, model_name, test_size)
     plt.close()
     logging.info(f"Actual vs Predict plot saved to {plot_path}")
 
-def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type="lstm"):
+def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type="lstm", model_suffix=""):
     
     models_dir = 'output_models'
     os.makedirs(models_dir, exist_ok=True)
@@ -208,7 +210,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             
             # 3. Store the trained model
             logging.info("Saving model...")
-            model_name = f"{model_name_prefix}_{dataset}"
+            model_name = f"{model_name_prefix}_{dataset}{model_suffix}"
             save_model(model_name, trained_models_dict, models_dir)
             
             # 4. Predict
@@ -449,23 +451,15 @@ def execute_hybrid(datasets, prediction_lag_days):
         run_forecast_pipeline(['ACN_Caltech'], strategy_params_hybrid_caltech, split_date_str, model_type="hybrid")
 
 
-if __name__ == "__main__":
-    
-    # li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
-    # datasets = ['ACN_Caltech', 'ACN_JPL']
-    # prediction_lag_days = [30, 120, 240]
-    datasets = ['ACN_JPL']
-    prediction_lag_days = [1]
-    split_date_str = "2021-01-01"
-    n_trials = 50
-    
+
+def optimize_lstm(datasets, n_trials):
     # Extract dataset name from list
     dataset_name = datasets[0] if datasets else None
     if not dataset_name:
         logging.error("No dataset specified. Exiting.")
         sys.exit(1)
     
-    logging.info(f"Starting LSTM hyperparameter optimization for {dataset_name}")
+    logging.info(f"Starting {Colors.GREEN}LSTM{Colors.NORMAL} hyperparameter optimization for {Colors.GREEN}{dataset_name}{Colors.NORMAL}")
     
     # =========================================================================
     # 1. Fetch and prepare data
@@ -480,103 +474,8 @@ if __name__ == "__main__":
     logging.info(f"Data shape: {df_full.shape}, date range: {df_full.index.min()} to {df_full.index.max()}")
     
     # =========================================================================
-    # 2. Define data-specific objective function
+    # 2. Prepare training data and run Optuna study
     # =========================================================================
-    # Create closures that capture the dataset so objective_lstm can access it
-    def make_objective_lstm(train_df, target_col):
-        """Factory function to create objective with captured data."""
-        def objective_lstm_with_data(trial):
-            from sklearn.preprocessing import MinMaxScaler
-            from keras.callbacks import EarlyStopping
-            from src.forecast.forecast_implementations import LSTMModelStrategy
-            from src.forecast.strategies.utils_ts import smape
-            
-            N_TRIAL_EPOCHS = 10 
-            PATIENCE = 10
-
-            # Suggest hyperparameters
-            lstm_params = {
-                "epochs": trial.suggest_int("epochs", 20, 120),
-                "batch_size": trial.suggest_categorical("batch_size", [16, 32, 64, 128]),
-                "learning_rate": trial.suggest_float("learning_rate", 1e-4, 5e-3, log=True),
-                "look_back": trial.suggest_int("look_back", 7, 60),
-                "activation": trial.suggest_categorical("activation", ["relu", "tanh", "sigmoid"]),
-                "dropout_rate": trial.suggest_float("dropout_rate", 0.0, 0.5),
-            }
-
-            # Build sequence data
-            subset_df = train_df.copy()
-            y_raw = subset_df[[target_col]].values.astype(float)
-
-            scaler = MinMaxScaler()
-            y_scaled = scaler.fit_transform(y_raw)
-
-            look_back = lstm_params["look_back"]
-            X, y = [], []
-            for i in range(len(y_scaled) - look_back):
-                X.append(y_scaled[i : i + look_back, 0])
-                y.append(y_scaled[i + look_back, 0])
-
-            X = np.array(X)
-            y = np.array(y)
-
-            if len(X) < 50:
-                raise optuna.TrialPruned()
-
-            X = X.reshape((X.shape[0], X.shape[1], 1))
-
-            # Chronological train/validation split (80/20)
-            split_idx = int(len(X) * 0.8)
-            X_train, X_val = X[:split_idx], X[split_idx:]
-            y_train, y_val = y[:split_idx], y[split_idx:]
-
-            # Build model
-            strategy = LSTMModelStrategy()
-            model = strategy.build_model(
-                input_shape=(X.shape[1], 1),
-                learning_rate=lstm_params["learning_rate"],
-                activation=lstm_params["activation"],
-                dropout_rate=lstm_params["dropout_rate"],
-            )
-
-            # Train with early stopping
-            callbacks = [
-                EarlyStopping(
-                    monitor="val_loss",
-                    patience=PATIENCE,
-                    restore_best_weights=True
-                )
-            ]
-
-            model.fit(
-                X_train, y_train,
-                validation_data=(X_val, y_val),
-                epochs=lstm_params["epochs"],
-                batch_size=lstm_params["batch_size"],
-                verbose=0,
-                callbacks=callbacks,
-            )
-
-            # Evaluate on validation set
-            y_pred_val = model.predict(X_val, verbose=0).reshape(-1, 1)
-            y_val_inv = scaler.inverse_transform(y_val.reshape(-1, 1)).ravel()
-            y_pred_inv = scaler.inverse_transform(y_pred_val).ravel()
-
-            smape_val = smape(y_pred_inv, y_val_inv)
-
-            # Save params for later retrieval
-            trial.set_user_attr("lstm_params", lstm_params)
-
-            logging.info(f"Trial {trial.number}: sMAPE={smape_val:.4f}, "
-                        f"lr={lstm_params['learning_rate']:.2e}, "
-                        f"epochs={lstm_params['epochs']}, "
-                        f"look_back={lstm_params['look_back']}")
-
-            return float(smape_val)
-        
-        return objective_lstm_with_data
-    
-    # Prepare training data (pre-COVID)
     split_date = pd.to_datetime(split_date_str)
     train_df = df_full[df_full.index <= split_date].copy()
     train_df['y'] = train_df[train_df.columns[0]]  # Ensure 'y' column exists
@@ -595,8 +494,12 @@ if __name__ == "__main__":
         pruner=optuna.pruners.SuccessiveHalvingPruner(reduction_factor=3)
     )
     
-    objective_func = make_objective_lstm(train_df, target_column)
-    study.optimize(objective_func, n_trials=n_trials, show_progress_bar=True)
+    # Use lambda wrapper to pass data to objective function
+    study.optimize(
+        lambda trial: objective_lstm(trial, train_df, target_column), 
+        n_trials=n_trials, 
+        show_progress_bar=True
+    )
     
     # =========================================================================
     # 4. Retrieve and display best results
@@ -633,7 +536,7 @@ if __name__ == "__main__":
 
     strategy_params_lstm_best_jpl = {**strategy_params_lstm_best, **strategy_jpl}
     
-    run_forecast_pipeline([dataset_name], strategy_params_lstm_best_jpl, split_date_str, model_type="lstm")
+    run_forecast_pipeline([dataset_name], strategy_params_lstm_best_jpl, split_date_str, model_type="lstm", model_suffix="_optuna")
     
     logging.info("\n" + "="*80)
     logging.info("LSTM OPTIMIZATION AND TRAINING COMPLETE")
@@ -643,6 +546,19 @@ if __name__ == "__main__":
     logging.info(f"  - Plots: output_plots/")
     logging.info(f"  - Metrics: forecast_metrics_summary.csv")
     logging.info("="*80)
+
+
+if __name__ == "__main__":
+    
+    # li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
+    # datasets = ['ACN_Caltech', 'ACN_JPL']
+    # prediction_lag_days = [30, 120, 240]
+    datasets = ['ACN_JPL']
+    prediction_lag_days = [7]
+    split_date_str = "2021-01-01"
+    n_trials = 5
+
+    optimize_lstm(datasets, n_trials)
 
     # tree based
     #execute_lightgbm(datasets, prediction_lag_days)

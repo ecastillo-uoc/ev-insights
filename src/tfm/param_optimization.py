@@ -13,6 +13,7 @@ import optuna
 
 from sklearn.preprocessing import MinMaxScaler
 from keras.callbacks import EarlyStopping
+from keras.utils import plot_model
 
 from src.forecast.forecast_implementations import TransformerModelStrategy
 from src.forecast.strategies.utils_ts import smape
@@ -28,7 +29,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 VERBOSE_LEVEL = 1
 use_cudnn = True
 
-def objective_transformer(trial):
+def objective_transformer(trial, train_df, target_column):
 
     # Increase epochs and rely on early stopping
     N_TRIAL_EPOCHS = 10 
@@ -71,8 +72,6 @@ def objective_transformer(trial):
     # Build model
     # -------------------------------------------------------------------------
     # Build sequence data from your training series
-    # Replace this with your real dataframe preparation:
-    # subset_df must be one dataset_name and include target column
     
     subset_df = train_df.copy()
     y_raw = subset_df[[target_column]].values.astype(float)
@@ -146,7 +145,6 @@ def objective_transformer(trial):
     # Evaluate
     # -------------------------------------------------------------------------
 
-
     # Evaluate in original scale with SMAPE (or MAE/MSE)
     y_pred_val = model.predict(X_val, verbose=0).reshape(-1, 1)
     y_val_inv = scaler.inverse_transform(y_val.reshape(-1, 1)).ravel()
@@ -162,7 +160,7 @@ def objective_transformer(trial):
 
 
 
-def objective_lstm(trial):
+def objective_lstm(trial, train_df, target_column):
 
     # Increase epochs and rely on early stopping
     N_TRIAL_EPOCHS = 10 
@@ -189,8 +187,6 @@ def objective_lstm(trial):
     # Build model
     # -------------------------------------------------------------------------
     # Build sequence data from your training series
-    # Replace this with your real dataframe preparation:
-    # subset_df must be one dataset_name and include target column
     
     subset_df = train_df.copy()
     y_raw = subset_df[[target_column]].values.astype(float)
@@ -259,7 +255,6 @@ def objective_lstm(trial):
     # -------------------------------------------------------------------------
     # Evaluate
     # -------------------------------------------------------------------------
-
 
     # Evaluate in original scale with SMAPE (or MAE/MSE)
     y_pred_val = model.predict(X_val, verbose=0).reshape(-1, 1)

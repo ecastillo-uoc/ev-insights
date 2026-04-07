@@ -50,9 +50,8 @@ def fetch_dataset_energy_trends(dataset_name: str, db_config: dict = None, site_
     """
     try:       
         engine = get_engine(db_config)
-        from sqlalchemy import text
         with engine.connect() as conn:
-            dataset = pd.read_sql(text(query), conn, params=params)
+            dataset = pd.read_sql(query, conn, params=params)
         return dataset
     except Exception as e:
         print(f"An error occurred while fetching {dataset_name}: Query: {query}\n -- {e}")
