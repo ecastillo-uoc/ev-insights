@@ -17,9 +17,10 @@ def get_engine(db_config=None):
     engine_url = f"postgresql://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['dbname']}"
     return create_engine(engine_url)
 
-def fetch_dataset_energy_trends(dataset_name: str, db_config: dict = None) -> pd.DataFrame:
+def fetch_dataset_energy_trends(dataset_name: str, db_config: dict = None, site_name: str = None) -> pd.DataFrame:
     """
     Fetches the dataset by name from the database and returns the energy trends as a DataFrame.
+    Admits optional site_name filter.
     """
     query = """
     SELECT 
@@ -29,14 +30,29 @@ def fetch_dataset_energy_trends(dataset_name: str, db_config: dict = None) -> pd
         evinsights."ChargingSession" cs
     JOIN evinsights."Dataset" d 
         ON cs.fk_dataset_id = d.id
+    """
+    params = {'dataset_name': dataset_name}
+    if site_name:
+        query += """
+    JOIN evinsights."ChargingStation" st
+        ON cs.fk_charging_station_id = st.id
+    WHERE d.name = %(dataset_name)s AND st.site_name = %(site_name)s
+    """
+        params['site_name'] = site_name
+    else:
+        query += """
     WHERE d.name = %(dataset_name)s
+    """
+
+    query += """
     GROUP BY DATE(cs.plug_out_datetime)
     ORDER BY timestamp
     """
     try:       
         engine = get_engine(db_config)
+        from sqlalchemy import text
         with engine.connect() as conn:
-            dataset = pd.read_sql(query, conn, params={'dataset_name': dataset_name})
+            dataset = pd.read_sql(text(query), conn, params=params)
         return dataset
     except Exception as e:
         print(f"An error occurred while fetching {dataset_name}: Query: {query}\n -- {e}")
@@ -225,3 +241,40 @@ def fetch_dataset_charges_trends_by_site(dataset_name: str, db_config: dict = No
         return pd.DataFrame()
 
 
+
+def fetch_dataset_session_details_by_station(station_ids: tuple = None, city: str = None, db_config: dict = None) -> pd.DataFrame:
+    """
+    Fetches session details for specific charging stations, optionally filtered by city or station_ids or both.
+    """
+    query = """
+    SELECT 
+        cs.plug_in_datetime, 
+        cs.plug_out_datetime,
+        cs.energy_supplied,
+        cs.plug_in_soc,
+        st.station_name AS site,
+        st.city
+    FROM 
+        evinsights."ChargingSession" cs
+    JOIN evinsights."ChargingStation" st
+        ON cs.fk_charging_station_id = st.id
+    WHERE 1=1
+    """
+    params = {}
+    if station_ids:
+        query += " AND cs.fk_charging_station_id IN %(station_ids)s"
+        params['station_ids'] = tuple(station_ids)
+    if city:
+        query += " AND st.city = %(city)s"
+        params['city'] = city
+        
+    try:
+        #print(query)
+        engine = get_engine(db_config)
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            dataset = pd.read_sql(text(query), conn, params=params)
+        return dataset
+    except Exception as e:
+        print(f"An error occurred while fetching specific station details: {e}")
+        return pd.DataFrame()

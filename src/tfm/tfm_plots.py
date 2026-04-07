@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import logging
 import importlib
 import pandas as pd
@@ -15,7 +16,7 @@ from statsmodels.tsa.stattools import adfuller
 import statsmodels.api as sm
 
 # own modules
-from tfm_data_fetcher import fetch_dataset_session_details_by_specific_site, fetch_dataset_energy_trends, fetch_dataset_charges_trends, fetch_dataset_plug_ins, fetch_dataset_energy_trends_by_site, fetch_dataset_charges_trends_by_site, fetch_dataset_session_details_by_site
+from src.tfm.tfm_data_fetcher import fetch_dataset_session_details_by_specific_site, fetch_dataset_energy_trends, fetch_dataset_charges_trends, fetch_dataset_plug_ins, fetch_dataset_energy_trends_by_site, fetch_dataset_charges_trends_by_site, fetch_dataset_session_details_by_site, fetch_dataset_session_details_by_station
 from src.tfm.tfm_constants import COVID_START, COVID_END
 
 def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'timestamp', energy_col: str = 'energy_kwh', 
@@ -102,7 +103,7 @@ def plot_multiple_energy_consumption_trends(datasets: dict, time_col: str = 'tim
 
 
 
-def fetch_and_plot_dataset_trends(dataset_name: str, db_config: dict, fig_dir: Path):
+def fetch_and_plot_dataset_trends(dataset_name: str, db_config: dict, fig_dir: Path, site_name: str = None):
     """
     Fetches the dataset by name from the database and plots the energy trends.
     """
@@ -173,7 +174,7 @@ def plot_charges_trends(dataset: pd.DataFrame, time_col: str = 'timestamp', coun
         
     plt.show()
 
-def fetch_and_plot_dataset_charges_trends(dataset_name: str, db_config: dict, fig_dir: Path):
+def fetch_and_plot_dataset_charges_trends(dataset_name: str, db_config: dict, fig_dir: Path, site_name: str = None):
     """
     Fetches the dataset by name from the database and plots the charging sessions trends.
     """
@@ -275,7 +276,7 @@ def plot_charges_by_weekday(dataset: pd.DataFrame, dataset_name: str, fig_dir: P
     plt.show()
 
 
-def fetch_and_plot_charges_by_weekday(dataset_name: str, db_config: dict, fig_dir: Path):
+def fetch_and_plot_charges_by_weekday(dataset_name: str, db_config: dict, fig_dir: Path, site_name: str = None):
     """
     Fetches the dataset and plots the total number of charging sessions by weekday.
     """
@@ -317,7 +318,7 @@ def plot_energy_by_weekday(dataset: pd.DataFrame, dataset_name: str, fig_dir: Pa
     plt.savefig(str(save_path))
     plt.show()
 
-def fetch_and_plot_energy_by_weekday(dataset_name: str, db_config: dict, fig_dir: Path):
+def fetch_and_plot_energy_by_weekday(dataset_name: str, db_config: dict, fig_dir: Path, site_name: str = None):
     """
     Fetches the dataset and plots the total energy supplied by weekday.
     """
@@ -357,7 +358,7 @@ def plot_energy_by_month(dataset: pd.DataFrame, dataset_name: str, fig_dir: Path
     plt.savefig(str(save_path))
     plt.show()
 
-def fetch_and_plot_energy_by_month(dataset_name: str, db_config: dict, fig_dir: Path):
+def fetch_and_plot_energy_by_month(dataset_name: str, db_config: dict, fig_dir: Path, site_name: str = None):
     """
     Fetches the dataset and plots the total energy supplied by month.
     """
@@ -397,7 +398,7 @@ def plot_charges_by_month(dataset: pd.DataFrame, dataset_name: str, fig_dir: Pat
     plt.savefig(str(save_path))
     plt.show()
 
-def fetch_and_plot_charges_by_month(dataset_name: str, db_config: dict, fig_dir: Path):
+def fetch_and_plot_charges_by_month(dataset_name: str, db_config: dict, fig_dir: Path, site_name: str = None):
     """
     Fetches the dataset and plots the total number of charges supplied by month.
     """
@@ -537,7 +538,7 @@ def fetch_and_plot_covid_patterns(dataset_name: str, db_config: dict, fig_dir: P
     else:
         print(f"No data found for the {dataset_name} dataset in the database.")
 
-def fetch_and_plot_time_serie_decomposition(dataset_name: str, db_config: dict, fig_dir: Path):
+def fetch_and_plot_time_serie_decomposition(dataset_name: str, db_config: dict, fig_dir: Path, site_name: str = None):
     
     # 1. Fetch data already grouped by day
     dataset = fetch_dataset_energy_trends(dataset_name, db_config)
@@ -591,7 +592,7 @@ def fetch_and_plot_time_serie_decomposition(dataset_name: str, db_config: dict, 
     
     plt.show()
 
-def fetch_and_plot_charges_time_serie_decomposition(dataset_name: str, db_config: dict, fig_dir: Path):
+def fetch_and_plot_charges_time_serie_decomposition(dataset_name: str, db_config: dict, fig_dir: Path, site_name: str = None):
     
     # 1. Fetch data already grouped by day
     dataset = fetch_dataset_charges_trends(dataset_name, db_config)
@@ -694,6 +695,16 @@ def plot_session_boxplots_by_site(dataset: pd.DataFrame, dataset_name: str, fig_
     plt.savefig(str(save_path_duration))
     plt.show()
 
+def fetch_and_plot_session_boxplots_by_site(dataset_name: str, db_config: dict, fig_dir: Path):
+    """
+    Fetches the session details by dataset (and groups by site internally) and generates the energy and duration boxplots.
+    """
+    dataset = fetch_dataset_session_details_by_site, fetch_dataset_session_details_by_station, fetch_dataset_session_details_by_station(dataset_name, db_config)
+    if not dataset.empty:
+        plot_session_boxplots_by_site(dataset, dataset_name, fig_dir)
+    else:
+        print(f"No session details found for the {dataset_name} dataset in the database.")
+
 def fetch_and_plot_session_boxplots_by_specific_site(dataset_name: str, site_name: str, db_config: dict, fig_dir: Path):
     """
     Fetches the session details by a specific dataset and site then generates the energy and duration boxplots.
@@ -703,6 +714,28 @@ def fetch_and_plot_session_boxplots_by_specific_site(dataset_name: str, site_nam
         plot_session_boxplots_by_site(dataset, f"{dataset_name} ({site_name})", fig_dir)
     else:
         print(f"No session details found for the {dataset_name} dataset at site {site_name} in the database.")
+
+def fetch_and_plot_session_boxplots_by_station(station_ids: tuple = None, city: str = None, db_config: dict = None, fig_dir: Path = None):
+    """
+    Fetches the session details by explicit station IDs and/or city, and generates the energy and duration boxplots.
+    """
+    dataset = fetch_dataset_session_details_by_station(station_ids=station_ids, city=city, db_config=db_config)
+    if not dataset.empty:
+        dataset['plug_in_datetime'] = pd.to_datetime(dataset['plug_in_datetime'])
+        dataset['plug_out_datetime'] = pd.to_datetime(dataset['plug_out_datetime'])
+        dataset['duration_hours'] = (dataset['plug_out_datetime'] - dataset['plug_in_datetime']).dt.total_seconds() / 3600.0
+        
+        title_parts = []
+        if station_ids:
+            title_parts.append(f"Stations_{'_'.join(map(str, station_ids))}")
+        if city:
+            title_parts.append(f"City_{city}")
+            
+        title = "_".join(title_parts) if title_parts else "All_Stations"
+        
+        plot_session_boxplots_by_site(dataset, title, fig_dir)
+    else:
+        print(f"No session details found for the station IDs {station_ids} and city {city}.")
 
 
 def main():
@@ -727,28 +760,41 @@ def main():
 
     # fetch and plot
     # li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
-    li_ds = [('Norway_12loc', 'OSL_T'), ('Norway_12loc', 'OSL_S')]
-    for ds, site in li_ds:
+    #li_ds = [('Norway_12loc', 'OSL_T'), ('Norway_12loc', 'OSL_S'), 'ACN_Caltech']
+    li_ds = []
+    for item in li_ds:
+        if isinstance(item, tuple):
+            ds, site = item
+        else:
+            ds = item
+            site = None
+
+        print(f"\n--- Processing dataset: {ds}" + (f", site: {site}" if site else "") + " ---")
+
         # Energy
-        # fetch_and_plot_dataset_trends(ds, db_config, FIG_DIR)
-        fetch_and_plot_energy_trends_by_site(ds, db_config, FIG_DIR)
-        # fetch_and_plot_energy_by_weekday(ds, db_config, FIG_DIR)
-        # fetch_and_plot_energy_by_month(ds, db_config, FIG_DIR)
-        # fetch_and_plot_time_serie_decomposition(ds,db_config, FIG_DIR)
+        # fetch_and_plot_dataset_trends(ds, db_config, FIG_DIR, site_name=site)
+        # fetch_and_plot_energy_by_weekday(ds, db_config, FIG_DIR, site_name=site)
+        # fetch_and_plot_energy_by_month(ds, db_config, FIG_DIR, site_name=site)
+        # fetch_and_plot_time_serie_decomposition(ds, db_config, FIG_DIR, site_name=site)
         
         # Sessions / Charges
-        # fetch_and_plot_dataset_charges_trends(ds, db_config, FIG_DIR)
-        # fetch_and_plot_charges_trends_by_site(ds, db_config, FIG_DIR)
-        # fetch_and_plot_charges_by_weekday(ds, db_config, FIG_DIR)
+        # fetch_and_plot_dataset_charges_trends(ds, db_config, FIG_DIR, site_name=site)
+        # fetch_and_plot_charges_by_weekday(ds, db_config, FIG_DIR, site_name=site)
+        # fetch_and_plot_charges_by_month(ds, db_config, FIG_DIR, site_name=site)
+        # fetch_and_plot_charges_time_serie_decomposition(ds, db_config, FIG_DIR, site_name=site)
+        
+        # Boxplots
+        if site:
+            fetch_and_plot_session_boxplots_by_specific_site(ds, site, db_config, FIG_DIR)
+        else:
+            fetch_and_plot_session_boxplots_by_site(ds, db_config, FIG_DIR)
+            # Also if no site is provided, we might want to plot the overall grouping by site
+            fetch_and_plot_energy_trends_by_site(ds, db_config, FIG_DIR)
+            fetch_and_plot_charges_trends_by_site(ds, db_config, FIG_DIR)
 
-        # fetch_and_plot_charges_by_month(ds, db_config, FIG_DIR)
-        # fetch_and_plot_charges_time_serie_decomposition(ds, db_config, FIG_DIR)
-        
-        # Site specific boxplots
-        fetch_and_plot_session_boxplots_by_specific_site(ds, site, db_config, FIG_DIR)
-        
-        # COVID Patterns (contains both energy and sessions)
-        # fetch_and_plot_covid_patterns(ds, db_config, FIG_DIR)
+    fetch_and_plot_session_boxplots_by_station(city='Sant Cugat del Vall?s', db_config=db_config, fig_dir=FIG_DIR)
+    # fetch_and_plot_session_boxplots_by_station(station_ids=(141, 142), db_config=db_config, fig_dir=FIG_DIR)
+
 
 if __name__ == '__main__':
     main()
