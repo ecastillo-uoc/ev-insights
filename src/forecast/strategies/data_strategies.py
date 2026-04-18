@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Tuple
 import pandas as pd
 
 from src.utils.date_utils import utc_to_decimal_hours_minutes
+from src.tfm.tfm_constants import COVID_START, COVID_END
 from .interfaces import PredictionTargetStrategy
 from .utils_ts import add_lags, add_timefeat_df
 
@@ -163,6 +164,10 @@ class StationChargesDataStrategy(PredictionTargetStrategy):
                     date_range = pd.date_range(start=df.index.min(), end=df.index.max(), freq='D')
                     df = df.reindex(date_range, fill_value=0)
 
+                # Remove COVID no-data period (artificial zeros from reindex)
+                covid_mask = (df.index >= pd.to_datetime(COVID_START)) & (df.index <= pd.to_datetime(COVID_END))
+                df = df[~covid_mask]
+
                 df = add_timefeat_df(df)
                 df = add_lags(df, "number_charges", lags, lag_windows)
 
@@ -245,6 +250,10 @@ class StationEnergyDataStrategy(PredictionTargetStrategy):
                 if not df.empty:
                     date_range = pd.date_range(start=df.index.min(), end=df.index.max(), freq='D')
                     df = df.reindex(date_range, fill_value=0)
+
+                # Remove COVID no-data period (artificial zeros from reindex)
+                covid_mask = (df.index >= pd.to_datetime(COVID_START)) & (df.index <= pd.to_datetime(COVID_END))
+                df = df[~covid_mask]
 
                 df = add_timefeat_df(df)
                 df = add_lags(df, "daily_demand", lags, lag_windows)
