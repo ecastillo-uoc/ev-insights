@@ -128,8 +128,8 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         model_objects: Any,
         strategy_name: str,
         logger: logging.Logger,
-    ) -> Tuple[Any, MinMaxScaler, int, dict] | None:
-        """Extract ``(model, scaler, look_back, params)`` from *model_objects*.
+    ) -> Tuple[Any, MinMaxScaler, int, int | None, dict] | None:
+        """Extract ``(model, scaler, look_back, forecast_horizon, params)`` from *model_objects*.
 
         Returns ``None`` when the expected dict layout is not found.
         """
@@ -138,15 +138,21 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                 model_objects['keras_model'],
                 model_objects['scaler'],
                 model_objects.get('look_back', 30),
+                model_objects.get('forecast_horizon'),
                 model_objects.get('params', {}),
             )
         logger.error(f"{strategy_name} requires a dict with keras_model and scaler.")
         return None
 
     @staticmethod
-    def _resolve_predict_bounds(params: dict) -> Tuple[int, str | None, str | None]:
-        """Return ``(prediction_days, predict_start_date, predict_end_date)``."""
-        prediction_days = params.get('prediction_days', 30)
+    def _resolve_predict_bounds(params: dict, forecast_horizon: int | None = None) -> Tuple[int, str | None, str | None]:
+        """Return ``(prediction_days, predict_start_date, predict_end_date)``.
+
+        *forecast_horizon* (if supplied) is used as the default for
+        ``prediction_days`` when the latter is absent from *params*.
+        """
+        default_days = forecast_horizon if forecast_horizon is not None else 30
+        prediction_days = params.get('prediction_days', default_days)
         predict_start_date = params.get('predict_start_date')
         predict_end_date = params.get('predict_end_date')
         test_range = params.get('test_range')
@@ -306,6 +312,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             epochs = strategy_params.get('epochs', 100)
             batch_size = strategy_params.get('batch_size', 32)
             look_back = strategy_params.get('look_back', 30)
+            forecast_horizon = strategy_params.get('forecast_horizon')
 
             for dataset_name in dataset_names:
                 self.logger.info(
@@ -347,6 +354,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                         'keras_model': model,
                         'scaler': scaler,
                         'look_back': look_back,
+                        'forecast_horizon': forecast_horizon,
                     },
                     'metrics': {},
                     'artifacts': {},
@@ -405,10 +413,10 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             )
             if unpacked is None:
                 return output_dict
-            model, scaler, look_back, params = unpacked
+            model, scaler, look_back, forecast_horizon, params = unpacked
 
             prediction_days, predict_start_date, predict_end_date = (
-                self._resolve_predict_bounds(params)
+                self._resolve_predict_bounds(params, forecast_horizon)
             )
 
             if submode == 'schedule':

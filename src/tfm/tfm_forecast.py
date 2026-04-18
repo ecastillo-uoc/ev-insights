@@ -112,6 +112,9 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
 
         for forecast_horizon in li_forecast_horizons:
             logging.info(f"Prediction window: {forecast_horizon} days")
+
+            # Make forecast_horizon available to the strategy layer
+            strategy_params['forecast_horizon'] = forecast_horizon
             
             # 1. Split train/test
             if len(df) <= forecast_horizon:
@@ -536,8 +539,6 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
         'epochs': 100, 
         'batch_size': 32,
         'look_back': 14,
-        'li_forecast_horizons': li_forecast_horizons,
-        'learning_rate': 0.001,
         'li_forecast_horizons': li_forecast_horizons,
         'learning_rate': 0.001,
         'd_model': 128,

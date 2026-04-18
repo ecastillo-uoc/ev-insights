@@ -95,6 +95,7 @@ def _save_keras(model_obj: dict, model_name: str, models_path: Path, forecaster_
     joblib.dump(model_obj['scaler'], str(scaler_path))
     meta = {
         'look_back': model_obj.get('look_back', 30),
+        'forecast_horizon': model_obj.get('forecast_horizon'),
         'params': train_params or {},
     }
     joblib.dump(meta, str(meta_path))
@@ -123,6 +124,7 @@ def _load_keras(model_name: str, models_path: Path):
         'keras_model': keras_model,
         'scaler': scaler,
         'look_back': meta.get('look_back', 30),
+        'forecast_horizon': meta.get('forecast_horizon'),
         'params': meta.get('params', {}),
     }
 
