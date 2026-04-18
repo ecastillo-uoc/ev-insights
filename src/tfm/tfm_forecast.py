@@ -1,4 +1,5 @@
 import os
+import math
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,7 +17,11 @@ from src.utils.console import Colors
 # forecast
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
 
-from src.forecast.strategies import LSTMModelStrategy, TransformerModelStrategy, HussainTransformerModelStrategy, LightGBMModelStrategy, XGBoostModelStrategy, HybridTransformerLSTMModelStrategy
+from src.forecast.strategies import (
+    LSTMModelStrategy, TransformerModelStrategy, HussainTransformerModelStrategy,
+    LightGBMModelStrategy, XGBoostModelStrategy, HybridTransformerLSTMModelStrategy,
+    HussainHybridModelStrategy,
+)
 from src.forecast.model_persistence import save_model, load_model
 from src.forecast.strategies.utils_ts import smape
 
@@ -116,7 +121,12 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
 
     for dataset in datasets:
         logging.info(f"--- Processing Dataset: {dataset} ---")
-        df = fetch_daily_energy_for_forecast(dataset)
+        # Hussain models include COVID zeros to match the article methodology.
+        # Other models respect the global EXCLUDE_COVID_DATA constant.
+        is_hussain = model_type.startswith("hussain_")
+        df = fetch_daily_energy_for_forecast(
+            dataset, exclude_covid=False if is_hussain else None,
+        )
         
         if df.empty:
             logging.warning(f"No data found for {dataset}. Skipping.")
@@ -227,15 +237,15 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df['dataset_name'] = dataset
                 train_df.attrs['hussain_transformer_params'] = strategy_params
             elif model_type == "hussain_hybrid":
-                strategy = HybridTransformerLSTMModelStrategy()
+                strategy = HussainHybridModelStrategy()
                 model_name_prefix = f"hussain_hybrid_{forecast_horizon}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
-                df_model.attrs['hybrid_params'] = strategy_params
+                df_model.attrs['hussain_hybrid_params'] = strategy_params
                 
                 train_df['dataset_name'] = dataset
-                train_df.attrs['hybrid_params'] = strategy_params
+                train_df.attrs['hussain_hybrid_params'] = strategy_params
             else:
                 strategy = LSTMModelStrategy()
                 model_name_prefix = f"lstm_{forecast_horizon}d"
@@ -278,6 +288,10 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             
             # For LSTM/Transformer models we use backtest mode (rolling one-step on test data)
             # For tree-based models we predict directly on the test data which already has the lag features
+            # For Hussain models we use SCHEDULE mode (multi-step recursive) to match
+            # the article methodology: feed last look_back days of training data and
+            # recursively predict forecast_horizon days ahead (visible in Figs 9-26
+            # where x-axis = "Number of Days" 0..N).
             if model_type in ["xgboost", "lightgbm"]:
                 predict_df = test_df.copy()
                 predict_df['dataset_name'] = dataset
@@ -287,6 +301,12 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 predict_df = predict_df.dropna()
                 
                 predict_mode = None
+            elif is_hussain:
+                # Schedule mode: pass training data as context so the model
+                # bootstraps from the last look_back training days.
+                predict_df = train_df.copy()
+                predict_df['dataset_name'] = dataset
+                predict_mode = 'schedule'
             else:
                 predict_df = test_df.copy()
                 predict_df['dataset_name'] = dataset
@@ -316,8 +336,14 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             # Handling lengths
             min_len = min(len(preds_array), len(actuals_array))
             a, p = actuals_array[:min_len], preds_array[:min_len]
+            mse_val = mean_squared_error(a, p)
             metrics = {
-                'MSE': mean_squared_error(a, p),
+                'MSE': mse_val,
+                # RMSE is included because Hussain et al. (2025) appear to
+                # report RMSE labelled as "MSE" — their reported "MSE" values
+                # are only slightly above the corresponding MAE, which is
+                # consistent with RMSE (√MSE) but not raw MSE.
+                'RMSE': math.sqrt(mse_val),
                 'MAE': mean_absolute_error(a, p),
                 'MAPE': mean_absolute_percentage_error(a, p),
                 'SMAPE': smape(p, a)
@@ -593,13 +619,21 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
 # Key differences from our default models:
 #   * look_back = forecast_horizon (30, 120, 240) — not a fixed 14
 #   * dropout = 0.2   (vs. 0.1 for our Transformer/Hybrid)
+#   * ReduceLROnPlateau + EarlyStopping callbacks (article text, Section IV)
 #   * Transformer uses a single Dense(ReLU) → MHA → GAP → Dense(1) arch
 #     (no residual, no LayerNorm, no feed-forward block, no MLP head)
-#   * LSTM and Hybrid architectures are identical to ours; only hyperparams differ
+#   * Hybrid uses HussainHybridModelStrategy which removes residual
+#     connections and adds positional encoding (matching Fig. 4)
+#   * Prediction uses schedule (multi-step recursive) mode matching the
+#     article figures (Figs 9–26 show exactly N predicted days)
+#   * COVID data is intentionally INCLUDED (exclude_covid=False) to match
+#     the article methodology — visible in their Fig. 8 train/test split
 #
-# The data splits below use our pre-COVID regime for methodological soundness.
-# To replicate the article's splits (which include COVID), change train_range /
-# test_range to cover Sep 2018 – mid 2020 (train) and mid 2020 – 2021 (test).
+# IMPORTANT — "MSE" column in the article:
+#   The paper's reported "MSE" values are numerically very close to their MAE
+#   (e.g. MAE=82.8, "MSE"=90.5 for JPL 30d LSTM).  This is inconsistent with
+#   true MSE (should be >>MAE²/N).  We believe the article reports RMSE (√MSE)
+#   mislabelled as MSE.  Our RMSE column is the correct comparison target.
 # =============================================================================
 
 def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
@@ -624,6 +658,8 @@ def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=Non
             'learning_rate': 0.001,
             'dropout_rate': 0.2,              # Article Table 1
             'activation': 'relu',
+            'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
+            'use_early_stopping': True,        # Article: EarlyStopping
         }
 
         if 'ACN_JPL' in datasets:
@@ -660,6 +696,8 @@ def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_
             'num_heads': 4,
             'key_dim': 64,
             'dropout': 0.2,                   # Article Table 1
+            'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
+            'use_early_stopping': True,        # Article: EarlyStopping
         }
 
         if 'ACN_JPL' in datasets:
@@ -695,6 +733,8 @@ def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=N
             'd_model': 128,
             'num_heads': 4,
             'dropout': 0.2,                   # Article Table 1
+            'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
+            'use_early_stopping': True,        # Article: EarlyStopping
         }
 
         if 'ACN_JPL' in datasets:
@@ -816,7 +856,8 @@ if __name__ == "__main__":
     n_trials = 5
 
     # MLflow tracking (set to None to disable)
-    MLFLOW_TRACKING_URI = "http://localhost:5000"
+    #MLFLOW_TRACKING_URI = "http://localhost:5000"
+    MLFLOW_TRACKING_URI = None
 
     #optimize_lstm(datasets, n_trials, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 

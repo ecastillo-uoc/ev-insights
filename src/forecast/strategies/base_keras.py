@@ -25,6 +25,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+from keras.callbacks import ReduceLROnPlateau, EarlyStopping
 from sklearn.preprocessing import MinMaxScaler
 
 from .interfaces import ModelStrategy
@@ -383,11 +384,27 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         keyword arguments to ``build_model()``.
         """
         model = self.build_model(input_shape, **strategy_params)
+
+        # Optional Keras callbacks — enabled by strategy_params flags.
+        # Hussain et al. (2025) use ReduceLROnPlateau and EarlyStopping.
+        callbacks = []
+        if strategy_params.get('use_lr_scheduler', False):
+            callbacks.append(ReduceLROnPlateau(
+                monitor='loss', patience=10, factor=0.5, min_lr=1e-6, verbose=0,
+            ))
+        if strategy_params.get('use_early_stopping', False):
+            callbacks.append(EarlyStopping(
+                monitor='loss', patience=20, restore_best_weights=True, verbose=0,
+            ))
+
         self.logger.info(
             f"Training {self._strategy_display_name} model for {epochs} epochs, "
             f"batch size {batch_size}..."
         )
-        model.fit(X, y, epochs=epochs, batch_size=batch_size, verbose=0)
+        model.fit(
+            X, y, epochs=epochs, batch_size=batch_size, verbose=0,
+            callbacks=callbacks if callbacks else None,
+        )
         return model
 
     # ------------------------------------------------------------------

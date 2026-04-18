@@ -168,11 +168,18 @@ def fetch_dataset_session_details_by_specific_site(dataset_name: str, site_name:
         print(f"An error occurred while fetching specific site details for {dataset_name} at {site_name}: Query: {query}\n -- {e}")
         return pd.DataFrame()
 
-def fetch_daily_energy_for_forecast(dataset_name: str, db_config: dict = None) -> pd.DataFrame:
+def fetch_daily_energy_for_forecast(dataset_name: str, db_config: dict = None,
+                                    exclude_covid: bool = None) -> pd.DataFrame:
     """
     Fetches daily energy demand data and formats it for forecasting models (Prophet/LSTM).
     Fills missing days with 0 and removes the COVID no-data period.
     Returns DataFrame with a DatetimeIndex 'ds' and values 'y'.
+
+    Parameters
+    ----------
+    exclude_covid : bool | None
+        If ``True``/``False``, override the global ``EXCLUDE_COVID_DATA``
+        constant.  ``None`` (default) defers to the constant.
     """
     df = fetch_dataset_energy_trends(dataset_name, db_config)
     if df.empty:
@@ -190,7 +197,8 @@ def fetch_daily_energy_for_forecast(dataset_name: str, db_config: dict = None) -
 
     # Remove COVID no-data period — the gap contains only artificial zeros
     # from asfreq fill, not real observations
-    if EXCLUDE_COVID_DATA:
+    should_exclude = exclude_covid if exclude_covid is not None else EXCLUDE_COVID_DATA
+    if should_exclude:
         covid_mask = (df.index >= pd.to_datetime(COVID_START)) & (df.index <= pd.to_datetime(COVID_END))
         df = df[~covid_mask]
     

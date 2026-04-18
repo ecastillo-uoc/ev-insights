@@ -24,6 +24,7 @@ from .xgboost_strategy import XGBoostModelStrategy
 from .lstm_strategy import LSTMModelStrategy
 from .transformer_strategy import TransformerModelStrategy
 from .hussain_transformer_strategy import HussainTransformerModelStrategy
+from .hussain_hybrid_strategy import HussainHybridModelStrategy
 from .hybrid_strategy import HybridTransformerLSTMModelStrategy
 
 __all__ = [
@@ -37,5 +38,6 @@ __all__ = [
     'LSTMModelStrategy',
     'TransformerModelStrategy',
     'HussainTransformerModelStrategy',
+    'HussainHybridModelStrategy',
     'HybridTransformerLSTMModelStrategy',
 ]

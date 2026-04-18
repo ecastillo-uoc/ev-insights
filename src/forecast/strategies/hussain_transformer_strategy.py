@@ -86,8 +86,12 @@ class HussainTransformerModelStrategy(KerasTimeSeriesBaseStrategy):
             key_dim=key_dim, num_heads=num_heads, dropout=dropout,
         )(x, x)
 
-        # Global average pooling (Eq. 10)
-        x = GlobalAveragePooling1D(data_format="channels_first")(x)
+        # Global average pooling over *timesteps* (Eq. 10).
+        # channels_last (default) is correct: input (batch, timesteps, features)
+        # pools over dim-1 (timesteps) → output (batch, features=encoding_dim).
+        # NOTE: channels_first would incorrectly pool over the feature/encoding
+        # dimension instead of the temporal dimension.
+        x = GlobalAveragePooling1D()(x)
 
         # Regression output — single Dense(1), no MLP head (Eq. 12)
         outputs = Dense(1)(x)
