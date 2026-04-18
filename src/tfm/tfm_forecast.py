@@ -41,12 +41,20 @@ from src.tfm.tfm_constants import COVID_START, COVID_END
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def plot_train_test_split(train, test, dataset_name, forecast_horizon, zoom_range=None):
-    """Plot the real training data and test data split."""
+def plot_train_test_split(train, test, dataset_name, forecast_horizon, zoom_range=None, model_name=None):
+    """Plot the target variable over time with distinct colours for train and test periods."""
     plt.figure(figsize=(12, 6))
-    plt.plot(train.index, train['y'], label='Train', linewidth=1.5)
-    plt.plot(test.index, test['y'], label='Test (Actual)', linewidth=1.5)
-    plt.title(f'Train vs Test Split for {dataset_name}')
+    plt.plot(train.index, train['y'], label='Train', linewidth=1.5, color='#1f77b4')
+    plt.plot(test.index, test['y'], label='Test (Actual)', linewidth=1.5, color='#ff7f0e')
+
+    # Vertical line at the train/test boundary
+    split_date = train.index.max()
+    plt.axvline(x=split_date, color='grey', linestyle='--', linewidth=1, label='Train / Test split')
+
+    title = f'Train vs Test Split for {dataset_name}'
+    if model_name:
+        title += f'\nModel: {model_name}'
+    plt.title(title)
     plt.xlabel('Date')
     plt.ylabel('Energy delivered (kWh)')
     plt.legend()
@@ -54,18 +62,21 @@ def plot_train_test_split(train, test, dataset_name, forecast_horizon, zoom_rang
     
     # Save full plot
     os.makedirs('output_plots', exist_ok=True)
-    plot_path = f'output_plots/{dataset_name}_train_test_split_{forecast_horizon}days.png'
+    suffix = f'_{model_name}' if model_name else ''
+    plot_path = f'output_plots/{dataset_name}_train_test_split{suffix}_{forecast_horizon}days.png'
     plt.savefig(plot_path)
     logging.info(f"Train/Test split plot saved to {plot_path}")
 
     # Save zoom plot if range is provided
+    plot_path_zoom = None
     if zoom_range:
         plt.xlim(pd.to_datetime(zoom_range[0]), pd.to_datetime(zoom_range[1]))
-        plot_path_zoom = f'output_plots/train_test_split_{dataset_name}_{forecast_horizon}days_zoom.png'
+        plot_path_zoom = f'output_plots/{dataset_name}_train_test_split{suffix}_{forecast_horizon}days_zoom.png'
         plt.savefig(plot_path_zoom)
         logging.info(f"Train/Test split zoom plot saved to {plot_path_zoom}")
 
     plt.close()
+    return plot_path
 
 
 
@@ -320,10 +331,12 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             
             # 6. Plot real vs predictions
             zoom_range = strategy_params.get('zoom_range', None)
-            plot_train_test_split(train_df, test_df, dataset, forecast_horizon, zoom_range=zoom_range)
+            plot_path_split = plot_train_test_split(
+                train_df, test_df, dataset, forecast_horizon,
+                zoom_range=zoom_range, model_name=model_name
+            )
 
             plot_path_predict = f'output_plots/{dataset}_actual_vs_predict_{model_name}_{forecast_horizon}days.png'
-            plot_path_split = f'output_plots/{dataset}_train_test_split_{forecast_horizon}days.png'
             plot_test_vs_predict(test_df.iloc[:min_len], preds_array[:min_len], dataset, model_name, forecast_horizon)
 
             # 7. Log to MLflow (optional)
