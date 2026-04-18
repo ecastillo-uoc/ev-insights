@@ -1,6 +1,8 @@
 import pandas as pd
 from sqlalchemy import create_engine
 
+from src.tfm.tfm_constants import COVID_START, COVID_END
+
 DEFAULT_DB_CONFIG = {
     'dbname': 'evinsights',
     'user': 'evinsights',
@@ -166,7 +168,7 @@ def fetch_dataset_session_details_by_specific_site(dataset_name: str, site_name:
 def fetch_daily_energy_for_forecast(dataset_name: str, db_config: dict = None) -> pd.DataFrame:
     """
     Fetches daily energy demand data and formats it for forecasting models (Prophet/LSTM).
-    Fills missing days with 0. 
+    Fills missing days with 0 and removes the COVID no-data period.
     Returns DataFrame with a DatetimeIndex 'ds' and values 'y'.
     """
     df = fetch_dataset_energy_trends(dataset_name, db_config)
@@ -179,6 +181,11 @@ def fetch_daily_energy_for_forecast(dataset_name: str, db_config: dict = None) -
     
     # Ensure regular daily frequency, filling missing days with 0
     df = df.asfreq('D', fill_value=0)
+    
+    # Remove COVID no-data period — the gap contains only artificial zeros
+    # from asfreq fill, not real observations
+    covid_mask = (df.index >= pd.to_datetime(COVID_START)) & (df.index <= pd.to_datetime(COVID_END))
+    df = df[~covid_mask]
     
     return df
 
