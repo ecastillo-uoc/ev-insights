@@ -7,7 +7,7 @@ Architecture (Sequential):
 
 Hyperparameters read from ``df.attrs['lstm_params']``:
   epochs, batch_size, learning_rate, activation, dropout_rate, look_back,
-  train_range, test_range, prediction_days, etc.
+  train_range, test_range, forecast_horizon, etc.
 
 All shared train/predict pipeline logic lives in ``KerasTimeSeriesBaseStrategy``.
 """

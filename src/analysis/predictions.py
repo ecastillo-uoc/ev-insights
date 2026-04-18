@@ -14,7 +14,7 @@ _logger.setLevel(logging.DEBUG)
 def plot_predictions_energy(actual_dates, actual_values, future_dates, 
                      prediced_values, 
                      title:str,
-                     prediction_days:str, 
+                     forecast_horizon:str, 
                      save_dir=None, show_images:bool=False):
     """
     Plots the real values and the predicted values.
@@ -25,7 +25,7 @@ def plot_predictions_energy(actual_dates, actual_values, future_dates,
         future_dates (array-like): The dates corresponding to the future predictions.
         predictions (array-like): Inverse-scaled predictions to plot against actuals.
         title (str): Name of the plot
-        prediction_days (str): The prediction horizon in days (e.g., "30 Days").
+        forecast_horizon (str): The prediction horizon in days (e.g., "30 Days").
         save_dir (Path or str): Directory to save the plot. Optional.
     """
     
@@ -38,7 +38,7 @@ def plot_predictions_energy(actual_dates, actual_values, future_dates,
     plt.plot(future_dates, prediced_values, label="LSTM Predictions", color='orange', linestyle='--', linewidth=2)
     
     # Formatting
-    plt.title(f"Forecast: model:{title} - {prediction_days} Days Horizon")
+    plt.title(f"Forecast: model:{title} - {forecast_horizon} Days Horizon")
     plt.xlabel("Date")
     plt.ylabel("Energy (kWh)")
     plt.grid(True, linestyle='--', alpha=0.6)
@@ -46,7 +46,7 @@ def plot_predictions_energy(actual_dates, actual_values, future_dates,
     plt.tight_layout()
     
     if save_dir:
-        plot_fn = f"{title}_{prediction_days}.png".replace(" ","_")
+        plot_fn = f"{title}_{forecast_horizon}.png".replace(" ","_")
         save_path = Path(save_dir) / plot_fn
         save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(str(save_path))

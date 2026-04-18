@@ -146,20 +146,19 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
 
     @staticmethod
     def _resolve_predict_bounds(params: dict, forecast_horizon: int | None = None) -> Tuple[int, str | None, str | None]:
-        """Return ``(prediction_days, predict_start_date, predict_end_date)``.
+        """Return ``(forecast_horizon, predict_start_date, predict_end_date)``.
 
-        *forecast_horizon* (if supplied) is used as the default for
-        ``prediction_days`` when the latter is absent from *params*.
+
         """
         default_days = forecast_horizon if forecast_horizon is not None else 30
-        prediction_days = params.get('prediction_days', default_days)
+        forecast_horizon = params.get('forecast_horizon', default_days)
         predict_start_date = params.get('predict_start_date')
         predict_end_date = params.get('predict_end_date')
         test_range = params.get('test_range')
         if test_range:
             predict_start_date = test_range[0] or predict_start_date
             predict_end_date = test_range[1] or predict_end_date
-        return prediction_days, predict_start_date, predict_end_date
+        return forecast_horizon, predict_start_date, predict_end_date
 
     def _predict_schedule(
         self,
@@ -169,7 +168,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         model,
         scaler: MinMaxScaler,
         look_back: int,
-        prediction_days: int,
+        forecast_horizon: int,
         predict_start_date: str | None,
         predict_end_date: str | None,
     ) -> dict:
@@ -202,7 +201,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             current_seq = scaled_data.copy()
             predictions = []
 
-            for _ in range(prediction_days):
+            for _ in range(forecast_horizon):
                 pred = model.predict(current_seq[np.newaxis, :, :], verbose=0)
                 predictions.append(pred[0, 0])
                 current_seq = np.roll(current_seq, -1, axis=0)
@@ -222,7 +221,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                 last_date = pd.Timestamp.now()
             future_dates = pd.date_range(
                 start=last_date + pd.Timedelta(days=1),
-                periods=prediction_days,
+                periods=forecast_horizon,
                 freq='D',
             )
 
@@ -415,7 +414,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                 return output_dict
             model, scaler, look_back, forecast_horizon, params = unpacked
 
-            prediction_days, predict_start_date, predict_end_date = (
+            forecast_horizon, predict_start_date, predict_end_date = (
                 self._resolve_predict_bounds(params, forecast_horizon)
             )
 
@@ -423,7 +422,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                 result = self._predict_schedule(
                     df, target_column, dataset_names,
                     model, scaler, look_back,
-                    prediction_days, predict_start_date, predict_end_date,
+                    forecast_horizon, predict_start_date, predict_end_date,
                 )
             else:
                 result = self._predict_backtest(
