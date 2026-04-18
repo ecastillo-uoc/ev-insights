@@ -27,9 +27,10 @@ def save_model(forecaster_name: str, results: dict, models_dir: str, algo: str =
 
     for model_name, output in results['train'].items():
         model_obj = output['model']
+        train_params = output.get('params', {})
 
         if isinstance(model_obj, dict) and 'keras_model' in model_obj:
-            _save_keras(model_obj, model_name, models_path, forecaster_name)
+            _save_keras(model_obj, model_name, models_path, forecaster_name, train_params)
         else:
             _save_native(model_obj, model_name, models_path, forecaster_name)
 
@@ -86,13 +87,17 @@ def list_models(models_dir: str) -> list[str]:
 
 # --- Private helpers ---
 
-def _save_keras(model_obj: dict, model_name: str, models_path: Path, forecaster_name: str):
+def _save_keras(model_obj: dict, model_name: str, models_path: Path, forecaster_name: str, train_params: dict = None):
     keras_path = models_path / f"{model_name}.keras"
     scaler_path = models_path / f"{model_name}_scaler.pkl"
     meta_path = models_path / f"{model_name}_meta.pkl"
     model_obj['keras_model'].save(str(keras_path))
     joblib.dump(model_obj['scaler'], str(scaler_path))
-    joblib.dump({'look_back': model_obj.get('look_back', 30)}, str(meta_path))
+    meta = {
+        'look_back': model_obj.get('look_back', 30),
+        'params': train_params or {},
+    }
+    joblib.dump(meta, str(meta_path))
     logger.info(f"Saved LSTM model {forecaster_name} to {keras_path}")
 
 
@@ -118,6 +123,7 @@ def _load_keras(model_name: str, models_path: Path):
         'keras_model': keras_model,
         'scaler': scaler,
         'look_back': meta.get('look_back', 30),
+        'params': meta.get('params', {}),
     }
 
 
