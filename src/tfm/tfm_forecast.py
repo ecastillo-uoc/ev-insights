@@ -153,7 +153,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             # 2. Train model using appropriate ModelStrategy
             if model_type == "transformer":
                 strategy = TransformerModelStrategy()
-                model_name_prefix = f"transformer_{horizon_days}d"
+                model_name_prefix = f"transformer_{forecast_horizon}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
@@ -163,7 +163,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df.attrs['transformer_params'] = strategy_params
             elif model_type == "lightgbm":
                 strategy = LightGBMModelStrategy()
-                model_name_prefix = f"lightgbm_{horizon_days}d"
+                model_name_prefix = f"lightgbm_{forecast_horizon}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
@@ -173,7 +173,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df.attrs['lgbm_params'] = strategy_params
             elif model_type == "xgboost":
                 strategy = XGBoostModelStrategy()
-                model_name_prefix = f"xgboost_{horizon_days}d"
+                model_name_prefix = f"xgboost_{forecast_horizon}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
@@ -183,7 +183,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df.attrs['xgb_params'] = strategy_params
             elif model_type == "hybrid":
                 strategy = HybridTransformerLSTMModelStrategy()
-                model_name_prefix = f"hybrid_{horizon_days}d"
+                model_name_prefix = f"hybrid_{forecast_horizon}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
@@ -193,7 +193,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df.attrs['hybrid_params'] = strategy_params
             elif model_type == "hussain_lstm":
                 strategy = LSTMModelStrategy()
-                model_name_prefix = f"hussain_lstm_{horizon_days}d"
+                model_name_prefix = f"hussain_lstm_{forecast_horizon}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
@@ -203,7 +203,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df.attrs['lstm_params'] = strategy_params
             elif model_type == "hussain_transformer":
                 strategy = HussainTransformerModelStrategy()
-                model_name_prefix = f"hussain_transformer_{horizon_days}d"
+                model_name_prefix = f"hussain_transformer_{forecast_horizon}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
@@ -213,7 +213,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df.attrs['hussain_transformer_params'] = strategy_params
             elif model_type == "hussain_hybrid":
                 strategy = HybridTransformerLSTMModelStrategy()
-                model_name_prefix = f"hussain_hybrid_{horizon_days}d"
+                model_name_prefix = f"hussain_hybrid_{forecast_horizon}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
@@ -223,7 +223,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df.attrs['hybrid_params'] = strategy_params
             else:
                 strategy = LSTMModelStrategy()
-                model_name_prefix = f"lstm_{horizon_days}d"
+                model_name_prefix = f"lstm_{forecast_horizon}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
