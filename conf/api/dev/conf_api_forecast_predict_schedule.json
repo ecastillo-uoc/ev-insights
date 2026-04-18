@@ -35,7 +35,7 @@
                     "port": "5000",
                     "user": "mlflow",
                     "password": "mlflow",
-                    "bucket_name": "mlflow",
+                    "bucket_name": "mlflow-bucket",
                     "init_storage": false
                 }
             },

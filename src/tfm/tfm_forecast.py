@@ -20,6 +20,15 @@ from src.forecast.forecast_implementations import LSTMModelStrategy, Transformer
 from src.forecast.model_persistence import save_model, load_model
 from src.forecast.strategies.utils_ts import smape
 
+# MLflow (optional, for experiment tracking)
+try:
+    import mlflow
+    import joblib
+    import tempfile
+    _MLFLOW_AVAILABLE = True
+except ImportError:
+    _MLFLOW_AVAILABLE = False
+
 # Optimization
 import optuna
 from src.tfm.param_optimization import objective_lstm, objective_transformer
@@ -84,7 +93,8 @@ def plot_test_vs_predict(test, predictions, dataset_name, model_name, test_size)
     plt.close()
     logging.info(f"Actual vs Predict plot saved to {plot_path}")
 
-def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type="lstm", model_suffix=""):
+def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type="lstm", model_suffix="",
+                          mlflow_tracking_uri=None):
     
     models_dir = 'output_models'
     os.makedirs(models_dir, exist_ok=True)
@@ -278,14 +288,79 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             # 6. Plot real vs predictions
             zoom_range = strategy_params.get('zoom_range', None)
             plot_train_test_split(train_df, test_df, dataset, lag_size_days, zoom_range=zoom_range)
+
+            plot_path_predict = f'output_plots/{dataset}_actual_vs_predict_{model_name}_{lag_size_days}days.png'
+            plot_path_split = f'output_plots/{dataset}_train_test_split_{lag_size_days}days.png'
             plot_test_vs_predict(test_df.iloc[:min_len], preds_array[:min_len], dataset, model_name, lag_size_days)
+
+            # 7. Log to MLflow (optional)
+            if mlflow_tracking_uri and _MLFLOW_AVAILABLE:
+                try:
+                    mlflow.set_tracking_uri(mlflow_tracking_uri)
+                    experiment_name = model_name
+                    experiment = mlflow.get_experiment_by_name(experiment_name)
+                    if experiment is None:
+                        experiment_id = mlflow.create_experiment(experiment_name)
+                    else:
+                        experiment_id = experiment.experiment_id
+
+                    with mlflow.start_run(experiment_id=experiment_id, run_name=f"{model_name}_{lag_size_days}d"):
+                        # Log hyperparams (filter to serialisable scalar values)
+                        for k, v in strategy_params.items():
+                            if isinstance(v, (int, float, str, bool)):
+                                mlflow.log_param(k, v)
+                        mlflow.log_param('model_type', model_type)
+                        mlflow.log_param('split_date', split_date_str)
+                        mlflow.log_param('lag_size_days', lag_size_days)
+
+                        # Log metrics
+                        mlflow.log_metrics(metrics)
+
+                        # Log model artifacts
+                        train_output = trained_models_dict['train'].get(f"{model_name_prefix}_{dataset}", {})
+                        model_obj = train_output.get('model')
+                        if isinstance(model_obj, dict) and 'keras_model' in model_obj:
+                            mlflow.keras.log_model(model_obj['keras_model'], artifact_path=f"{model_type}_model",
+                                                   registered_model_name=model_name)
+                            with tempfile.TemporaryDirectory() as tmpdir:
+                                if model_obj.get('scaler') is not None:
+                                    scaler_p = os.path.join(tmpdir, 'scaler.pkl')
+                                    joblib.dump(model_obj['scaler'], scaler_p)
+                                    mlflow.log_artifact(scaler_p, artifact_path=f"{model_type}_model")
+                                meta = {
+                                    'look_back': model_obj.get('look_back', 30),
+                                    'params': strategy_params,
+                                }
+                                meta_p = os.path.join(tmpdir, 'meta.pkl')
+                                joblib.dump(meta, meta_p)
+                                mlflow.log_artifact(meta_p, artifact_path=f"{model_type}_model")
+                        elif model_obj is not None:
+                            try:
+                                if model_type == 'lightgbm':
+                                    mlflow.lightgbm.log_model(model_obj, artifact_path=f"{model_type}_model",
+                                                              registered_model_name=model_name)
+                                elif model_type == 'xgboost':
+                                    mlflow.xgboost.log_model(model_obj, artifact_path=f"{model_type}_model",
+                                                             registered_model_name=model_name)
+                            except Exception as model_log_err:
+                                logging.warning(f"Could not log model to MLflow: {model_log_err}")
+
+                        # Log plot artifacts
+                        if os.path.exists(plot_path_predict):
+                            mlflow.log_artifact(plot_path_predict, artifact_path="plots")
+                        if os.path.exists(plot_path_split):
+                            mlflow.log_artifact(plot_path_split, artifact_path="plots")
+
+                    logging.info(f"MLflow run logged for {model_name}")
+                except Exception as mlflow_err:
+                    logging.warning(f"MLflow logging failed (non-blocking): {mlflow_err}")
             
     summary_df = pd.DataFrame(results_summary)
     logging.info("\\nFinal Benchmark Summary:\\n" + summary_df.to_string())
     summary_df.to_csv('forecast_metrics_summary.csv', index=False)
     logging.info("Metrics saved to forecast_metrics_summary.csv")
 
-def execute_lstm(datsets, prediction_lag_days): 
+def execute_lstm(datsets, prediction_lag_days, mlflow_tracking_uri=None): 
     # fetch and plot
     split_date_str = "2021-01-01"
     strategy_params_lstm = {
@@ -319,9 +394,9 @@ def execute_lstm(datsets, prediction_lag_days):
     # Merge base LSTM strategy params with the JPL specific overrides
     strategy_params_lstm_caltech = {**strategy_params_lstm, **strategy_caltech}
 
-    run_forecast_pipeline(['ACN_Caltech'], strategy_params_lstm_caltech, split_date_str)
+    run_forecast_pipeline(['ACN_Caltech'], strategy_params_lstm_caltech, split_date_str, mlflow_tracking_uri=mlflow_tracking_uri)
 
-def execute_transformer(datasets, prediction_lag_days):
+def execute_transformer(datasets, prediction_lag_days, mlflow_tracking_uri=None):
     split_date_str = "2021-01-01"
     strategy_params_transformer = {
         'epochs': 100, 
@@ -347,7 +422,7 @@ def execute_transformer(datasets, prediction_lag_days):
 
     # Only run if ACN_JPL is in datasets
     if 'ACN_JPL' in datasets:
-        run_forecast_pipeline(['ACN_JPL'], strategy_params_transformer_jpl, split_date_str, model_type="transformer")
+        run_forecast_pipeline(['ACN_JPL'], strategy_params_transformer_jpl, split_date_str, model_type="transformer", mlflow_tracking_uri=mlflow_tracking_uri)
 
     strategy_caltech = {
         'train_range': ('2019-01-01', '2019-06-30'),
@@ -359,9 +434,9 @@ def execute_transformer(datasets, prediction_lag_days):
 
     # Only run if ACN_Caltech is in datasets
     if 'ACN_Caltech' in datasets:
-        run_forecast_pipeline(['ACN_Caltech'], strategy_params_transformer_caltech, split_date_str, model_type="transformer")
+        run_forecast_pipeline(['ACN_Caltech'], strategy_params_transformer_caltech, split_date_str, model_type="transformer", mlflow_tracking_uri=mlflow_tracking_uri)
 
-def execute_lightgbm(datasets, prediction_lag_days):
+def execute_lightgbm(datasets, prediction_lag_days, mlflow_tracking_uri=None):
     split_date_str = "2021-01-01"
     strategy_params_lgbm = {
         'prediction_lag_days': prediction_lag_days,
@@ -381,7 +456,7 @@ def execute_lightgbm(datasets, prediction_lag_days):
     strategy_params_lgbm_jpl = {**strategy_params_lgbm, **strategy_jpl}
 
     if 'ACN_JPL' in datasets:
-        run_forecast_pipeline(['ACN_JPL'], strategy_params_lgbm_jpl, split_date_str, model_type="lightgbm")
+        run_forecast_pipeline(['ACN_JPL'], strategy_params_lgbm_jpl, split_date_str, model_type="lightgbm", mlflow_tracking_uri=mlflow_tracking_uri)
 
     strategy_caltech = {
         'train_range': ('2019-01-01', '2019-06-30'),
@@ -392,9 +467,9 @@ def execute_lightgbm(datasets, prediction_lag_days):
     strategy_params_lgbm_caltech = {**strategy_params_lgbm, **strategy_caltech}
 
     if 'ACN_Caltech' in datasets:
-        run_forecast_pipeline(['ACN_Caltech'], strategy_params_lgbm_caltech, split_date_str, model_type="lightgbm")
+        run_forecast_pipeline(['ACN_Caltech'], strategy_params_lgbm_caltech, split_date_str, model_type="lightgbm", mlflow_tracking_uri=mlflow_tracking_uri)
 
-def execute_xgboost(datasets, prediction_lag_days):
+def execute_xgboost(datasets, prediction_lag_days, mlflow_tracking_uri=None):
     split_date_str = "2021-01-01"
     strategy_params_xgb = {
         'prediction_lag_days': prediction_lag_days,
@@ -411,7 +486,7 @@ def execute_xgboost(datasets, prediction_lag_days):
     strategy_params_xgb_jpl = {**strategy_params_xgb, **strategy_jpl}
 
     if 'ACN_JPL' in datasets:
-        run_forecast_pipeline(['ACN_JPL'], strategy_params_xgb_jpl, split_date_str, model_type="xgboost")
+        run_forecast_pipeline(['ACN_JPL'], strategy_params_xgb_jpl, split_date_str, model_type="xgboost", mlflow_tracking_uri=mlflow_tracking_uri)
 
     strategy_caltech = {
         'train_range': ('2019-01-01', '2019-06-30'),
@@ -422,10 +497,10 @@ def execute_xgboost(datasets, prediction_lag_days):
     strategy_params_xgb_caltech = {**strategy_params_xgb, **strategy_caltech}
 
     if 'ACN_Caltech' in datasets:
-        run_forecast_pipeline(['ACN_Caltech'], strategy_params_xgb_caltech, split_date_str, model_type="xgboost")
+        run_forecast_pipeline(['ACN_Caltech'], strategy_params_xgb_caltech, split_date_str, model_type="xgboost", mlflow_tracking_uri=mlflow_tracking_uri)
 
 
-def execute_hybrid(datasets, prediction_lag_days):
+def execute_hybrid(datasets, prediction_lag_days, mlflow_tracking_uri=None):
     split_date_str = "2021-01-01"
     strategy_params_hybrid = {
         'epochs': 100, 
@@ -449,7 +524,7 @@ def execute_hybrid(datasets, prediction_lag_days):
     strategy_params_hybrid_jpl = {**strategy_params_hybrid, **strategy_jpl}
 
     if 'ACN_JPL' in datasets:
-        run_forecast_pipeline(['ACN_JPL'], strategy_params_hybrid_jpl, split_date_str, model_type="hybrid")
+        run_forecast_pipeline(['ACN_JPL'], strategy_params_hybrid_jpl, split_date_str, model_type="hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
 
     strategy_caltech = {
         'train_range': ('2019-01-01', '2019-06-30'),
@@ -460,11 +535,11 @@ def execute_hybrid(datasets, prediction_lag_days):
     strategy_params_hybrid_caltech = {**strategy_params_hybrid, **strategy_caltech}
 
     if 'ACN_Caltech' in datasets:
-        run_forecast_pipeline(['ACN_Caltech'], strategy_params_hybrid_caltech, split_date_str, model_type="hybrid")
+        run_forecast_pipeline(['ACN_Caltech'], strategy_params_hybrid_caltech, split_date_str, model_type="hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
 
 
 
-def optimize_lstm(datasets, n_trials):
+def optimize_lstm(datasets, n_trials, mlflow_tracking_uri=None):
     # Extract dataset name from list
     dataset_name = datasets[0] if datasets else None
     if not dataset_name:
@@ -548,7 +623,8 @@ def optimize_lstm(datasets, n_trials):
 
     strategy_params_lstm_best_jpl = {**strategy_params_lstm_best, **strategy_jpl}
     
-    run_forecast_pipeline([dataset_name], strategy_params_lstm_best_jpl, split_date_str, model_type="lstm", model_suffix="_optuna")
+    run_forecast_pipeline([dataset_name], strategy_params_lstm_best_jpl, split_date_str, model_type="lstm", model_suffix="_optuna",
+                           mlflow_tracking_uri=mlflow_tracking_uri)
     
     logging.info("\n" + "="*80)
     logging.info("LSTM OPTIMIZATION AND TRAINING COMPLETE")
@@ -566,16 +642,19 @@ if __name__ == "__main__":
     # datasets = ['ACN_Caltech', 'ACN_JPL']
     # prediction_lag_days = [30, 120, 240]
     datasets = ['ACN_JPL']
-    prediction_lag_days = [7]
+    prediction_lag_days = [30]
     split_date_str = "2021-01-01"
     n_trials = 5
 
-    optimize_lstm(datasets, n_trials)
+    # MLflow tracking (set to None to disable)
+    MLFLOW_TRACKING_URI = "http://localhost:5000"
+
+    #optimize_lstm(datasets, n_trials, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
     # tree based
-    #execute_lightgbm(datasets, prediction_lag_days)
-    #execute_xgboost(datasets, prediction_lag_days)
+    #execute_lightgbm(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    #execute_xgboost(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
-    # execute_lstm(datasets, prediction_lag_days)
-    # execute_transformer(datasets, prediction_lag_days)
-    # execute_hybrid(datasets, prediction_lag_days)
+    execute_lstm(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    # execute_transformer(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    # execute_hybrid(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)

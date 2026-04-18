@@ -64,10 +64,17 @@ class ForecastService(Service):
                                          f"mlflow_interface={'yes' if self.mlflow_interface else 'no'}, "
                                          f"models_dir={self.models_dir}")
                         if self.mlflow_interface:
-                            experiment_id, run_id, model = self.mlflow_interface.get_model(algo=forecast.algo,
-                                                                                           model_name=forecast.model_name)
-                            self.logger.debug(f"[ForecastService] MLflow model loaded: type={type(model).__name__}, "
-                                             f"experiment_id={experiment_id}, run_id={run_id}")
+                            try:
+                                experiment_id, run_id, model = self.mlflow_interface.get_model(algo=forecast.algo,
+                                                                                               model_name=forecast.model_name)
+                                self.logger.debug(f"[ForecastService] MLflow model loaded: type={type(model).__name__}, "
+                                                 f"experiment_id={experiment_id}, run_id={run_id}")
+                            except Exception as mlflow_err:
+                                self.logger.warning(f"MLflow model load failed, falling back to file: {mlflow_err}")
+                                model = model_persistence.load_model(
+                                    algo=forecast.algo,
+                                    model_name=forecast.model_name,
+                                    models_dir=self.models_dir)
                         else:
                             # Load model from filesystem (interface-agnostic)
                             try:
@@ -104,9 +111,17 @@ class ForecastService(Service):
                     if forecast.save_results:
                         if forecast.mode == 'train':
                             if self.mlflow_interface:
-                                self.mlflow_interface.save_forecast_model(forecaster_name=forecast.name,
-                                                                          algo=forecast.algo,
-                                                                          results=forecast.results)
+                                try:
+                                    self.mlflow_interface.save_forecast_model(forecaster_name=forecast.name,
+                                                                              algo=forecast.algo,
+                                                                              results=forecast.results)
+                                except Exception as mlflow_err:
+                                    self.logger.warning(f"MLflow save failed, falling back to file: {mlflow_err}")
+                                    model_persistence.save_model(
+                                        forecaster_name=forecast.name,
+                                        results=forecast.results,
+                                        models_dir=self.models_dir,
+                                        algo=forecast.algo)
                             else:
                                 # Save model to filesystem (interface-agnostic)
                                 model_persistence.save_model(

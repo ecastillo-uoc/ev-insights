@@ -287,6 +287,8 @@ class LightGBMModelStrategy(ModelStrategy):
         params = {'random_state': 16, 'test_size': 0.20}
         
         try:
+            # Merge user-supplied hyperparams from df.attrs
+            user_lgbm_params = df.attrs.get('lgbm_params', {})
 
             for dataset_name in dataset_names:
                 subset_df = df.loc[df['dataset_name'] == dataset_name]
@@ -330,13 +332,14 @@ class LightGBMModelStrategy(ModelStrategy):
                 features_to_use = list(X_train.columns)
 
                 lgb_params = {
-                    'num_leaves': 10,
-                    'learning_rate': 0.02,
-                    'max_depth': 5,
+                    'num_leaves': user_lgbm_params.get('num_leaves', 10),
+                    'learning_rate': user_lgbm_params.get('learning_rate', 0.02),
+                    'max_depth': user_lgbm_params.get('max_depth', 5),
                     'verbose': 0,
-                    'early_stopping_rounds': 200,
+                    'early_stopping_rounds': user_lgbm_params.get('early_stopping_rounds', 200),
                     'nthread': -1
                 }
+                params = {**params, **{k: v for k, v in lgb_params.items() if k != 'verbose' and k != 'nthread'}}
                 
                 features_to_use = list(X_train.columns)
 
@@ -488,7 +491,11 @@ class XGBoostModelStrategy(ModelStrategy):
               split_date: str = None) -> Dict[str, Any]:
         
         output_dict = {'train': {}}
-        params = {'random_state': 16, 'test_size': 0.20}
+        user_xgb_params = df.attrs.get('xgb_params', {})
+        params = {
+            'random_state': user_xgb_params.get('random_state', 16),
+            'test_size': user_xgb_params.get('test_size', 0.20),
+        }
 
         try:
             for dataset_name in dataset_names:

@@ -98,7 +98,8 @@ class MLflow(Interface):
                     self.save_params(run_id=run_id, params=params)
 
                 if model is not None and model != {}:
-                    self.save_model(run_id=run_id, algo=algo, model=model, model_name=model_name)
+                    self.save_model(run_id=run_id, algo=algo, model=model,
+                                    model_name=model_name, train_params=params)
 
                 if metrics is not None and metrics != {}:
                     self.save_metrics(run_id=run_id, metrics=metrics)
@@ -122,11 +123,11 @@ class MLflow(Interface):
         run_id = run.info.run_id
         return run_id
 
-    def save_model(self, run_id, algo, model, model_name):
+    def save_model(self, run_id, algo, model, model_name, train_params=None):
         self.logger.info(f"Saving model: run_id={run_id} algo={algo} model_name={model_name}")
         artifact_path = f"{algo}_model"
 
-        # LSTM/Keras: model is a dict with keras_model, scaler, look_back
+        # LSTM/Keras/Transformer/Hybrid: model is a dict with keras_model, scaler, look_back
         if isinstance(model, dict) and 'keras_model' in model:
             import joblib, tempfile, os
             mlflow.keras.log_model(model['keras_model'], artifact_path=artifact_path,
@@ -137,7 +138,10 @@ class MLflow(Interface):
                     scaler_path = os.path.join(tmpdir, 'scaler.pkl')
                     joblib.dump(model['scaler'], scaler_path)
                     self.client.log_artifact(run_id, scaler_path, artifact_path=artifact_path)
-                meta = {'look_back': model.get('look_back', 30)}
+                meta = {
+                    'look_back': model.get('look_back', 30),
+                    'params': train_params or {},
+                }
                 meta_path = os.path.join(tmpdir, 'meta.pkl')
                 joblib.dump(meta, meta_path)
                 self.client.log_artifact(run_id, meta_path, artifact_path=artifact_path)
@@ -155,6 +159,8 @@ class MLflow(Interface):
             'lightgbm': mlflow.lightgbm,
             'keras': mlflow.keras,
             'lstm': mlflow.keras,
+            'transformer': mlflow.keras,
+            'hybrid': mlflow.keras,
         }
         module = mapping.get(algo)
         if module is None:
@@ -239,8 +245,8 @@ class MLflow(Interface):
         self.logger.info(f"Loading model_name: {model_name}, run_id: {run_id}, experiment_id: {experiment.experiment_id}")
         model_uri = f"mlflow-artifacts:/{experiment.experiment_id}/{run_id}/artifacts/{artifact_path}"
 
-        # LSTM/Keras: load keras model + scaler + metadata
-        if algo in ('lstm', 'keras'):
+        # LSTM/Keras/Transformer/Hybrid: load keras model + scaler + metadata
+        if algo in ('lstm', 'keras', 'transformer', 'hybrid'):
             import joblib, tempfile, os
             keras_model = mlflow.keras.load_model(model_uri=model_uri)
             # Download scaler and meta artifacts
@@ -253,6 +259,7 @@ class MLflow(Interface):
                 'keras_model': keras_model,
                 'scaler': scaler,
                 'look_back': meta.get('look_back', 30),
+                'params': meta.get('params', {}),
             }
         else:
             mlflow_module = self._get_mlflow_module(algo)
