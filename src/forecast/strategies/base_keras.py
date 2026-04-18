@@ -100,8 +100,16 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
     def _scale_and_create_sequences(
         data: np.ndarray,
         look_back: int,
+        forecast_horizon: int = 1,
     ) -> Tuple[np.ndarray, np.ndarray, MinMaxScaler]:
         """MinMax-scale *data* and build sliding-window sequences.
+
+        When *forecast_horizon* is 1 (default), targets are next-step scalars
+        and the method is backward-compatible with all existing models.
+
+        When *forecast_horizon* > 1 (direct multi-step), each target ``y[i]``
+        is a vector of the next *forecast_horizon* values — enabling a single
+        forward pass to predict the whole horizon at once.
 
         Returns ``(X, y, scaler)`` where *X* has shape
         ``(n_samples, look_back, 1)`` ready for Keras models.
@@ -110,9 +118,17 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         scaled_data = scaler.fit_transform(data)
 
         X, y = [], []
-        for i in range(len(scaled_data) - look_back):
-            X.append(scaled_data[i:(i + look_back), 0])
-            y.append(scaled_data[i + look_back, 0])
+        if forecast_horizon <= 1:
+            # ---- single-step targets (backward-compatible) ----
+            for i in range(len(scaled_data) - look_back):
+                X.append(scaled_data[i:(i + look_back), 0])
+                y.append(scaled_data[i + look_back, 0])
+        else:
+            # ---- direct multi-step targets ----
+            for i in range(len(scaled_data) - look_back - forecast_horizon + 1):
+                X.append(scaled_data[i:(i + look_back), 0])
+                y.append(scaled_data[(i + look_back):(i + look_back + forecast_horizon), 0])
+
         X = np.array(X)
         y = np.array(y)
 
@@ -210,6 +226,83 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
 
             predictions_unscaled = scaler.inverse_transform(
                 np.array(predictions).reshape(-1, 1)
+            )
+            predictions_series = predictions_unscaled.flatten().tolist()
+
+            # Determine last date for future date range
+            if isinstance(subset.index, pd.DatetimeIndex):
+                last_date = subset.index[-1]
+            elif 'plug_in_datetime' in subset.columns:
+                last_date = pd.to_datetime(subset['plug_in_datetime']).iloc[-1]
+            else:
+                last_date = pd.Timestamp.now()
+            future_dates = pd.date_range(
+                start=last_date + pd.Timedelta(days=1),
+                periods=forecast_horizon,
+                freq='D',
+            )
+
+            output_dict.update({
+                self.output_key: predictions_series,
+                'values': predictions_series,
+                'dates': future_dates.strftime('%Y-%m-%d').tolist(),
+                'value': predictions_series[0] if predictions_series else 0,
+                'date': datetime.now(),
+                'created_at': datetime.now(),
+            })
+
+        return output_dict
+
+    def _predict_direct_multistep(
+        self,
+        df: pd.DataFrame,
+        target_column: str,
+        dataset_names: List[str],
+        model,
+        scaler: MinMaxScaler,
+        look_back: int,
+        forecast_horizon: int,
+        predict_start_date: str | None,
+        predict_end_date: str | None,
+    ) -> dict:
+        """Run **direct multi-step** prediction: a single forward pass produces
+        all *forecast_horizon* values at once.
+
+        Requires the model's output layer to be ``Dense(forecast_horizon)``.
+        """
+        output_dict: Dict[str, Any] = {}
+
+        for dataset_name in dataset_names:
+            subset = df.loc[df['dataset_name'] == dataset_name].copy()
+            if subset.empty:
+                continue
+
+            if predict_start_date or predict_end_date:
+                if isinstance(subset.index, pd.DatetimeIndex):
+                    mask = pd.Series(True, index=subset.index)
+                    if predict_start_date:
+                        mask = mask & (subset.index >= pd.to_datetime(predict_start_date))
+                    if predict_end_date:
+                        mask = mask & (subset.index <= pd.to_datetime(predict_end_date))
+                    subset = subset[mask]
+
+            if len(subset) < look_back:
+                self.logger.warning(
+                    f"Not enough data for {dataset_name} to fulfill look_back of {look_back}"
+                )
+                continue
+
+            # Take the last look_back values as input seed
+            data = subset[[target_column]].values[-look_back:]
+            scaled_data = scaler.transform(data)
+
+            # Single forward pass → (1, forecast_horizon) output
+            pred_scaled = model.predict(
+                scaled_data.reshape(1, look_back, 1), verbose=0,
+            )
+            # pred_scaled shape: (1, forecast_horizon)
+            predictions_unscaled = scaler.inverse_transform(
+                pred_scaled.reshape(-1, 1),
             )
             predictions_series = predictions_unscaled.flatten().tolist()
 

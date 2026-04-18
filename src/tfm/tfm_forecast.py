@@ -121,12 +121,10 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
 
     for dataset in datasets:
         logging.info(f"--- Processing Dataset: {dataset} ---")
-        # Hussain models include COVID zeros to match the article methodology.
-        # Other models respect the global EXCLUDE_COVID_DATA constant.
         is_hussain = model_type.startswith("hussain_")
-        df = fetch_daily_energy_for_forecast(
-            dataset, exclude_covid=False if is_hussain else None,
-        )
+        # COVID exclusion is governed globally by EXCLUDE_COVID_DATA for ALL
+        # strategies — including Hussain variants.
+        df = fetch_daily_energy_for_forecast(dataset)
         
         if df.empty:
             logging.warning(f"No data found for {dataset}. Skipping.")
@@ -643,8 +641,8 @@ def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=Non
     # Article splits: train ~24 months (Sep 2018 – Aug 2020), test ~7 months (Sep 2020 – Mar 2021).
     # COVID period is intentionally included, consistent with the original paper.
     strategy_article = {
-        'train_range': ('2018-09-01', '2020-08-31'),
-        'test_range': ('2020-09-01', '2021-03-31'),
+        'train_range': ('2018-09-01', '2020-08-05'),
+        'test_range': ('2020-11-17', '2021-03-31'),
         #'zoom_range': ('2020-09-01', '2021-03-31'),
         'zoom_range': ('2021-01-01', '2021-03-31'),
     }
@@ -680,8 +678,9 @@ def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_
     # Article splits: train ~24 months (Sep 2018 – Aug 2020), test ~7 months (Sep 2020 – Mar 2021).
     # COVID period is intentionally included, consistent with the original paper.
     strategy_article = {
-        'train_range': ('2018-09-01', '2020-08-31'),
-        'test_range': ('2020-09-01', '2021-03-31'),
+        'train_range': ('2018-09-01', '2020-08-05'),
+        'test_range': ('2020-11-17', '2021-03-31'),
+        #'zoom_range': ('2020-09-01', '2021-03-31'),
         'zoom_range': ('2021-01-01', '2021-03-31'),
     }
 
@@ -718,9 +717,10 @@ def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=N
     # Article splits: train ~24 months (Sep 2018 – Aug 2020), test ~7 months (Sep 2020 – Mar 2021).
     # COVID period is intentionally included, consistent with the original paper.
     strategy_article = {
-        'train_range': ('2018-09-01', '2020-08-31'),
-        'test_range': ('2020-09-01', '2021-03-31'),
-        'zoom_range': ('2020-09-01', '2021-03-31'),
+        'train_range': ('2018-09-01', '2020-08-05'),
+        'test_range': ('2020-11-17', '2021-03-31'),
+        #'zoom_range': ('2020-09-01', '2021-03-31'),
+        'zoom_range': ('2021-01-01', '2021-03-31'),
     }
 
     for forecast_horizon in li_forecast_horizons:
