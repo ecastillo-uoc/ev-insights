@@ -910,6 +910,46 @@ class LSTMModelStrategy(ModelStrategy):
                         'created_at': datetime.now()
                     })
 
+                else:
+                    # Backtest / validate mode: rolling one-step predictions on test data
+                    subset = df.loc[df['dataset_name'] == dataset_name].copy()
+                    if subset.empty:
+                        continue
+
+                    all_data = subset[[target_column]].values
+                    scaled_all = scaler.transform(all_data)
+
+                    if len(scaled_all) <= look_back:
+                        self.logger.warning(f"Not enough data for {dataset_name} to backtest with look_back={look_back}")
+                        continue
+
+                    predictions_scaled = []
+                    for i in range(look_back, len(scaled_all)):
+                        seq = scaled_all[i - look_back:i].reshape(1, look_back, 1)
+                        pred = model.predict(seq, verbose=0)
+                        predictions_scaled.append(pred[0, 0])
+
+                    predictions_unscaled = scaler.inverse_transform(
+                        np.array(predictions_scaled).reshape(-1, 1)
+                    ).flatten().tolist()
+
+                    actuals_unscaled = all_data[look_back:].flatten().tolist()
+
+                    if isinstance(subset.index, pd.DatetimeIndex):
+                        pred_dates = subset.index[look_back:].strftime('%Y-%m-%d').tolist()
+                    else:
+                        pred_dates = list(range(len(predictions_unscaled)))
+
+                    output_dict['predict'].update({
+                        self.output_key: predictions_unscaled,
+                        'values': predictions_unscaled,
+                        'actuals': actuals_unscaled,
+                        'dates': pred_dates,
+                        'value': predictions_unscaled[0] if predictions_unscaled else 0,
+                        'date': datetime.now(),
+                        'created_at': datetime.now()
+                    })
+
         except Exception as e:
             self.logger.error(f"LSTM predict failed: {e}\n{traceback.format_exc()}")
             raise
@@ -1154,6 +1194,46 @@ class TransformerModelStrategy(ModelStrategy):
                         'created_at': datetime.now()
                     })
 
+                else:
+                    # Backtest / validate mode: rolling one-step predictions on test data
+                    subset = df.loc[df['dataset_name'] == dataset_name].copy()
+                    if subset.empty:
+                        continue
+
+                    all_data = subset[[target_column]].values
+                    scaled_all = scaler.transform(all_data)
+
+                    if len(scaled_all) <= look_back:
+                        self.logger.warning(f"Not enough data for {dataset_name} to backtest with look_back={look_back}")
+                        continue
+
+                    predictions_scaled = []
+                    for i in range(look_back, len(scaled_all)):
+                        seq = scaled_all[i - look_back:i].reshape(1, look_back, 1)
+                        pred = model.predict(seq, verbose=0)
+                        predictions_scaled.append(pred[0, 0])
+
+                    predictions_unscaled = scaler.inverse_transform(
+                        np.array(predictions_scaled).reshape(-1, 1)
+                    ).flatten().tolist()
+
+                    actuals_unscaled = all_data[look_back:].flatten().tolist()
+
+                    if isinstance(subset.index, pd.DatetimeIndex):
+                        pred_dates = subset.index[look_back:].strftime('%Y-%m-%d').tolist()
+                    else:
+                        pred_dates = list(range(len(predictions_unscaled)))
+
+                    output_dict['predict'].update({
+                        self.output_key: predictions_unscaled,
+                        'values': predictions_unscaled,
+                        'actuals': actuals_unscaled,
+                        'dates': pred_dates,
+                        'value': predictions_unscaled[0] if predictions_unscaled else 0,
+                        'date': datetime.now(),
+                        'created_at': datetime.now()
+                    })
+
         except Exception as e:
             self.logger.error(f"Transformer predict failed: {e}\n{traceback.format_exc()}")
             raise
@@ -1374,6 +1454,46 @@ class HybridTransformerLSTMModelStrategy(ModelStrategy):
                         'values': predictions_series,
                         'dates': future_dates.strftime('%Y-%m-%d').tolist(),
                         'value': predictions_series[0] if predictions_series else 0,
+                        'date': datetime.now(),
+                        'created_at': datetime.now()
+                    })
+
+                else:
+                    # Backtest / validate mode: rolling one-step predictions on test data
+                    subset = df.loc[df['dataset_name'] == dataset_name].copy()
+                    if subset.empty:
+                        continue
+
+                    all_data = subset[[target_column]].values
+                    scaled_all = scaler.transform(all_data)
+
+                    if len(scaled_all) <= look_back:
+                        self.logger.warning(f"Not enough data for {dataset_name} to backtest with look_back={look_back}")
+                        continue
+
+                    predictions_scaled = []
+                    for i in range(look_back, len(scaled_all)):
+                        seq = scaled_all[i - look_back:i].reshape(1, look_back, 1)
+                        pred = model.predict(seq, verbose=0)
+                        predictions_scaled.append(pred[0, 0])
+
+                    predictions_unscaled = scaler.inverse_transform(
+                        np.array(predictions_scaled).reshape(-1, 1)
+                    ).flatten().tolist()
+
+                    actuals_unscaled = all_data[look_back:].flatten().tolist()
+
+                    if isinstance(subset.index, pd.DatetimeIndex):
+                        pred_dates = subset.index[look_back:].strftime('%Y-%m-%d').tolist()
+                    else:
+                        pred_dates = list(range(len(predictions_unscaled)))
+
+                    output_dict['predict'].update({
+                        self.output_key: predictions_unscaled,
+                        'values': predictions_unscaled,
+                        'actuals': actuals_unscaled,
+                        'dates': pred_dates,
+                        'value': predictions_unscaled[0] if predictions_unscaled else 0,
                         'date': datetime.now(),
                         'created_at': datetime.now()
                     })

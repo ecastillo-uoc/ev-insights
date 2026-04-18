@@ -216,7 +216,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             # 4. Predict
             logging.info("Generating predictions...")
             
-            # For LSTM/Transformer models we do autoregressive rolling forecast using the train data
+            # For LSTM/Transformer models we use backtest mode (rolling one-step on test data)
             # For tree-based models we predict directly on the test data which already has the lag features
             if model_type in ["xgboost", "lightgbm"]:
                 predict_df = test_df.copy()
@@ -228,8 +228,9 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 
                 predict_mode = None
             else:
-                predict_df = train_df
-                predict_mode = 'schedule'
+                predict_df = test_df.copy()
+                predict_df['dataset_name'] = dataset
+                predict_mode = None  # Triggers backtest/validate mode
 
             predict_dict = strategy.predict(
                 df=predict_df, 
@@ -243,8 +244,14 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             predictions = predict_dict['predict']['values']
             
             # 5. Provide metrics
-            preds_array = np.array(predictions)
-            actuals_array = test_df['y'].values
+            # Use actuals from predict output if available (backtest mode), else from test_df
+            predict_actuals = predict_dict['predict'].get('actuals')
+            if predict_actuals is not None:
+                actuals_array = np.array(predict_actuals)
+                preds_array = np.array(predictions)
+            else:
+                preds_array = np.array(predictions)
+                actuals_array = test_df['y'].values
             
             # Handling lengths
             min_len = min(len(preds_array), len(actuals_array))
