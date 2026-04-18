@@ -8,6 +8,7 @@ from .strategies import (
     XGBoostModelStrategy,
     LSTMModelStrategy,
     TransformerModelStrategy,
+    HussainTransformerModelStrategy,
     HybridTransformerLSTMModelStrategy,
 )
 
@@ -24,6 +25,7 @@ class ModelStrategyType(Enum):
     XGBOOST = "xgboost"
     LSTM = "lstm"
     TRANSFORMER = "transformer"
+    HUSSAIN_TRANSFORMER = "hussain_transformer"
     HYBRID_TRANSFORMER_LSTM = "hybrid_transformer_lstm"
 
 # Registry dictionary
@@ -63,7 +65,13 @@ MODEL_STRATEGY_REGISTRY: Dict[ModelStrategyType, ModelStrategyInfo] = {
         strategy_class=HybridTransformerLSTMModelStrategy,
         default_params={"epochs": 50, "batch_size": 32}
     ),
-    
+    ModelStrategyType.HUSSAIN_TRANSFORMER: ModelStrategyInfo(
+        name=ModelStrategyType.HUSSAIN_TRANSFORMER.value,
+        display_name="Hussain Transformer",
+        description="Simplified single-attention Transformer from Hussain et al. (2025) for EV charging demand forecasting.",
+        strategy_class=HussainTransformerModelStrategy,
+        default_params={"epochs": 100, "batch_size": 32, "dropout": 0.2}
+    ),
 }
 
 def get_model_strategy(strategy_type: ModelStrategyType) -> ModelStrategy:

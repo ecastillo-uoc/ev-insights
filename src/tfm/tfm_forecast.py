@@ -16,7 +16,7 @@ from src.utils.console import Colors
 # forecast
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
 
-from src.forecast.strategies import LSTMModelStrategy, TransformerModelStrategy, LightGBMModelStrategy, XGBoostModelStrategy, HybridTransformerLSTMModelStrategy
+from src.forecast.strategies import LSTMModelStrategy, TransformerModelStrategy, HussainTransformerModelStrategy, LightGBMModelStrategy, XGBoostModelStrategy, HybridTransformerLSTMModelStrategy
 from src.forecast.model_persistence import save_model, load_model
 from src.forecast.strategies.utils_ts import smape
 
@@ -98,7 +98,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
     
     models_dir = 'output_models'
     os.makedirs(models_dir, exist_ok=True)
-    prediction_lag_days = strategy_params.get('prediction_lag_days', [1])
+    li_forecast_horizons = strategy_params.get('li_forecast_horizons', [1])
 
     results_summary = []
 
@@ -110,12 +110,12 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             logging.warning(f"No data found for {dataset}. Skipping.")
             continue
 
-        for lag_size_days in prediction_lag_days:
-            logging.info(f"Prediction window: {lag_size_days} days")
+        for forecast_horizon in li_forecast_horizons:
+            logging.info(f"Prediction window: {forecast_horizon} days")
             
             # 1. Split train/test
-            if len(df) <= lag_size_days:
-                logging.warning(f"Not enough data for test size {lag_size_days}. Skipping.")
+            if len(df) <= forecast_horizon:
+                logging.warning(f"Not enough data for test size {forecast_horizon}. Skipping.")
                 continue
                 
 
@@ -153,7 +153,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             # 2. Train model using appropriate ModelStrategy
             if model_type == "transformer":
                 strategy = TransformerModelStrategy()
-                model_name_prefix = f"transformer_{lag_size_days}d"
+                model_name_prefix = f"transformer_{horizon_days}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
@@ -163,7 +163,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df.attrs['transformer_params'] = strategy_params
             elif model_type == "lightgbm":
                 strategy = LightGBMModelStrategy()
-                model_name_prefix = f"lightgbm_{lag_size_days}d"
+                model_name_prefix = f"lightgbm_{horizon_days}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
@@ -173,7 +173,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df.attrs['lgbm_params'] = strategy_params
             elif model_type == "xgboost":
                 strategy = XGBoostModelStrategy()
-                model_name_prefix = f"xgboost_{lag_size_days}d"
+                model_name_prefix = f"xgboost_{horizon_days}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
@@ -183,7 +183,37 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df.attrs['xgb_params'] = strategy_params
             elif model_type == "hybrid":
                 strategy = HybridTransformerLSTMModelStrategy()
-                model_name_prefix = f"hybrid_{lag_size_days}d"
+                model_name_prefix = f"hybrid_{horizon_days}d"
+                
+                df_model = df.copy()
+                df_model['dataset_name'] = dataset
+                df_model.attrs['hybrid_params'] = strategy_params
+                
+                train_df['dataset_name'] = dataset
+                train_df.attrs['hybrid_params'] = strategy_params
+            elif model_type == "hussain_lstm":
+                strategy = LSTMModelStrategy()
+                model_name_prefix = f"hussain_lstm_{horizon_days}d"
+                
+                df_model = df.copy()
+                df_model['dataset_name'] = dataset
+                df_model.attrs['lstm_params'] = strategy_params
+                
+                train_df['dataset_name'] = dataset
+                train_df.attrs['lstm_params'] = strategy_params
+            elif model_type == "hussain_transformer":
+                strategy = HussainTransformerModelStrategy()
+                model_name_prefix = f"hussain_transformer_{horizon_days}d"
+                
+                df_model = df.copy()
+                df_model['dataset_name'] = dataset
+                df_model.attrs['hussain_transformer_params'] = strategy_params
+                
+                train_df['dataset_name'] = dataset
+                train_df.attrs['hussain_transformer_params'] = strategy_params
+            elif model_type == "hussain_hybrid":
+                strategy = HybridTransformerLSTMModelStrategy()
+                model_name_prefix = f"hussain_hybrid_{horizon_days}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
@@ -193,7 +223,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df.attrs['hybrid_params'] = strategy_params
             else:
                 strategy = LSTMModelStrategy()
-                model_name_prefix = f"lstm_{lag_size_days}d"
+                model_name_prefix = f"lstm_{horizon_days}d"
                 
                 df_model = df.copy()
                 df_model['dataset_name'] = dataset
@@ -204,7 +234,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             
             feature_cols = []
             if model_type in ["xgboost", "lightgbm"]:
-                for i in range(1, lag_size_days + 1):
+                for i in range(1, forecast_horizon + 1):
                     col_name = f'lag_{i}'
                     df_model[col_name] = df_model['y'].shift(i)
                     train_df[col_name] = train_df['y'].shift(i)
@@ -237,7 +267,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 predict_df = test_df.copy()
                 predict_df['dataset_name'] = dataset
                 # Ensure lag features are computed properly on test_df by relying on the full df_model shifts
-                for i in range(1, lag_size_days + 1):
+                for i in range(1, forecast_horizon + 1):
                     predict_df[f'lag_{i}'] = df_model.loc[predict_df.index, f'lag_{i}']
                 predict_df = predict_df.dropna()
                 
@@ -277,21 +307,21 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 'MAPE': mean_absolute_percentage_error(a, p),
                 'SMAPE': smape(p, a)
             }
-            logging.info(f"Metrics for {dataset} ({lag_size_days} days): {metrics}")
+            logging.info(f"Metrics for {dataset} ({forecast_horizon} days): {metrics}")
             
             results_summary.append({
                 'dataset': dataset,
-                'lag_size_days': lag_size_days,
+                'forecast_horizon': forecast_horizon,
                 **metrics
             })
             
             # 6. Plot real vs predictions
             zoom_range = strategy_params.get('zoom_range', None)
-            plot_train_test_split(train_df, test_df, dataset, lag_size_days, zoom_range=zoom_range)
+            plot_train_test_split(train_df, test_df, dataset, forecast_horizon, zoom_range=zoom_range)
 
-            plot_path_predict = f'output_plots/{dataset}_actual_vs_predict_{model_name}_{lag_size_days}days.png'
-            plot_path_split = f'output_plots/{dataset}_train_test_split_{lag_size_days}days.png'
-            plot_test_vs_predict(test_df.iloc[:min_len], preds_array[:min_len], dataset, model_name, lag_size_days)
+            plot_path_predict = f'output_plots/{dataset}_actual_vs_predict_{model_name}_{forecast_horizon}days.png'
+            plot_path_split = f'output_plots/{dataset}_train_test_split_{forecast_horizon}days.png'
+            plot_test_vs_predict(test_df.iloc[:min_len], preds_array[:min_len], dataset, model_name, forecast_horizon)
 
             # 7. Log to MLflow (optional)
             if mlflow_tracking_uri and _MLFLOW_AVAILABLE:
@@ -304,14 +334,14 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                     else:
                         experiment_id = experiment.experiment_id
 
-                    with mlflow.start_run(experiment_id=experiment_id, run_name=f"{model_name}_{lag_size_days}d"):
+                    with mlflow.start_run(experiment_id=experiment_id, run_name=f"{model_name}_{forecast_horizon}d"):
                         # Log hyperparams (filter to serialisable scalar values)
                         for k, v in strategy_params.items():
                             if isinstance(v, (int, float, str, bool)):
                                 mlflow.log_param(k, v)
                         mlflow.log_param('model_type', model_type)
                         mlflow.log_param('split_date', split_date_str)
-                        mlflow.log_param('lag_size_days', lag_size_days)
+                        mlflow.log_param('forecast_horizon', forecast_horizon)
 
                         # Log metrics
                         mlflow.log_metrics(metrics)
@@ -360,14 +390,14 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
     summary_df.to_csv('forecast_metrics_summary.csv', index=False)
     logging.info("Metrics saved to forecast_metrics_summary.csv")
 
-def execute_lstm(datsets, prediction_lag_days, mlflow_tracking_uri=None): 
+def execute_lstm(datsets, li_forecast_horizons, mlflow_tracking_uri=None): 
     # fetch and plot
     split_date_str = "2021-01-01"
     strategy_params_lstm = {
         'epochs': 100, 
         'batch_size': 32,
         'look_back': 14,           # 2 weeks look back
-        'prediction_lag_days': prediction_lag_days,
+        'li_forecast_horizons': li_forecast_horizons,
         'learning_rate': 0.001,    # Default used if missing
         'dropout_rate': 0.2,       # Default used if missing
         'activation': 'relu',      # Default used if missing
@@ -396,13 +426,13 @@ def execute_lstm(datsets, prediction_lag_days, mlflow_tracking_uri=None):
 
     run_forecast_pipeline(['ACN_Caltech'], strategy_params_lstm_caltech, split_date_str, mlflow_tracking_uri=mlflow_tracking_uri)
 
-def execute_transformer(datasets, prediction_lag_days, mlflow_tracking_uri=None):
+def execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     split_date_str = "2021-01-01"
     strategy_params_transformer = {
         'epochs': 100, 
         'batch_size': 32,
         'look_back': 14,
-        'prediction_lag_days': prediction_lag_days,
+        'li_forecast_horizons': li_forecast_horizons,
         'learning_rate': 0.001,
         'head_size': 128,
         'num_heads': 4,
@@ -436,10 +466,10 @@ def execute_transformer(datasets, prediction_lag_days, mlflow_tracking_uri=None)
     if 'ACN_Caltech' in datasets:
         run_forecast_pipeline(['ACN_Caltech'], strategy_params_transformer_caltech, split_date_str, model_type="transformer", mlflow_tracking_uri=mlflow_tracking_uri)
 
-def execute_lightgbm(datasets, prediction_lag_days, mlflow_tracking_uri=None):
+def execute_lightgbm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     split_date_str = "2021-01-01"
     strategy_params_lgbm = {
-        'prediction_lag_days': prediction_lag_days,
+        'li_forecast_horizons': li_forecast_horizons,
         # Default LightGBM specific params can be passed here
         'num_leaves': 10,
         'learning_rate': 0.02,
@@ -469,10 +499,10 @@ def execute_lightgbm(datasets, prediction_lag_days, mlflow_tracking_uri=None):
     if 'ACN_Caltech' in datasets:
         run_forecast_pipeline(['ACN_Caltech'], strategy_params_lgbm_caltech, split_date_str, model_type="lightgbm", mlflow_tracking_uri=mlflow_tracking_uri)
 
-def execute_xgboost(datasets, prediction_lag_days, mlflow_tracking_uri=None):
+def execute_xgboost(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     split_date_str = "2021-01-01"
     strategy_params_xgb = {
-        'prediction_lag_days': prediction_lag_days,
+        'li_forecast_horizons': li_forecast_horizons,
         'random_state': 16,
         'test_size': 0.20
     }
@@ -500,15 +530,15 @@ def execute_xgboost(datasets, prediction_lag_days, mlflow_tracking_uri=None):
         run_forecast_pipeline(['ACN_Caltech'], strategy_params_xgb_caltech, split_date_str, model_type="xgboost", mlflow_tracking_uri=mlflow_tracking_uri)
 
 
-def execute_hybrid(datasets, prediction_lag_days, mlflow_tracking_uri=None):
+def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     split_date_str = "2021-01-01"
     strategy_params_hybrid = {
         'epochs': 100, 
         'batch_size': 32,
         'look_back': 14,
-        'prediction_lag_days': prediction_lag_days,
+        'li_forecast_horizons': li_forecast_horizons,
         'learning_rate': 0.001,
-        'prediction_lag_days': prediction_lag_days,
+        'li_forecast_horizons': li_forecast_horizons,
         'learning_rate': 0.001,
         'd_model': 128,
         'num_heads': 4,
@@ -537,6 +567,138 @@ def execute_hybrid(datasets, prediction_lag_days, mlflow_tracking_uri=None):
     if 'ACN_Caltech' in datasets:
         run_forecast_pipeline(['ACN_Caltech'], strategy_params_hybrid_caltech, split_date_str, model_type="hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
 
+
+# =============================================================================
+# Hussain et al. (2025) article-variant models
+# --------------------------------------------------------------------------
+# These functions reproduce the architectures and hyperparameters described in:
+#   Hussain, A. et al. "Charging stations demand forecasting using LSTM based
+#   hybrid transformer model." Sci Rep 15, 13555 (2025).
+#
+# Key differences from our default models:
+#   * look_back = prediction_period (30, 120, 240) — not a fixed 14
+#   * dropout = 0.2   (vs. 0.1 for our Transformer/Hybrid)
+#   * Transformer uses a single Dense(ReLU) → MHA → GAP → Dense(1) arch
+#     (no residual, no LayerNorm, no feed-forward block, no MLP head)
+#   * LSTM and Hybrid architectures are identical to ours; only hyperparams differ
+#
+# The data splits below use our pre-COVID regime for methodological soundness.
+# To replicate the article's splits (which include COVID), change train_range /
+# test_range to cover Sep 2018 – mid 2020 (train) and mid 2020 – 2021 (test).
+# =============================================================================
+
+def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
+    """LSTM with Hussain et al. hyperparams: look_back = prediction_period, dropout=0.2."""
+    split_date_str = "2021-01-01"
+
+    strategy_jpl = {
+        'train_range': ('2019-01-01', '2019-09-30'),
+        'test_range': ('2019-10-01', '2020-03-01'),
+        'zoom_range': ('2019-10-01', '2020-03-01'),
+    }
+    strategy_caltech = {
+        'train_range': ('2019-01-01', '2019-06-30'),
+        'test_range': ('2019-07-01', '2019-12-15'),
+        'zoom_range': ('2019-07-01', '2019-12-15'),
+    }
+
+    for forecast_horizon in li_forecast_horizons:
+        strategy_params = {
+            'epochs': 100,
+            'batch_size': 32,
+            'look_back': forecast_horizon,       # Article: look_back = prediction period
+            'li_forecast_horizons': [forecast_horizon],
+            'learning_rate': 0.001,
+            'dropout_rate': 0.2,              # Article Table 1
+            'activation': 'relu',
+        }
+
+        if 'ACN_JPL' in datasets:
+            params_jpl = {**strategy_params, **strategy_jpl}
+            run_forecast_pipeline(['ACN_JPL'], params_jpl, split_date_str,
+                                  model_type="hussain_lstm", mlflow_tracking_uri=mlflow_tracking_uri)
+
+        if 'ACN_Caltech' in datasets:
+            params_caltech = {**strategy_params, **strategy_caltech}
+            run_forecast_pipeline(['ACN_Caltech'], params_caltech, split_date_str,
+                                  model_type="hussain_lstm", mlflow_tracking_uri=mlflow_tracking_uri)
+
+
+def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
+    """Simplified Transformer from Hussain et al.: Dense→MHA→GAP→Dense(1)."""
+    split_date_str = "2021-01-01"
+
+    strategy_jpl = {
+        'train_range': ('2019-01-01', '2019-09-30'),
+        'test_range': ('2019-10-01', '2020-03-01'),
+        'zoom_range': ('2019-10-01', '2020-03-01'),
+    }
+    strategy_caltech = {
+        'train_range': ('2019-01-01', '2019-06-30'),
+        'test_range': ('2019-07-01', '2019-12-15'),
+        'zoom_range': ('2019-07-01', '2019-12-15'),
+    }
+
+    for forecast_horizon in li_forecast_horizons:
+        strategy_params = {
+            'epochs': 100,
+            'batch_size': 32,
+            'look_back': forecast_horizon,       # Article: look_back = prediction period
+            'li_forecast_horizons': [forecast_horizon],
+            'learning_rate': 0.001,
+            'encoding_dim': 64,
+            'num_heads': 4,
+            'key_dim': 64,
+            'dropout': 0.2,                   # Article Table 1
+        }
+
+        if 'ACN_JPL' in datasets:
+            params_jpl = {**strategy_params, **strategy_jpl}
+            run_forecast_pipeline(['ACN_JPL'], params_jpl, split_date_str,
+                                  model_type="hussain_transformer", mlflow_tracking_uri=mlflow_tracking_uri)
+
+        if 'ACN_Caltech' in datasets:
+            params_caltech = {**strategy_params, **strategy_caltech}
+            run_forecast_pipeline(['ACN_Caltech'], params_caltech, split_date_str,
+                                  model_type="hussain_transformer", mlflow_tracking_uri=mlflow_tracking_uri)
+
+
+def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
+    """Hybrid LSTM-Transformer with Hussain et al. hyperparams: look_back = prediction_period, dropout=0.2."""
+    split_date_str = "2021-01-01"
+
+    strategy_jpl = {
+        'train_range': ('2019-01-01', '2019-09-30'),
+        'test_range': ('2019-10-01', '2020-03-01'),
+        'zoom_range': ('2019-10-01', '2020-03-01'),
+    }
+    strategy_caltech = {
+        'train_range': ('2019-01-01', '2019-06-30'),
+        'test_range': ('2019-07-01', '2019-12-15'),
+        'zoom_range': ('2019-07-01', '2019-12-15'),
+    }
+
+    for forecast_horizon in li_forecast_horizons:
+        strategy_params = {
+            'epochs': 100,
+            'batch_size': 32,
+            'look_back': forecast_horizon,       # Article: look_back = prediction period
+            'li_forecast_horizons': [forecast_horizon],
+            'learning_rate': 0.001,
+            'd_model': 128,
+            'num_heads': 4,
+            'dropout': 0.2,                   # Article Table 1
+        }
+
+        if 'ACN_JPL' in datasets:
+            params_jpl = {**strategy_params, **strategy_jpl}
+            run_forecast_pipeline(['ACN_JPL'], params_jpl, split_date_str,
+                                  model_type="hussain_hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
+
+        if 'ACN_Caltech' in datasets:
+            params_caltech = {**strategy_params, **strategy_caltech}
+            run_forecast_pipeline(['ACN_Caltech'], params_caltech, split_date_str,
+                                  model_type="hussain_hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
 
 
 def optimize_lstm(datasets, n_trials, mlflow_tracking_uri=None):
@@ -612,7 +774,7 @@ def optimize_lstm(datasets, n_trials, mlflow_tracking_uri=None):
     
     strategy_params_lstm_best = {
         **best_params,
-        'prediction_lag_days': prediction_lag_days,
+        'li_forecast_horizons': li_forecast_horizons,
     }
     
     strategy_jpl = {
@@ -640,9 +802,9 @@ if __name__ == "__main__":
     
     # li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
     # datasets = ['ACN_Caltech', 'ACN_JPL']
-    # prediction_lag_days = [30, 120, 240]
+    # li_forecast_horizons = [30, 120, 240]
     datasets = ['ACN_JPL']
-    prediction_lag_days = [30]
+    li_forecast_horizons = [30]
     split_date_str = "2021-01-01"
     n_trials = 5
 
@@ -652,9 +814,14 @@ if __name__ == "__main__":
     #optimize_lstm(datasets, n_trials, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
     # tree based
-    #execute_lightgbm(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
-    #execute_xgboost(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    #execute_lightgbm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    #execute_xgboost(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
-    #execute_lstm(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
-    execute_transformer(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
-    # execute_hybrid(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    #execute_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    # execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+
+    # Hussain et al. (2025) article-variant models
+    # execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    # execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    # execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
