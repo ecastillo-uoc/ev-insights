@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Tuple
 import pandas as pd
 
 from src.utils.date_utils import utc_to_decimal_hours_minutes
-from src.tfm.tfm_constants import COVID_START, COVID_END
+from src.tfm.tfm_constants import COVID_START, COVID_END, EXCLUDE_COVID_DATA
 from .interfaces import PredictionTargetStrategy
 from .utils_ts import add_lags, add_timefeat_df
 
@@ -165,8 +165,9 @@ class StationChargesDataStrategy(PredictionTargetStrategy):
                     df = df.reindex(date_range, fill_value=0)
 
                 # Remove COVID no-data period (artificial zeros from reindex)
-                covid_mask = (df.index >= pd.to_datetime(COVID_START)) & (df.index <= pd.to_datetime(COVID_END))
-                df = df[~covid_mask]
+                if EXCLUDE_COVID_DATA:
+                    covid_mask = (df.index >= pd.to_datetime(COVID_START)) & (df.index <= pd.to_datetime(COVID_END))
+                    df = df[~covid_mask]
 
                 df = add_timefeat_df(df)
                 df = add_lags(df, "number_charges", lags, lag_windows)
@@ -252,8 +253,9 @@ class StationEnergyDataStrategy(PredictionTargetStrategy):
                     df = df.reindex(date_range, fill_value=0)
 
                 # Remove COVID no-data period (artificial zeros from reindex)
-                covid_mask = (df.index >= pd.to_datetime(COVID_START)) & (df.index <= pd.to_datetime(COVID_END))
-                df = df[~covid_mask]
+                if EXCLUDE_COVID_DATA:
+                    covid_mask = (df.index >= pd.to_datetime(COVID_START)) & (df.index <= pd.to_datetime(COVID_END))
+                    df = df[~covid_mask]
 
                 df = add_timefeat_df(df)
                 df = add_lags(df, "daily_demand", lags, lag_windows)

@@ -1,7 +1,10 @@
+import logging
 import pandas as pd
 from sqlalchemy import create_engine
 
-from src.tfm.tfm_constants import COVID_START, COVID_END
+from src.tfm.tfm_constants import COVID_START, COVID_END, EXCLUDE_COVID_DATA
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_DB_CONFIG = {
     'dbname': 'evinsights',
@@ -182,12 +185,39 @@ def fetch_daily_energy_for_forecast(dataset_name: str, db_config: dict = None) -
     # Ensure regular daily frequency, filling missing days with 0
     df = df.asfreq('D', fill_value=0)
     
+    # EDA: detect long consecutive-zero stretches that signal data gaps
+    _warn_zero_gaps(df, 'y', dataset_name)
+
     # Remove COVID no-data period — the gap contains only artificial zeros
     # from asfreq fill, not real observations
-    covid_mask = (df.index >= pd.to_datetime(COVID_START)) & (df.index <= pd.to_datetime(COVID_END))
-    df = df[~covid_mask]
+    if EXCLUDE_COVID_DATA:
+        covid_mask = (df.index >= pd.to_datetime(COVID_START)) & (df.index <= pd.to_datetime(COVID_END))
+        df = df[~covid_mask]
     
     return df
+
+
+def _warn_zero_gaps(df: pd.DataFrame, col: str, dataset_name: str,
+                    min_consecutive: int = 14) -> None:
+    """Log a warning when the series contains long runs of consecutive zeros.
+
+    This helps identify data gaps (e.g. COVID no-data period) that were filled
+    with artificial zeros by ``asfreq``/``reindex``.
+    """
+    is_zero = (df[col] == 0).astype(int)
+    # Group consecutive identical values; keep only the zero groups
+    groups = is_zero.ne(is_zero.shift()).cumsum()
+    for _, grp in df[is_zero == 1].groupby(groups):
+        if len(grp) >= min_consecutive:
+            logger.warning(
+                "Dataset '%s': %d consecutive zero-value days detected "
+                "from %s to %s. This may indicate a data gap "
+                "(e.g. COVID no-data period). Consider setting "
+                "EXCLUDE_COVID_DATA = True.",
+                dataset_name, len(grp),
+                grp.index.min().strftime('%Y-%m-%d'),
+                grp.index.max().strftime('%Y-%m-%d'),
+            )
 
 def fetch_dataset_energy_trends_by_site(dataset_name: str, db_config: dict = None) -> pd.DataFrame:
     """

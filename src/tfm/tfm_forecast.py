@@ -39,6 +39,7 @@ from src.tfm.tfm_constants import COVID_START, COVID_END
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 
 def plot_train_test_split(train, test, dataset_name, forecast_horizon, zoom_range=None, model_name=None):
@@ -340,7 +341,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             plot_test_vs_predict(test_df.iloc[:min_len], preds_array[:min_len], dataset, model_name, forecast_horizon)
 
             # 7. Log to MLflow (optional)
-            if mlflow_tracking_uri and _MLFLOW_AVAILABLE:
+            if mlflow_tracking_uri and _MLFLOW_AVAILABLE and False:
                 try:
                     mlflow.set_tracking_uri(mlflow_tracking_uri)
                     experiment_name = model_name
@@ -828,6 +829,6 @@ if __name__ == "__main__":
     # execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
     # Hussain et al. (2025) article-variant models
-    #execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
     execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
-    # execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
