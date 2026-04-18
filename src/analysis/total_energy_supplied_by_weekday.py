@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 from pprint import pprint
 from src.analysis.analysis import Analysis
+from src.analysis.plot_utils import save_and_show_plotly
 
 
 class total_energy_supplied_by_weekday(Analysis):
@@ -163,12 +164,8 @@ class total_energy_supplied_by_weekday(Analysis):
             fig.update_yaxes(showgrid=True, gridwidth=0.3, gridcolor='lightgray')
             fig.update_xaxes(showline=True, linewidth=1, linecolor='gray')
 
-            if self.save_images:
-                fig.write_image(os.path.join(self.output_dir, f'{dataset_name}_energy_supplied_by_weekday.png'),
-                                width=1080, height=720, scale=2)
-
-            if self.show_images:
-                fig.show()
+            save_and_show_plotly(fig, self.save_images, self.show_images,
+                                self.output_dir, f'{dataset_name}_energy_supplied_by_weekday')
 
             output_dict[dataset_name] = dict(zip(grouped_df['plug_in_weekday'], grouped_df['energy_supplied']))
 

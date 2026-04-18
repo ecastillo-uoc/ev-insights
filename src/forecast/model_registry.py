@@ -6,7 +6,9 @@ from .strategies.interfaces import ModelStrategy
 from .forecast_implementations import (
     LightGBMModelStrategy,
     XGBoostModelStrategy,
-    LSTMModelStrategy
+    LSTMModelStrategy,
+    TransformerModelStrategy,
+    HybridTransformerLSTMModelStrategy
 )
 
 @dataclass
@@ -21,6 +23,8 @@ class ModelStrategyType(Enum):
     LIGHTGBM = "lightgbm"
     XGBOOST = "xgboost"
     LSTM = "lstm"
+    TRANSFORMER = "transformer"
+    HYBRID_TRANSFORMER_LSTM = "hybrid_transformer_lstm"
 
 # Registry dictionary
 MODEL_STRATEGY_REGISTRY: Dict[ModelStrategyType, ModelStrategyInfo] = {
@@ -41,9 +45,23 @@ MODEL_STRATEGY_REGISTRY: Dict[ModelStrategyType, ModelStrategyInfo] = {
     ModelStrategyType.LSTM: ModelStrategyInfo(
         name=ModelStrategyType.LSTM.value,
         display_name="LSTM",
-        description="Optimized distributed gradient boosting library designed to be highly efficient, flexible and portable.",
+        description="Long Short-Term Memory recurrent neural network for sequence-based time-series forecasting.",
         strategy_class=LSTMModelStrategy,
-        default_params={"n_estimators": 100, "max_depth": 3}
+        default_params={"epochs": 50, "batch_size": 32}
+    ),
+    ModelStrategyType.TRANSFORMER: ModelStrategyInfo(
+        name=ModelStrategyType.TRANSFORMER.value,
+        display_name="Transformer",
+        description="Attention-based Transformer architecture for time-series forecasting.",
+        strategy_class=TransformerModelStrategy,
+        default_params={"epochs": 50, "batch_size": 32}
+    ),
+    ModelStrategyType.HYBRID_TRANSFORMER_LSTM: ModelStrategyInfo(
+        name=ModelStrategyType.HYBRID_TRANSFORMER_LSTM.value,
+        display_name="Hybrid Transformer-LSTM",
+        description="Hybrid architecture combining Transformer attention with LSTM sequential memory.",
+        strategy_class=HybridTransformerLSTMModelStrategy,
+        default_params={"epochs": 50, "batch_size": 32}
     ),
     
 }

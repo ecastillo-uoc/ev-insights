@@ -6,6 +6,7 @@ import plotly.express as px
 from pprint import pprint
 
 from src.analysis.analysis import Analysis
+from src.analysis.plot_utils import save_and_show_plotly
 
 
 class plug_duration_by_plugin_hour(Analysis):
@@ -85,13 +86,9 @@ class plug_duration_by_plugin_hour(Analysis):
             fig.update_yaxes(title_text='Plug Duration')
 
             # Save the figure
-            if self.save_images:
-                fig.write_image(os.path.join(self.output_dir, f'{dataset_name}_plug_duration_by_plugin_hour.png'),
-                                width=1080, height=720, scale=2)
-                fig.write_html(os.path.join(self.output_dir, f'{dataset_name}_plug_duration_by_plugin_hour.html'))
-
-            if self.show_images:
-                fig.show()
+            save_and_show_plotly(fig, self.save_images, self.show_images,
+                                self.output_dir, f'{dataset_name}_plug_duration_by_plugin_hour',
+                                save_html=True)
 
             output = self.extract_stats(df[['plug_in_hour', 'plug_duration_clip']])
             output_dict.update({dataset_name: output})

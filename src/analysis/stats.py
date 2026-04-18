@@ -23,6 +23,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.platypus import PageBreak
 
 from src.analysis.analysis import Analysis
+from src.analysis.plot_utils import save_and_show_plotly
 
 
 class stats(Analysis):
@@ -296,23 +297,16 @@ class stats(Analysis):
             barmode='group'
         )
 
-        if self.save_images:
-            fig1.write_image(os.path.join(self.output_dir, f"{table_name}_uniques_and_nulls.png"), width=1080, height=720, scale=2)
-
-        if self.show_images:
-            fig1.show()
+        save_and_show_plotly(fig1, self.save_images, self.show_images,
+                            self.output_dir, f'{table_name}_uniques_and_nulls')
 
         # Pie charts for distribution of values (top 10 most frequent values) for each column
         for stat in column_stats:
             distribution = pd.DataFrame(stat['distribution'], columns=['value', 'count'])
             fig2 = px.pie(distribution, names='value', values='count', title=f"{table_name}: Value Distribution for {stat['column']}")
 
-            if self.save_images:
-                fig2.write_image(os.path.join(self.output_dir, f"{table_name}_{stat['column']}_distribution.png"),
-                                 width=1080, height=720, scale=2)
-
-            if self.show_images:
-                fig2.show()
+            save_and_show_plotly(fig2, self.save_images, self.show_images,
+                                self.output_dir, f"{table_name}_{stat['column']}_distribution")
 
         return
 

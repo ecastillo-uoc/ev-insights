@@ -3,9 +3,9 @@ import logging
 import importlib
 import pandas as pd
 from pathlib import Path
-from pprint import pprint
 from abc import ABC, abstractmethod
 from src.interfaces.interface import Interface
+from src.utils.output import save_results_to_json
 
 # Retrieve the names of admin functions from the source, ensuring the list updates automatically whenever a new admin is added.
 ADMIN = [p.stem for p in Path(__file__).parent.glob("*.py")
@@ -35,12 +35,7 @@ class Admin(ABC):
         pass
 
     def save_output_to_file(self):
-        # Save output to file
-        filename = self.output_dir / f"{self.name}.json"
-        with filename.open('w') as file:
-            pprint(self.results, stream=file)
-
-        return
+        save_results_to_json(self.results, self.output_dir, self.name)
 
 
 def import_class(module_path, class_name):
@@ -67,7 +62,7 @@ def init_admin(config, output_interface=None):
         if config["enabled"]:
             full_module_path = f"src.admin.{admin_module}"
             AdminClass = import_class(full_module_path, config["name"])
-            admin = AdminClass(id=config['id'] if 'id' in config.keys() else 1,
+            admin = AdminClass(id=config.get('id', 1),
                                name=config['name'],
                                info=config['info'],
                                enabled=config['enabled'],

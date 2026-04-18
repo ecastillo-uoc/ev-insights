@@ -2,6 +2,7 @@ import os
 import numpy as np
 import plotly.express as px
 from src.analysis.analysis import Analysis
+from src.analysis.plot_utils import save_and_show_plotly
 
 
 class plug_duration(Analysis):
@@ -87,12 +88,8 @@ class plug_duration(Analysis):
             )
 
             # Save the figure
-            if self.save_images:
-                fig.write_image(os.path.join(self.output_dir, f'{dataset_name}_plug_duration_distribution.png'),
-                                width=1080, height=720, scale=2)
-
-            if self.show_images:
-                fig.show()
+            save_and_show_plotly(fig, self.save_images, self.show_images,
+                                self.output_dir, f'{dataset_name}_plug_duration_distribution')
 
         # TODO write results in output_dict, that is void now
         self.results = output_dict

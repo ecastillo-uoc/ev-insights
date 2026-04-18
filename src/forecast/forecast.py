@@ -5,7 +5,6 @@ import importlib
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
-from pprint import pprint
 from abc import ABC, abstractmethod
 
 from src.interfaces.interface import Interface
@@ -20,6 +19,7 @@ from .prediction_target_registry import (
 from .model_registry import (
     ModelStrategyType, get_model_strategy
 )
+from src.utils.output import save_results_to_json
 
 class Forecast(ABC):
     def __init__(self, id: int, name: str, algo: str, info: str, actor: str, actor_id: int, date: datetime.date, enabled: bool,
@@ -96,14 +96,8 @@ class Forecast(ABC):
     def predict(self):
         pass
 
-    # TODO This should be moved into the interface
     def save_output_to_file(self):
-        # Save output to file
-        filename = self.output_dir / f"{self.name}.json"
-        with filename.open('w') as file:
-            pprint(self.results, stream=file)
-
-        return
+        save_results_to_json(self.results, self.output_dir, self.name)
 
     def get_train_results(self, keys=None):
         results = copy.deepcopy(self.results)
@@ -178,8 +172,7 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
     forecast = None
     forecast_name = config["name"]
     
-    if 'full_custom_mode' not in config.keys():
-        config['full_custom_mode'] = False
+    config.setdefault('full_custom_mode', False)
 
     # --- Strategy override support ---
     # When the UI (or caller) provides 'prediction_target' and/or 'model_strategy',
@@ -385,17 +378,17 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
                 except (ValueError, KeyError):
                     pass
 
-            forecast = ForecastClass(id=config['id'] if 'id' in config.keys() else 1,
+            forecast = ForecastClass(id=config.get('id', 1),
                                      name=config['name'],
                                      algo=config['algo'],
                                      info=config['info'],
-                                     actor=config['actor'] if 'actor' in config.keys() else None,
-                                     actor_id=config['actor_id'] if 'actor_id' in config.keys() else None,
-                                     date=config['date'] if 'date' in config.keys() else None,
+                                     actor=config.get('actor'),
+                                     actor_id=config.get('actor_id'),
+                                     date=config.get('date'),
                                      enabled=config['enabled'],
                                      full_custom_mode=config['full_custom_mode'],
                                      mode=config['mode'],
-                                     submode=config['submode'] if 'submode' in config.keys() else None,
+                                     submode=config.get('submode'),
                                      models_dir=str(Path(models_dir) / config['name']),
                                      model_name=config['model_name'],
                                      show_images=config['show_images'],

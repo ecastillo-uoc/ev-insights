@@ -3,7 +3,7 @@ import json
 import glob
 import logging
 import csv
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 import pandas as pd
 from pprint import pprint
 from datetime import datetime, timedelta
@@ -13,6 +13,7 @@ from src.interfaces.interface import Interface
 from src.utils.db_config import get_dataframe_columns_from_db
 from src.utils.constants import CONNECTOR_TYPE_ALIASES, DEFAULT_EV_DATAFRAME_COLUMNS, DEFAULT_CHARGING_STATION_DATAFRAME_COLUMNS
 from src.utils.console import Colors
+from src.utils.path_utils import normalize_path
 
 _logger = logging.getLogger("interfaces.file")
 
@@ -48,7 +49,7 @@ class File(Interface):
         self.logger = _logger
         
         if input_dir is not None:
-            self.input_dir = Path(PureWindowsPath(input_dir).as_posix())
+            self.input_dir = normalize_path(input_dir)
         else:
             self.input_dir = None
 
@@ -61,9 +62,9 @@ class File(Interface):
         # Data gathering from files
         if self.type == "input":
             if isinstance(datasets_details_file, list):
-                 self.datasets_details_file = [Path(PureWindowsPath(f).as_posix()) for f in datasets_details_file]
+                 self.datasets_details_file = [normalize_path(f) for f in datasets_details_file]
             else:
-                self.datasets_details_file = Path(PureWindowsPath(datasets_details_file).as_posix())
+                self.datasets_details_file = normalize_path(datasets_details_file)
             self.datasets_list = datasets_list
 
             if self.input_data_type == 'bulk':

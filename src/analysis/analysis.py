@@ -3,9 +3,9 @@ import logging
 import importlib
 import pandas as pd
 from pathlib import Path
-from pprint import pprint
 from abc import ABC, abstractmethod
 from src.interfaces.interface import Interface
+from src.utils.output import save_results_to_json
 
 # Retrieve the names of analyses from the source, ensuring the list updates automatically whenever a new analysis is added.
 ANALYSIS = [p.stem for p in Path(__file__).parent.glob("*.py")
@@ -57,15 +57,7 @@ class Analysis(ABC):
         pass
 
     def save_output_to_file(self):
-        # Save output to file
-        # Since self.output_dir is now a pathlib.Path object (initialized in __init__), 
-        # using the / operator to join it with the filename string is the correct 
-        # and idiomatic way to construct paths in modern Python.
-        filename = self.output_dir / f"{self.name}.json"
-        with filename.open('w') as file:
-            pprint(self.results, stream=file)
-
-        return
+        save_results_to_json(self.results, self.output_dir, self.name)
 
     def get_results(self):
         return self.results
@@ -94,12 +86,11 @@ def init_analysis(config, input_interface=None, output_interface=None):
 
     if config["name"] in ANALYSIS:
         if config["enabled"]:
-            if 'full_custom_mode' not in config.keys():
-                config['full_custom_mode'] = False
+            config.setdefault('full_custom_mode', False)
 
             full_module_path = f"src.analysis.{analysis_module}"
             AnalysisClass = import_class(full_module_path, config["name"])
-            analysis = AnalysisClass(id=config['id'] if 'id' in config.keys() else 1,
+            analysis = AnalysisClass(id=config.get('id', 1),
                                      name=config['name'],
                                      info=config['info'],
                                      enabled=config['enabled'],
@@ -110,8 +101,8 @@ def init_analysis(config, input_interface=None, output_interface=None):
                                      input_interface=input_interface,
                                      output_interface=output_interface,
                                      output_dir=config['output_dir'],
-                                     data_selection=config['data_selection'] if 'data_selection' in config.keys() else None,    # if not config['full_custom_mode'] else None,
-                                     custom_params=config['custom_params'] if 'custom_params' in config.keys() else None)   # if not config['full_custom_mode'] else None)
+                                     data_selection=config.get('data_selection'),
+                                     custom_params=config.get('custom_params'))
         else:
             logger.info('Analysis ' + config["name"] + ' not enabled.')
     else:

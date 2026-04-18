@@ -1,7 +1,8 @@
 import logging
 from abc import ABC, abstractmethod
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 from src.interfaces.interface import init_interface
+from src.utils.path_utils import normalize_path
 from datetime import datetime
 from pprint import pprint
 
@@ -11,7 +12,7 @@ SERVICES = {"analysis", "forecast", "ingestion", "admin"}
 class Service(ABC):
     def __init__(self, name, output_dir, interfaces):
         self.name = name
-        self.output_dir = Path(PureWindowsPath(output_dir).as_posix())
+        self.output_dir = normalize_path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.logger = logging.getLogger('service')
         self.logger.info("Initialized " + self.name)
@@ -20,7 +21,7 @@ class Service(ABC):
         # Init interfaces
         self.input_interface = init_interface(config=interfaces['input'])
         self.output_interface = init_interface(config=interfaces['output'])
-        if "mlflow" in interfaces.keys():
+        if "mlflow" in interfaces:
             self.mlflow_interface = init_interface(config=interfaces['mlflow'])
         else:
             self.mlflow_interface = None
