@@ -257,13 +257,11 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             
             feature_cols = []
             if model_type in ["xgboost", "lightgbm"]:
-                for i in range(1, forecast_horizon + 1):
-                    col_name = f'lag_{i}'
-                    df_model[col_name] = df_model['y'].shift(i)
-                    train_df[col_name] = train_df['y'].shift(i)
-                    feature_cols.append(col_name)
-                df_model = df_model.dropna()
-                train_df = train_df.dropna()
+                feature_cols = [f'lag_{i}' for i in range(1, forecast_horizon + 1)]
+                lag_df_model = pd.concat([df_model['y'].shift(i).rename(f'lag_{i}') for i in range(1, forecast_horizon + 1)], axis=1)
+                lag_train = pd.concat([train_df['y'].shift(i).rename(f'lag_{i}') for i in range(1, forecast_horizon + 1)], axis=1)
+                df_model = pd.concat([df_model, lag_df_model], axis=1).dropna()
+                train_df = pd.concat([train_df, lag_train], axis=1).dropna()
 
             logging.info(f"Training model with split_date={split_date_str}...")
             trained_models_dict = strategy.train(
@@ -286,29 +284,22 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             
             # For LSTM/Transformer models we use backtest mode (rolling one-step on test data)
             # For tree-based models we predict directly on the test data which already has the lag features
-            # For Hussain models we use SCHEDULE mode (multi-step recursive) to match
-            # the article methodology: feed last look_back days of training data and
-            # recursively predict forecast_horizon days ahead (visible in Figs 9-26
-            # where x-axis = "Number of Days" 0..N).
+            # For ALL neural models (including Hussain) we use backtest mode:
+            # rolling one-step prediction on the full test set, where each
+            # prediction uses real recent data as context.  The article's
+            # figures (Figs 9-26) show predictions that closely track daily
+            # patterns — only possible with real-data context at each step.
+            # The "30/120/240 Days" in figure titles refers to the look_back
+            # parameter, not to a single recursive multi-step forecast.
             if model_type in ["xgboost", "lightgbm"]:
                 predict_df = test_df.copy()
                 predict_df['dataset_name'] = dataset
                 # Ensure lag features are computed properly on test_df by relying on the full df_model shifts
-                for i in range(1, forecast_horizon + 1):
-                    predict_df[f'lag_{i}'] = df_model.loc[predict_df.index, f'lag_{i}']
-                predict_df = predict_df.dropna()
+                common_idx = predict_df.index.intersection(df_model.index)
+                lag_cols = pd.DataFrame(df_model.loc[common_idx, feature_cols])
+                predict_df = pd.concat([predict_df, lag_cols], axis=1).dropna()
                 
                 predict_mode = None
-            elif is_hussain:
-                # Direct multi-step: seed from the first look_back days of
-                # test data so that predictions fall inside the test range
-                # (starting at test_start + look_back).  We cannot seed from
-                # training data because the predicted dates would land in the
-                # COVID gap where no valid data exists.
-                look_back = strategy_params.get('look_back', forecast_horizon)
-                predict_df = test_df.iloc[:look_back].copy()
-                predict_df['dataset_name'] = dataset
-                predict_mode = 'direct_multistep'
             else:
                 predict_df = test_df.copy()
                 predict_df['dataset_name'] = dataset
@@ -682,7 +673,6 @@ def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=Non
             'activation': 'relu',
             'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
             'use_early_stopping': True,        # Article: EarlyStopping
-            'predict_mode': 'direct_multistep',
         }
 
         if 'ACN_JPL' in datasets:
@@ -722,7 +712,6 @@ def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_
             'dropout': 0.2,                   # Article Table 1
             'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
             'use_early_stopping': True,        # Article: EarlyStopping
-            'predict_mode': 'direct_multistep',
         }
 
         if 'ACN_JPL' in datasets:
@@ -761,7 +750,6 @@ def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=N
             'dropout': 0.2,                   # Article Table 1
             'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
             'use_early_stopping': True,        # Article: EarlyStopping
-            'predict_mode': 'direct_multistep',
         }
 
         if 'ACN_JPL' in datasets:
@@ -874,11 +862,11 @@ def optimize_lstm(datasets, n_trials, mlflow_tracking_uri=None):
 
 if __name__ == "__main__":
     
-    # li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
-    # datasets = ['ACN_Caltech', 'ACN_JPL']
-    # li_forecast_horizons = [30, 120, 240]
-    datasets = ['ACN_JPL']
-    li_forecast_horizons = [30]
+    datasets = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
+    #datasets = ['ACN_Caltech', 'ACN_JPL']
+    li_forecast_horizons = [1, 7, 30, 120, 240]
+    #datasets = ['ACN_JPL']
+    #li_forecast_horizons = [30]
     split_date_str = "2021-01-01"
     n_trials = 5
 
@@ -889,12 +877,12 @@ if __name__ == "__main__":
     #optimize_lstm(datasets, n_trials, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
     # tree based
-    #execute_lightgbm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
-    #execute_xgboost(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    execute_lightgbm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    execute_xgboost(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
-    #execute_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
-    #execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
-    # execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    execute_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
     # Hussain et al. (2025) article-variant models
     execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
