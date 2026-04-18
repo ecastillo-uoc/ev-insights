@@ -3,10 +3,10 @@ from dataclasses import dataclass
 from typing import Type, Dict, Any, Callable
 
 from .strategies.interfaces import PredictionTargetStrategy
-from .forecast_implementations import (
+from .strategies import (
     SessionDataStrategy,
     StationChargesDataStrategy,
-    StationEnergyDataStrategy
+    StationEnergyDataStrategy,
 )
 
 @dataclass

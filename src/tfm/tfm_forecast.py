@@ -16,7 +16,7 @@ from src.utils.console import Colors
 # forecast
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
 
-from src.forecast.forecast_implementations import LSTMModelStrategy, TransformerModelStrategy, LightGBMModelStrategy, XGBoostModelStrategy, HybridTransformerLSTMModelStrategy
+from src.forecast.strategies import LSTMModelStrategy, TransformerModelStrategy, LightGBMModelStrategy, XGBoostModelStrategy, HybridTransformerLSTMModelStrategy
 from src.forecast.model_persistence import save_model, load_model
 from src.forecast.strategies.utils_ts import smape
 
@@ -655,6 +655,6 @@ if __name__ == "__main__":
     #execute_lightgbm(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
     #execute_xgboost(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
-    execute_lstm(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
-    # execute_transformer(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    #execute_lstm(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    execute_transformer(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
     # execute_hybrid(datasets, prediction_lag_days, mlflow_tracking_uri=MLFLOW_TRACKING_URI)

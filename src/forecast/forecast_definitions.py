@@ -3,13 +3,13 @@
 
 
 from .generic_forecast import GenericForecast
-from .forecast_implementations import (
+from .strategies import (
     SessionDataStrategy,
     XGBoostModelStrategy,
     StationChargesDataStrategy,
     LightGBMModelStrategy,
     StationEnergyDataStrategy,
-    LSTMModelStrategy
+    LSTMModelStrategy,
 )
 
 

@@ -219,7 +219,7 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
             resolved_name = f"{config.get('algo', 'unknown')}_{prediction_target_key}"
             # Try to get the model strategy from the original forecast class
             try:
-                import src.forecast.forecast_implementations as forecast_impl
+                import src.forecast.strategies as forecast_impl
                 OrigClass = getattr(forecast_impl, forecast_name, None)
                 if OrigClass and hasattr(OrigClass, '__init__'):
                     # Instantiate temporarily to extract strategy (GenericForecast stores it)
@@ -236,7 +236,7 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
             resolved_name = f"{resolved_algo}_{forecast_name.split('_', 1)[1] if '_' in forecast_name else forecast_name}"
             # Try to get the data strategy from the original class
             try:
-                import src.forecast.forecast_implementations as forecast_impl
+                import src.forecast.strategies as forecast_impl
                 OrigClass = getattr(forecast_impl, forecast_name, None)
                 if OrigClass:
                     # Create a temp instance to extract data_strategy - too complex
@@ -327,7 +327,7 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
     logger.debug(f"[init_forecast] Falling through to standard class lookup for: {forecast_name}")
     ForecastClass = None
     try:
-        import src.forecast.forecast_implementations as forecast_impl
+        import src.forecast.strategies as forecast_impl
         if hasattr(forecast_impl, forecast_name):
              ForecastClass = getattr(forecast_impl, forecast_name)
     except ImportError:
@@ -495,9 +495,9 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
             else:
 
                 # Retrieve the names of forecasts from the source, ensuring the list updates automatically whenever a new forecast is added.
-                # New logic: check forecast_implementations.py for subclasses of GenericForecast or Forecast explicitly
+                # New logic: check strategies package for subclasses of GenericForecast or Forecast explicitly
                 try:
-                    import forecast_implementations as forecast_impl
+                    from . import strategies as forecast_impl
                     from .generic_forecast import GenericForecast
                     import inspect
                     
@@ -509,7 +509,7 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
                 except ImportError:
                     # Fallback to file based if module not found (legacy support)
                     FORECAST = [p.stem for p in Path(__file__).parent.glob("*.py")
-                            if p.name not in ["forecast.py", "_sample_forecast.py", "__init__.py", "generic_forecast.py", "forecast_implementations.py"]]
+                            if p.name not in ["forecast.py", "_sample_forecast.py", "__init__.py", "generic_forecast.py"]]
 
                 raise Exception(f'Forecast {config["name"]} does not exist or class not found in {FORECAST}')
 

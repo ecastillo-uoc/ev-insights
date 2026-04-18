@@ -3,12 +3,12 @@ from dataclasses import dataclass
 from typing import Type, Dict, Any
 
 from .strategies.interfaces import ModelStrategy
-from .forecast_implementations import (
+from .strategies import (
     LightGBMModelStrategy,
     XGBoostModelStrategy,
     LSTMModelStrategy,
     TransformerModelStrategy,
-    HybridTransformerLSTMModelStrategy
+    HybridTransformerLSTMModelStrategy,
 )
 
 @dataclass

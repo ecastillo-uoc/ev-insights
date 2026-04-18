@@ -61,15 +61,15 @@ class GenericForecast(Forecast):
 
         # Lazy imports to avoid circular dependency at module load time
         if model_type == 'Booster' and strategy_type != 'LightGBMModelStrategy':
-            from src.forecast.forecast_implementations import LightGBMModelStrategy
+            from src.forecast.strategies import LightGBMModelStrategy
             self._gf_logger.info(f"Auto-switching from {strategy_type} to LightGBMModelStrategy (detected {model_type})")
             self.model_strategy = LightGBMModelStrategy()
         elif model_type in ('XGBRegressor', 'XGBClassifier') and strategy_type != 'XGBoostModelStrategy':
-            from src.forecast.forecast_implementations import XGBoostModelStrategy
+            from src.forecast.strategies import XGBoostModelStrategy
             self._gf_logger.info(f"Auto-switching from {strategy_type} to XGBoostModelStrategy (detected {model_type})")
             self.model_strategy = XGBoostModelStrategy()
         elif isinstance(self.model, dict) and 'keras_model' in self.model and strategy_type != 'LSTMModelStrategy':
-            from src.forecast.forecast_implementations import LSTMModelStrategy
+            from src.forecast.strategies import LSTMModelStrategy
             self._gf_logger.info(f"Auto-switching from {strategy_type} to LSTMModelStrategy (detected keras dict)")
             self.model_strategy = LSTMModelStrategy()
 

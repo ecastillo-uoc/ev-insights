@@ -15,7 +15,7 @@ from sklearn.preprocessing import MinMaxScaler
 from keras.callbacks import EarlyStopping
 from keras.utils import plot_model
 
-from src.forecast.forecast_implementations import TransformerModelStrategy
+from src.forecast.strategies import TransformerModelStrategy
 from src.forecast.strategies.utils_ts import smape
 
 # Configure basic logging
@@ -216,7 +216,7 @@ def objective_lstm(trial, train_df, target_column):
 
 
     # Build model using the same strategy class
-    from src.forecast.forecast_implementations import LSTMModelStrategy
+    from src.forecast.strategies import LSTMModelStrategy
     strategy = LSTMModelStrategy()
     model = strategy.build_model(
         input_shape=(X.shape[1], 1),
