@@ -20,7 +20,7 @@ from keras.layers import Input, LSTM as KerasLSTM, Dense, Dropout, Flatten
 from keras.layers import MultiHeadAttention, LayerNormalization, Add, GlobalAveragePooling1D, Reshape
 from keras.utils import plot_model
 # Own modules
-from src.utils.logger import Colors
+from src.utils.console import Colors
 from src.utils.date_utils import utc_to_decimal_hours_minutes
 
 from .strategies.interfaces import PredictionTargetStrategy, ModelStrategy
@@ -393,7 +393,7 @@ class LightGBMModelStrategy(ModelStrategy):
         dates_list = None
         actual_vals = None
         try:
-            debug_msg = f"DEBUG [LightGBM.predict] Starting predict: " + \
+            debug_msg = f"[LightGBM.predict] Starting predict: " + \
                         f"df.shape={df.shape if df is not None else None}, " + \
                         f"feature_columns={feature_columns}, " + \
                         f"target_column={target_column}, " + \
@@ -401,30 +401,30 @@ class LightGBMModelStrategy(ModelStrategy):
                         f"context_date={context_date}, " + \
                         f"dataset_names={dataset_names}, " + \
                         f"submode={submode}"
-            self.logger.info(debug_msg)
+            self.logger.debug(debug_msg)
 
             model = model_objects
             if model is None:
-                self.logger.error("DEBUG [LightGBM.predict] model_objects is None – cannot predict")
+                self.logger.error("[LightGBM.predict] model_objects is None – cannot predict")
                 return output_dict
 
             # Use the model's own feature names to ensure predict matches training
             if hasattr(model, 'feature_name'):
                 model_features = model.feature_name()
-                self.logger.info(f"DEBUG [LightGBM.predict] Model trained features ({len(model_features)}): {model_features}")
+                self.logger.debug(f"[LightGBM.predict] Model trained features ({len(model_features)}): {model_features}")
                 missing = [f for f in model_features if f not in df.columns]
                 if missing:
-                    self.logger.error(f"DEBUG [LightGBM.predict] Missing features in df: {missing}")
+                    self.logger.error(f"[LightGBM.predict] Missing features in df: {missing}")
                 # Use model's features instead of feature_columns from data strategy
                 feature_columns = model_features
 
             for dataset_name in (dataset_names or []):
-                self.logger.info(f"DEBUG [LightGBM.predict] Processing dataset: {dataset_name}")
+                self.logger.debug(f"[LightGBM.predict] Processing dataset: {dataset_name}")
                 subset = df.loc[df['dataset_name'] == dataset_name]
-                self.logger.info(f"DEBUG [LightGBM.predict] Subset rows: {len(subset)}")
+                self.logger.debug(f"[LightGBM.predict] Subset rows: {len(subset)}")
 
                 if subset.empty:
-                    self.logger.warning(f"DEBUG [LightGBM.predict] Empty subset for {dataset_name}, skipping")
+                    self.logger.warning(f"[LightGBM.predict] Empty subset for {dataset_name}, skipping")
                     continue
 
                 # Extract dates from index (ts_engineering) or plug_in_datetime column
@@ -439,14 +439,14 @@ class LightGBMModelStrategy(ModelStrategy):
                     # Take the last row as input for a single-step forecast
                     input_row = subset.iloc[[-1]].copy()
                     X = input_row[feature_columns]
-                    self.logger.info(f"DEBUG [LightGBM.predict] Schedule mode, input_row features: {X.columns.tolist()}, values: {X.values.tolist()}")
+                    self.logger.debug(f"[LightGBM.predict] Schedule mode, input_row features: {X.columns.tolist()}, values: {X.values.tolist()}")
                 else:
                     # Use all rows
                     X = subset[feature_columns]
-                    self.logger.info(f"DEBUG [LightGBM.predict] Full mode, X.shape={X.shape}")
+                    self.logger.debug(f"[LightGBM.predict] Full mode, X.shape={X.shape}")
 
                 prediction = model.predict(X, num_iteration=model.best_iteration if hasattr(model, 'best_iteration') else None)
-                self.logger.info(f"DEBUG [LightGBM.predict] Raw prediction: {prediction}")
+                self.logger.debug(f"[LightGBM.predict] Raw prediction: {prediction}")
 
                 if submode == 'schedule':
                     val = float(prediction[0])
@@ -467,7 +467,7 @@ class LightGBMModelStrategy(ModelStrategy):
                         'created_at': datetime.now()
                     })
 
-            self.logger.info(f"DEBUG [LightGBM.predict] Final output keys: {list(output_dict['predict'].keys())}")
+            self.logger.debug(f"[LightGBM.predict] Final output keys: {list(output_dict['predict'].keys())}")
         except Exception as e:
             self.logger.error(f"LightGBM predict failed: {e}\n{traceback.format_exc()}")
             raise
@@ -601,10 +601,10 @@ class XGBoostModelStrategy(ModelStrategy):
                 model_feature_names = model.get_booster().feature_names or []
 
             if model_feature_names:
-                self.logger.info(f"DEBUG [XGBoost.predict] Using model feature names: {model_feature_names}")
+                self.logger.debug(f"Using model feature names: {model_feature_names}")
                 feature_columns = model_feature_names
             elif not feature_columns:
-                self.logger.warning("DEBUG [XGBoost.predict] No feature_columns and no model feature names")
+                self.logger.warning("No feature_columns and no model feature names")
 
             # Determine if model expects one-hot weekday columns
             _weekday_ohe_cols = [f'plug_in_weekday_{i}' for i in range(7)]
@@ -638,7 +638,7 @@ class XGBoostModelStrategy(ModelStrategy):
                 if model_feature_names:
                     missing = [c for c in model_feature_names if c not in feats.columns]
                     if missing:
-                        self.logger.warning(f"DEBUG [XGBoost.predict] Columns missing after prep: {missing}")
+                        self.logger.warning(f"[XGBoost.predict] Columns missing after prep: {missing}")
                     feats = feats.reindex(columns=model_feature_names, fill_value=0)
                 return feats
 

@@ -8,7 +8,7 @@ import matplotlib.dates as mdates
 from pathlib import Path
 
 from src.__main__ import main as run_service
-# from src.utils.globals import CHARGING_POINT_TYPES  # Not used anymore
+# from src.utils.db_config import CHARGING_POINT_TYPES  # Not used anymore
 from src.interfaces.postgresql_interface import PostgreSql
 from src.ui.shared_components import render_data_selection
 

@@ -18,13 +18,13 @@ _logger.setLevel(logging.DEBUG)
 
 # own modules
 try: 
-    from .utils.logger import Colors
+    from .utils.console import Colors
 except Exception as ex:
     msg = str(ex)
     if msg != 'attempted relative import with no known parent package':
         print(str(ex))
     # When running directly, we are not in a module
-    from utils.logger import Colors
+    from utils.console import Colors
 
 
 def grid_search_model_agnostic(X_train, y_train, X_test, y_test, pipeline, 

@@ -4,7 +4,7 @@ import importlib
 import pandas as pd
 from pathlib import Path
 from pprint import pprint
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from src.interfaces.interface import Interface
 
 # Retrieve the names of admin functions from the source, ensuring the list updates automatically whenever a new admin is added.
@@ -12,7 +12,7 @@ ADMIN = [p.stem for p in Path(__file__).parent.glob("*.py")
          if p.name not in ["admin.py", "_sample_admin.py", "__init__.py"]]
 
 
-class Admin:
+class Admin(ABC):
     def __init__(self, id: int, name: str, info: str, enabled: bool, output_interface: Interface, output_dir: str, save_results: bool,
                  custom_params: dict):
         self.id = id

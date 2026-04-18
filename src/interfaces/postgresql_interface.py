@@ -11,7 +11,7 @@ from pathlib import Path
 
 from src.interfaces.interface import Interface
 from src.sql.postgresql import sql_query
-from src.utils.logger import Colors
+from src.utils.console import Colors
 
 # pd.set_option('display.max_columns', 20)
 # pd.set_option('display.max_rows', 300)

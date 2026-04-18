@@ -1,7 +1,7 @@
 import os
 from pprint import pprint
 from src.services.service import Service
-from src.utils.logger import Colors
+from src.utils.console import Colors
 
 
 class IngestionService(Service):

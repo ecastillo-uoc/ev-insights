@@ -6,10 +6,10 @@ import pandas as pd
 from datetime import datetime
 from pathlib import Path
 from pprint import pprint
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 from src.interfaces.interface import Interface
-from src.utils.logger import Colors
+from src.utils.console import Colors
 
 
 from .prediction_target_registry import (
@@ -21,7 +21,7 @@ from .model_registry import (
     ModelStrategyType, get_model_strategy
 )
 
-class Forecast:
+class Forecast(ABC):
     def __init__(self, id: int, name: str, algo: str, info: str, actor: str, actor_id: int, date: datetime.date, enabled: bool,
                  full_custom_mode: bool, mode: str, submode: str, models_dir: str, model_name: str, show_images: bool, save_images: bool,
                  save_results: bool, input_interface: Interface, output_interface: Interface, mlflow_interface: Interface, output_dir: str,
@@ -62,7 +62,6 @@ class Forecast:
         self.target = None
         return
 
-    @abstractmethod
     def load_data(self, df: pd.DataFrame, prediction=None, model=None):
         if df is not None:
             self.df = df
@@ -188,9 +187,9 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
     prediction_target_key = config.get('prediction_target')
     model_strategy_key = config.get('model_strategy')
 
-    logger.info(f"DEBUG [init_forecast] Config keys received: name={forecast_name}, algo={config.get('algo')}, "
-                f"prediction_target={prediction_target_key}, model_strategy={model_strategy_key}")
-    logger.info(f"DEBUG [init_forecast] All config keys: {list(config.keys())}")
+    logger.debug(f"[init_forecast] Config keys received: name={forecast_name}, algo={config.get('algo')}, "
+                 f"prediction_target={prediction_target_key}, model_strategy={model_strategy_key}")
+    logger.debug(f"[init_forecast] All config keys: {list(config.keys())}")
 
     if prediction_target_key or model_strategy_key:
         from .generic_forecast import GenericForecast
@@ -265,9 +264,9 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
             except Exception as e:
                 logger.warning(f"Could not resolve data strategy from config name: {e}")
 
-        logger.info(f"DEBUG [init_forecast] Strategy resolution result: "
-                    f"data_strategy={type(data_strategy).__name__ if data_strategy else None}, "
-                    f"model_strategy={type(model_strategy).__name__ if model_strategy else None}")
+        logger.debug(f"[init_forecast] Strategy resolution result: "
+                     f"data_strategy={type(data_strategy).__name__ if data_strategy else None}, "
+                     f"model_strategy={type(model_strategy).__name__ if model_strategy else None}")
 
         # --- Merge registry defaults into empty config fields ---
         if prediction_target_key:
@@ -284,7 +283,7 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
                 if default_fields:
                     ds['fields'] = dict(default_fields)  # copy
                     config['data_selection'] = ds
-                    logger.info(f"DEBUG [init_forecast] Merged default fields from registry: {list(default_fields.keys())}")
+                    logger.debug(f"[init_forecast] Merged default fields from registry: {list(default_fields.keys())}")
 
             # Merge default custom_params if empty
             cp = config.get('custom_params', {})
@@ -292,7 +291,7 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
                 default_cp = registry_defaults.get('custom_params', {})
                 if default_cp:
                     config['custom_params'] = dict(default_cp)  # copy
-                    logger.info(f"DEBUG [init_forecast] Merged default custom_params from registry: {list(default_cp.keys())}")
+                    logger.debug(f"[init_forecast] Merged default custom_params from registry: {list(default_cp.keys())}")
 
         if data_strategy and model_strategy and config.get("enabled", False):
             forecast = GenericForecast(
@@ -332,7 +331,7 @@ def init_forecast(config, models_dir, input_interface=None, output_interface=Non
                          f"Falling back to config name lookup.")
 
     # --- Standard class lookup (no overrides or fallback) ---
-    logger.info(f"DEBUG [init_forecast] Falling through to standard class lookup for: {forecast_name}")
+    logger.debug(f"[init_forecast] Falling through to standard class lookup for: {forecast_name}")
     ForecastClass = None
     try:
         import src.forecast.forecast_implementations as forecast_impl

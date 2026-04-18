@@ -10,8 +10,9 @@ from datetime import datetime, timedelta
 from dateutil import parser
 
 from src.interfaces.interface import Interface
-from src.utils.globals import get_dataframe_columns_from_db, CONNECTOR_TYPE_ALIASES, DEFAULT_EV_DATAFRAME_COLUMNS, DEFAULT_CHARGING_STATION_DATAFRAME_COLUMNS
-from src.utils.logger import Colors
+from src.utils.db_config import get_dataframe_columns_from_db
+from src.utils.constants import CONNECTOR_TYPE_ALIASES, DEFAULT_EV_DATAFRAME_COLUMNS, DEFAULT_CHARGING_STATION_DATAFRAME_COLUMNS
+from src.utils.console import Colors
 
 _logger = logging.getLogger("interfaces.file")
 

@@ -1,5 +1,5 @@
 import logging
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from pathlib import Path, PureWindowsPath
 from src.interfaces.interface import init_interface
 from datetime import datetime
@@ -8,7 +8,7 @@ from pprint import pprint
 SERVICES = {"analysis", "forecast", "ingestion", "admin"}
 
 
-class Service:
+class Service(ABC):
     def __init__(self, name, output_dir, interfaces):
         self.name = name
         self.output_dir = Path(PureWindowsPath(output_dir).as_posix())

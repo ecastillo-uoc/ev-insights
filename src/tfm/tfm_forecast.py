@@ -11,7 +11,7 @@ from datetime import timedelta
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Own modules
-from src.utils.logger import Colors
+from src.utils.console import Colors
 
 # forecast
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error

@@ -13,7 +13,12 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 def main(config_file=None, config_json=None, datasets_list=None, datasets_details_file=None):
     
-    print(f"DEBUG: main called. Service: {config_json.get('service') if config_json else 'None'}, datasets_list={datasets_list}")
+    # Init logger
+    Logger(config=config['utils']['logger'], filename="main")
+    logger = logging.getLogger(__name__)
+    logger.info("Start main")
+
+    logger.debug(f"[main] main called. Service: {config_json.get('service') if config_json else 'None'}, datasets_list={datasets_list}")
 
     service = None
     output = []
@@ -38,7 +43,7 @@ def main(config_file=None, config_json=None, datasets_list=None, datasets_detail
         # Override datasets_list and datasets_details_file from CLI arguments if provided
         if 'input' in config.get('interfaces', {}):
             if datasets_list is not None:
-                print(f"DEBUG: Overriding datasets_list with {datasets_list}")
+                logger.debug(f"[main] Overriding datasets_list with {datasets_list}")
                 config['interfaces']['input']['datasets_list'] = datasets_list
             if datasets_details_file is not None:
                 config['interfaces']['input']['datasets_details_file'] = datasets_details_file
@@ -85,10 +90,7 @@ def main(config_file=None, config_json=None, datasets_list=None, datasets_detail
         config['output_dir'] = str(output_service_dir)
         output_service_dir.mkdir(parents=True, exist_ok=True)
 
-        # Init logger
-        Logger(config=config['utils']['logger'], filename="main")
-        logger = logging.getLogger(__name__)
-        logger.info("Start main")
+
 
         if config_file is not None:
             # Copy the config file into the output folder
@@ -106,12 +108,12 @@ def main(config_file=None, config_json=None, datasets_list=None, datasets_detail
                 json.dump(config, json_file, indent=4)
 
         # Init service
-        logger.info(f"DEBUG [main] Initializing service: {service_name}")
+        logger.debug(f"[main] Initializing service: {service_name}")
         if service_name == 'forecast':
             forecast_tasks = config.get('forecast', [])
             for i, task in enumerate(forecast_tasks):
-                logger.info(f"DEBUG [main] Task {i}: name={task.get('name')}, algo={task.get('algo')}, "
-                            f"prediction_target={task.get('prediction_target')}, model_strategy={task.get('model_strategy')}")
+                logger.debug(f"[main] Task {i}: name={task.get('name')}, algo={task.get('algo')}, "
+                             f"prediction_target={task.get('prediction_target')}, model_strategy={task.get('model_strategy')}")
         service = init_service(config=config)
 
         # Run service

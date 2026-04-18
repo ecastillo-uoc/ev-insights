@@ -1,5 +1,5 @@
 import logging
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path, PureWindowsPath
 from pprint import pprint
@@ -7,7 +7,7 @@ from pprint import pprint
 INTERFACES = {"File", "MySql", "PostgreSql", "MLflow"}
 
 
-class Interface:
+class Interface(ABC):
     def __init__(self, name, type, output_dir):
         self.name = name
         self.type = type

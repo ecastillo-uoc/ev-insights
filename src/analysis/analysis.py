@@ -4,7 +4,7 @@ import importlib
 import pandas as pd
 from pathlib import Path
 from pprint import pprint
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from src.interfaces.interface import Interface
 
 # Retrieve the names of analyses from the source, ensuring the list updates automatically whenever a new analysis is added.
@@ -12,7 +12,7 @@ ANALYSIS = [p.stem for p in Path(__file__).parent.glob("*.py")
             if p.name not in ["analysis.py", "_sample_analysis.py", "__init__.py"]]
 
 
-class Analysis:
+class Analysis(ABC):
     def __init__(self, id: int, name: str, info: str, enabled: bool, full_custom_mode: bool, show_images: bool, save_images: bool,
                  save_results: bool, input_interface: Interface, output_interface: Interface, output_dir: str, data_selection: dict,
                  custom_params: dict):
@@ -38,7 +38,6 @@ class Analysis:
         self.results = {}
         return
 
-    @abstractmethod
     def load_data(self, df: pd.DataFrame):
         if df is not None:
             self.df = df

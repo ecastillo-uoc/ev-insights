@@ -26,10 +26,10 @@ class ForecastService(Service):
             else:
                 forecast_name = f"{forecast_conf['name']}"
             
-            self.logger.info(f"DEBUG [ForecastService] Processing task: name={forecast_conf.get('name')}, "
-                            f"algo={forecast_conf.get('algo')}, "
-                            f"prediction_target={forecast_conf.get('prediction_target')}, "
-                            f"model_strategy={forecast_conf.get('model_strategy')}")
+            self.logger.debug(f"[ForecastService] Processing task: name={forecast_conf.get('name')}, "
+                             f"algo={forecast_conf.get('algo')}, "
+                             f"prediction_target={forecast_conf.get('prediction_target')}, "
+                             f"model_strategy={forecast_conf.get('model_strategy')}")
             
             forecast_conf['output_dir'] = str(Path(self.output_dir) / forecast_name)
             full_custom_mode = forecast_conf['full_custom_mode'] \
@@ -40,8 +40,8 @@ class ForecastService(Service):
                                      output_interface=self.output_interface if full_custom_mode is True else None)
 
             if forecast:
-                self.logger.info(f"DEBUG [ForecastService] Forecast initialized: name={forecast.name}, algo={forecast.algo}, "
-                                f"type={type(forecast).__name__}")
+                self.logger.debug(f"[ForecastService] Forecast initialized: name={forecast.name}, algo={forecast.algo}, "
+                                 f"type={type(forecast).__name__}")
 
                 output = None
                 if forecast.full_custom_mode:
@@ -51,8 +51,8 @@ class ForecastService(Service):
                 else:
                     # Data gathering from input interface
                     df = self.input_interface.get_data(data_selection=forecast.data_selection)
-                    self.logger.info(f"DEBUG [ForecastService] Data loaded: df.shape={df.shape if df is not None else None}, "
-                                    f"columns={list(df.columns) if df is not None else None}")
+                    self.logger.debug(f"[ForecastService] Data loaded: df.shape={df.shape if df is not None else None}, "
+                                     f"columns={list(df.columns) if df is not None else None}")
 
                     # Load model for prediction or previous prediction from DB
                     model = None
@@ -60,15 +60,15 @@ class ForecastService(Service):
                     experiment_id = None
                     run_id = None
                     if forecast.mode == 'predict':
-                        self.logger.info(f"DEBUG [ForecastService] Predict mode: algo={forecast.algo}, "
-                                        f"model_name={forecast.model_name}, "
-                                        f"mlflow_interface={'yes' if self.mlflow_interface else 'no'}, "
-                                        f"models_dir={self.models_dir}")
+                        self.logger.debug(f"[ForecastService] Predict mode: algo={forecast.algo}, "
+                                         f"model_name={forecast.model_name}, "
+                                         f"mlflow_interface={'yes' if self.mlflow_interface else 'no'}, "
+                                         f"models_dir={self.models_dir}")
                         if self.mlflow_interface:
                             experiment_id, run_id, model = self.mlflow_interface.get_model(algo=forecast.algo,
                                                                                            model_name=forecast.model_name)
-                            self.logger.info(f"DEBUG [ForecastService] MLflow model loaded: type={type(model).__name__}, "
-                                            f"experiment_id={experiment_id}, run_id={run_id}")
+                            self.logger.debug(f"[ForecastService] MLflow model loaded: type={type(model).__name__}, "
+                                             f"experiment_id={experiment_id}, run_id={run_id}")
                         else:
                             # Load model from filesystem (interface-agnostic)
                             try:
@@ -76,8 +76,8 @@ class ForecastService(Service):
                                     algo=forecast.algo,
                                     model_name=forecast.model_name,
                                     models_dir=self.models_dir)
-                                self.logger.info(f"DEBUG [ForecastService] File model loaded: type={type(model).__name__}, "
-                                                f"model_name={forecast.model_name}")
+                                self.logger.debug(f"[ForecastService] File model loaded: type={type(model).__name__}, "
+                                                 f"model_name={forecast.model_name}")
                             except FileNotFoundError:
                                 self.logger.info(f"No model file found, loading prediction from database")
                                 prediction = self.input_interface.get_prediction(actor=forecast.actor,
@@ -86,10 +86,10 @@ class ForecastService(Service):
 
                     # Load data into Forecast object
                     forecast.load_data(df=df, prediction=prediction, model=model)
-                    self.logger.info(f"DEBUG [ForecastService] After load_data: "
-                                    f"forecast.model type={type(forecast.model).__name__}, "
-                                    f"forecast.model is None={forecast.model is None}, "
-                                    f"datasets_names={list(forecast.datasets_names)}")
+                    self.logger.debug(f"[ForecastService] After load_data: "
+                                     f"forecast.model type={type(forecast.model).__name__}, "
+                                     f"forecast.model is None={forecast.model is None}, "
+                                     f"datasets_names={list(forecast.datasets_names)}")
 
                     # Check data for input validation
                     forecast.check_data()
@@ -98,7 +98,7 @@ class ForecastService(Service):
                     forecast.feature_engineering()
 
                     # Run forecast (this will train the model or predict the forecast, based on selected mode)
-                    self.logger.info(f"DEBUG [ForecastService] About to run forecast: mode={forecast.mode}, submode={forecast.submode}")
+                    self.logger.debug(f"[ForecastService] About to run forecast: mode={forecast.mode}, submode={forecast.submode}")
                     forecast.run()
 
                     # Save forecast retults (train or predict, based on selected mode)
@@ -130,7 +130,7 @@ class ForecastService(Service):
                     elif forecast.mode == 'predict':
                         output = forecast.get_predict_results()
                     
-                    self.logger.info(f"DEBUG [ForecastService] Output from forecast: {output}")
+                    self.logger.debug(f"[ForecastService] Output from forecast: {output}")
 
                 output_dict.update({f"{forecast_name}": output})
 

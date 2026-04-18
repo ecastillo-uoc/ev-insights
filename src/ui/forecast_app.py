@@ -10,7 +10,7 @@ from src.forecast import (
     PREDICTION_TARGET_REGISTRY,
     MODEL_STRATEGY_REGISTRY
 )
-from src.utils.globals import CHARGING_POINT_TYPES
+from src.utils.db_config import CHARGING_POINT_TYPES
 from src.interfaces.postgresql_interface import PostgreSql
 from src.ui.shared_components import render_data_selection
 from src.analysis.predictions import plot_forecast_results
@@ -301,8 +301,8 @@ def render_forecast_page():
                     
                     # Debug: verify overrides are set on each task
                     for i, task in enumerate(forecast_tasks):
-                        st.write(f"DEBUG [UI] Task {i}: name={task.get('name')}, algo={task.get('algo')}, "
-                                 f"prediction_target={task.get('prediction_target')}, model_strategy={task.get('model_strategy')}")
+                        logging.debug(f"[forecast_app] Task {i}: name={task.get('name')}, algo={task.get('algo')}, "
+                                      f"prediction_target={task.get('prediction_target')}, model_strategy={task.get('model_strategy')}")
                 
                 if selected_mlflow_model:
                     overrides_applied.append(f"Model Name: {selected_mlflow_model}")
@@ -318,9 +318,9 @@ def render_forecast_page():
                     # Verify overrides are actually in the config dict (debug)
                     _ft = run_config.get('services', {}).get('forecast', {}).get('forecast', [])
                     for _i, _t in enumerate(_ft):
-                        print(f"DEBUG [forecast_app] PRE-RUN Task {_i}: name={_t.get('name')}, "
-                              f"algo={_t.get('algo')}, prediction_target={_t.get('prediction_target')}, "
-                              f"model_strategy={_t.get('model_strategy')}, model_name={_t.get('model_name')}")
+                        logging.debug(f"[forecast_app] PRE-RUN Task {_i}: name={_t.get('name')}, "
+                                      f"algo={_t.get('algo')}, prediction_target={_t.get('prediction_target')}, "
+                                      f"model_strategy={_t.get('model_strategy')}, model_name={_t.get('model_name')}")
                     result = run_service(config_json=run_config)
                 else:
                     result = run_service(config_file=selected_config_file)
