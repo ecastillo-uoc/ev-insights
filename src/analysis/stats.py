@@ -7,7 +7,6 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-from pprint import pprint
 from openpyxl import Workbook, load_workbook
 from openpyxl.drawing.text import LineBreak
 from openpyxl.utils import get_column_letter
@@ -335,7 +334,7 @@ class stats(Analysis):
         """
         filename = os.path.join(self.output_dir, "stats.json")
         with open(filename, 'w') as file:
-            pprint(data, stream=file)
+            json.dump(data, file, indent=2, default=str)
 
         return filename
 

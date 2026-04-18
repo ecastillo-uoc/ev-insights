@@ -10,7 +10,6 @@ from pathlib import Path
 
 from src.interfaces.interface import Interface
 from src.sql.postgresql import sql_query
-from src.utils.console import Colors
 
 # pd.set_option('display.max_columns', 20)
 # pd.set_option('display.max_rows', 300)
@@ -444,14 +443,11 @@ class PostgreSql(Interface):
 
         # Check if all fields exist in the db
         for field in data_selection['fields']:
-            if not self.check_column_existence(column=field) and False:  # TODO check: added "and False" to skip this check. Why is this still there?
-                raise Exception(f"ERROR: field {field} does not exist in db. Please check conf file, data_selection, fields")
+            if field in self.fields_table_map:
+                table_fields.append(self.fields_table_map[field])
             else:
-                if field in self.fields_table_map:
-                    table_fields.append(self.fields_table_map[field])
-                else:
-                    raise Exception(f"ERROR: field {field} does not exist in db, neither in fields_table_map {self.fields_table_map} "
-                                    f"Please check conf file, data_selection, fields")
+                raise Exception(f"ERROR: field {field} does not exist in db, neither in fields_table_map {self.fields_table_map} "
+                                f"Please check conf file, data_selection, fields")
 
         # Add dataset name column
         table_fields.insert(0, 'd.name') if 'd.name' not in table_fields else table_fields
@@ -466,11 +462,11 @@ class PostgreSql(Interface):
         if 'plug_in_datetime' in data_selection['fields']:
             datetime_from = data_selection['fields']['plug_in_datetime']['from'] \
                 if (data_selection['fields']['plug_in_datetime'] is not None and
-                    'from' in data_selection['fields']['plug_in_datetime'].keys()) else None
+                    'from' in data_selection['fields']['plug_in_datetime']) else None
             datetime_from = datetime.datetime.strptime(datetime_from, "%Y-%m-%d") if datetime_from is not None else None
             datetime_to = data_selection['fields']['plug_in_datetime']['to'] \
                 if (data_selection['fields']['plug_in_datetime'] is not None and
-                    'to' in data_selection['fields']['plug_in_datetime'].keys()) else None
+                    'to' in data_selection['fields']['plug_in_datetime']) else None
             datetime_to = datetime.datetime.strptime(datetime_to, "%Y-%m-%d") if datetime_to is not None else None
         if 'user_id' in data_selection['fields']:
             user_id = data_selection['fields']['user_id']
@@ -581,8 +577,8 @@ class PostgreSql(Interface):
 
         if actor == 'user':
             data_row = (results['predict']['date'],
-                        results['predict']['energy'] if 'energy' in results['predict'].keys() else None,
-                        results['predict']['duration'] if 'duration' in results['predict'].keys() else None,
+                        results['predict']['energy'] if 'energy' in results['predict'] else None,
+                        results['predict']['duration'] if 'duration' in results['predict'] else None,
                         experiment_id,
                         run_id,
                         results['predict']['created_at'],
@@ -591,8 +587,8 @@ class PostgreSql(Interface):
 
         elif actor == "charging_station":
             data_row = (results['predict']['date'],
-                        results['predict']['energy'] if 'energy' in results['predict'].keys() else None,
-                        results['predict']['connections'] if 'connections' in results['predict'].keys() else None,
+                        results['predict']['energy'] if 'energy' in results['predict'] else None,
+                        results['predict']['connections'] if 'connections' in results['predict'] else None,
                         experiment_id,
                         run_id,
                         results['predict']['created_at'],

@@ -20,7 +20,6 @@ from keras.layers import Input, LSTM as KerasLSTM, Dense, Dropout, Flatten
 from keras.layers import MultiHeadAttention, LayerNormalization, Add, GlobalAveragePooling1D, Reshape
 from keras.utils import plot_model
 # Own modules
-from src.utils.console import Colors
 from src.utils.date_utils import utc_to_decimal_hours_minutes
 
 from .strategies.interfaces import PredictionTargetStrategy, ModelStrategy

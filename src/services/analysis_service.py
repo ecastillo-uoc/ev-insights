@@ -19,13 +19,12 @@ class AnalysisService(Service):
         # Data analysis
         for analysis_conf in self.analysis_list:
 
-            if 'id' in analysis_conf.keys():
+            if 'id' in analysis_conf:
                 analysis_name = f"{analysis_conf['id']}_{analysis_conf['name']}"
             else:
                 analysis_name = f"{analysis_conf['name']}"
             analysis_conf['output_dir'] = str(Path(self.output_dir) / analysis_name)
-            full_custom_mode = analysis_conf['full_custom_mode'] \
-                if "full_custom_mode" in analysis_conf.keys() and analysis_conf['full_custom_mode'] is True else False
+            full_custom_mode = analysis_conf.get('full_custom_mode', False) == True
             analysis = init_analysis(config=analysis_conf,
                                      input_interface=self.input_interface,  # if full_custom_mode is True else None,
                                      output_interface=self.output_interface)  # if full_custom_mode is True else None)
