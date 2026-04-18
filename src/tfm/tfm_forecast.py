@@ -605,15 +605,12 @@ def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=Non
     """LSTM with Hussain et al. hyperparams: look_back = forecast_horizon, dropout=0.2."""
     split_date_str = "2021-01-01"
 
-    strategy_jpl = {
-        'train_range': ('2019-01-01', '2019-09-30'),
-        'test_range': ('2019-10-01', '2020-03-01'),
-        'zoom_range': ('2019-10-01', '2020-03-01'),
-    }
-    strategy_caltech = {
-        'train_range': ('2019-01-01', '2019-06-30'),
-        'test_range': ('2019-07-01', '2019-12-15'),
-        'zoom_range': ('2019-07-01', '2019-12-15'),
+    # Article splits: train ~24 months (Sep 2018 – Aug 2020), test ~7 months (Sep 2020 – Mar 2021).
+    # COVID period is intentionally included, consistent with the original paper.
+    strategy_article = {
+        'train_range': ('2018-09-01', '2020-08-31'),
+        'test_range': ('2020-09-01', '2021-03-31'),
+        'zoom_range': ('2020-09-01', '2021-03-31'),
     }
 
     for forecast_horizon in li_forecast_horizons:
@@ -628,12 +625,12 @@ def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=Non
         }
 
         if 'ACN_JPL' in datasets:
-            params_jpl = {**strategy_params, **strategy_jpl}
+            params_jpl = {**strategy_params, **strategy_article}
             run_forecast_pipeline(['ACN_JPL'], params_jpl, split_date_str,
                                   model_type="hussain_lstm", mlflow_tracking_uri=mlflow_tracking_uri)
 
         if 'ACN_Caltech' in datasets:
-            params_caltech = {**strategy_params, **strategy_caltech}
+            params_caltech = {**strategy_params, **strategy_article}
             run_forecast_pipeline(['ACN_Caltech'], params_caltech, split_date_str,
                                   model_type="hussain_lstm", mlflow_tracking_uri=mlflow_tracking_uri)
 
@@ -642,15 +639,12 @@ def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_
     """Simplified Transformer from Hussain et al.: Dense→MHA→GAP→Dense(1)."""
     split_date_str = "2021-01-01"
 
-    strategy_jpl = {
-        'train_range': ('2019-01-01', '2019-09-30'),
-        'test_range': ('2019-10-01', '2020-03-01'),
-        'zoom_range': ('2019-10-01', '2020-03-01'),
-    }
-    strategy_caltech = {
-        'train_range': ('2019-01-01', '2019-06-30'),
-        'test_range': ('2019-07-01', '2019-12-15'),
-        'zoom_range': ('2019-07-01', '2019-12-15'),
+    # Article splits: train ~24 months (Sep 2018 – Aug 2020), test ~7 months (Sep 2020 – Mar 2021).
+    # COVID period is intentionally included, consistent with the original paper.
+    strategy_article = {
+        'train_range': ('2018-09-01', '2020-08-31'),
+        'test_range': ('2020-09-01', '2021-03-31'),
+        'zoom_range': ('2020-09-01', '2021-03-31'),
     }
 
     for forecast_horizon in li_forecast_horizons:
@@ -667,12 +661,12 @@ def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_
         }
 
         if 'ACN_JPL' in datasets:
-            params_jpl = {**strategy_params, **strategy_jpl}
+            params_jpl = {**strategy_params, **strategy_article}
             run_forecast_pipeline(['ACN_JPL'], params_jpl, split_date_str,
                                   model_type="hussain_transformer", mlflow_tracking_uri=mlflow_tracking_uri)
 
         if 'ACN_Caltech' in datasets:
-            params_caltech = {**strategy_params, **strategy_caltech}
+            params_caltech = {**strategy_params, **strategy_article}
             run_forecast_pipeline(['ACN_Caltech'], params_caltech, split_date_str,
                                   model_type="hussain_transformer", mlflow_tracking_uri=mlflow_tracking_uri)
 
@@ -681,15 +675,12 @@ def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=N
     """Hybrid LSTM-Transformer with Hussain et al. hyperparams: look_back = forecast_horizon, dropout=0.2."""
     split_date_str = "2021-01-01"
 
-    strategy_jpl = {
-        'train_range': ('2019-01-01', '2019-09-30'),
-        'test_range': ('2019-10-01', '2020-03-01'),
-        'zoom_range': ('2019-10-01', '2020-03-01'),
-    }
-    strategy_caltech = {
-        'train_range': ('2019-01-01', '2019-06-30'),
-        'test_range': ('2019-07-01', '2019-12-15'),
-        'zoom_range': ('2019-07-01', '2019-12-15'),
+    # Article splits: train ~24 months (Sep 2018 – Aug 2020), test ~7 months (Sep 2020 – Mar 2021).
+    # COVID period is intentionally included, consistent with the original paper.
+    strategy_article = {
+        'train_range': ('2018-09-01', '2020-08-31'),
+        'test_range': ('2020-09-01', '2021-03-31'),
+        'zoom_range': ('2020-09-01', '2021-03-31'),
     }
 
     for forecast_horizon in li_forecast_horizons:
@@ -705,12 +696,12 @@ def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=N
         }
 
         if 'ACN_JPL' in datasets:
-            params_jpl = {**strategy_params, **strategy_jpl}
+            params_jpl = {**strategy_params, **strategy_article}
             run_forecast_pipeline(['ACN_JPL'], params_jpl, split_date_str,
                                   model_type="hussain_hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
 
         if 'ACN_Caltech' in datasets:
-            params_caltech = {**strategy_params, **strategy_caltech}
+            params_caltech = {**strategy_params, **strategy_article}
             run_forecast_pipeline(['ACN_Caltech'], params_caltech, split_date_str,
                                   model_type="hussain_hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
 
