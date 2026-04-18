@@ -96,11 +96,15 @@ def plot_forecast_results(predict_results, forecast_name="Forecast",
 
     fig, ax = plt.subplots(figsize=(14, 6))
 
-    has_actuals = actuals is not None and len(actuals) == len(values)
+    has_actuals = actuals is not None and len(actuals) > 0
 
     if has_actuals:
         actuals = np.asarray(actuals, dtype=float)
-        x_axis = dates if dates is not None else np.arange(len(values))
+        min_len = min(len(actuals), len(values))
+        actuals, values = actuals[:min_len], values[:min_len]
+        if dates is not None:
+            dates = dates[:min_len]
+        x_axis = dates if dates is not None else np.arange(min_len)
         ax.plot(x_axis, actuals, label="Actual", color='steelblue', linewidth=1.2)
         ax.plot(x_axis, values, label="Predicted", color='orange',
                 linestyle='--', linewidth=1.5, alpha=0.85)

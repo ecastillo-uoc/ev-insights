@@ -63,6 +63,11 @@ def plot_train_test_split(train, test, dataset_name, test_size, zoom_range=None)
 
 def plot_test_vs_predict(test, predictions, dataset_name, model_name, test_size):
     """Plot the test data (actual) against predictions."""
+    min_len = min(len(test), len(predictions))
+    if min_len < len(test) or min_len < len(predictions):
+        logging.warning(f"Length mismatch: test={len(test)}, predictions={len(predictions)}. Truncating to {min_len}.")
+    test = test.iloc[:min_len]
+    predictions = predictions[:min_len]
     plt.figure(figsize=(12, 6))
     plt.plot(test.index, test['y'], label='Test (Actual)', linewidth=1.5)
     plt.plot(test.index, predictions, label='Predictions', linestyle='--', linewidth=1.5, color='red')

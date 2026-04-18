@@ -3,6 +3,14 @@ from .strategies.interfaces import PredictionTargetStrategy, ModelStrategy
 
 import logging
 
+_STRATEGY_ATTRS_KEY = {
+    'LSTMModelStrategy': 'lstm_params',
+    'TransformerModelStrategy': 'transformer_params',
+    'LightGBMModelStrategy': 'lgbm_params',
+    'XGBoostModelStrategy': 'xgb_params',
+    'HybridTransformerLSTMModelStrategy': 'hybrid_params',
+}
+
 class GenericForecast(Forecast):
     def __init__(self, data_strategy: PredictionTargetStrategy, model_strategy: ModelStrategy, **kwargs):
         super().__init__(**kwargs)
@@ -24,9 +32,16 @@ class GenericForecast(Forecast):
                               f"feature_columns={self.feature_columns}, "
                               f"target_columns={self.target_columns}")
 
+    def _attach_custom_params(self):
+        """Set custom_params on df.attrs so the model strategy can read them."""
+        attrs_key = _STRATEGY_ATTRS_KEY.get(type(self.model_strategy).__name__)
+        if attrs_key and self.custom_params:
+            self.df.attrs[attrs_key] = self.custom_params
+
     def train(self):
         # Assuming single target for now or handling list inside strategy
         target_col = self.target_columns[0] if self.target_columns else None
+        self._attach_custom_params()
         
         output = self.model_strategy.train(
             df=self.df, 
@@ -63,6 +78,7 @@ class GenericForecast(Forecast):
 
         # Auto-detect and correct model strategy mismatch
         self._resolve_model_strategy()
+        self._attach_custom_params()
         
         self._gf_logger.debug(f"[GenericForecast.predict] mode={self.mode}, submode={self.submode}, "
                               f"algo={self.algo}, name={self.name}")
