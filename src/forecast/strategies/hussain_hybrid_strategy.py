@@ -94,6 +94,7 @@ class HussainHybridModelStrategy(KerasTimeSeriesBaseStrategy):
         num_heads: int = 4,
         dropout: float = 0.2,
         learning_rate: float = 0.001,
+        output_steps: int = 1,
         **_kwargs,
     ):
         """Build the article-faithful Hybrid encoder-decoder model.
@@ -146,7 +147,7 @@ class HussainHybridModelStrategy(KerasTimeSeriesBaseStrategy):
 
         # --- Regression head ---
         flat = Flatten()(dec_out)
-        outputs = Dense(1)(flat)
+        outputs = Dense(output_steps)(flat)
 
         model = Model(inputs, outputs)
         optimizer = Adam(learning_rate=learning_rate)

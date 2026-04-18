@@ -407,6 +407,15 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             look_back = strategy_params.get('look_back', 30)
             forecast_horizon = strategy_params.get('forecast_horizon')
 
+            # Direct multi-step: model outputs forecast_horizon values at once
+            predict_mode = strategy_params.get('predict_mode')
+            output_steps = (
+                forecast_horizon
+                if predict_mode == 'direct_multistep' and forecast_horizon
+                else 1
+            )
+            strategy_params['output_steps'] = output_steps
+
             for dataset_name in dataset_names:
                 self.logger.info(
                     f"{dataset_name} - {self._strategy_display_name} Forecast "
@@ -424,7 +433,9 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                 data = self._filter_train_data(
                     subset_df, target_column, strategy_params, split_date,
                 )
-                X, y, scaler = self._scale_and_create_sequences(data, look_back)
+                X, y, scaler = self._scale_and_create_sequences(
+                    data, look_back, forecast_horizon=output_steps,
+                )
 
                 if len(X) == 0:
                     self.logger.warning(
@@ -530,6 +541,12 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
 
             if submode == 'schedule':
                 result = self._predict_schedule(
+                    df, target_column, dataset_names,
+                    model, scaler, look_back,
+                    forecast_horizon, predict_start_date, predict_end_date,
+                )
+            elif submode == 'direct_multistep':
+                result = self._predict_direct_multistep(
                     df, target_column, dataset_names,
                     model, scaler, look_back,
                     forecast_horizon, predict_start_date, predict_end_date,

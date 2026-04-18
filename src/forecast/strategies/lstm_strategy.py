@@ -38,6 +38,7 @@ class LSTMModelStrategy(KerasTimeSeriesBaseStrategy):
         learning_rate: float = 0.001,
         activation: str = 'relu',
         dropout_rate: float = 0.2,
+        output_steps: int = 1,
         **_kwargs,
     ):
         """Build a two-layer LSTM model.
@@ -52,6 +53,9 @@ class LSTMModelStrategy(KerasTimeSeriesBaseStrategy):
             Activation function for LSTM cells.
         dropout_rate : float
             Fraction of units to drop after each LSTM layer.
+        output_steps : int
+            Number of output values.  1 for single-step (backtest) models;
+            ``forecast_horizon`` for direct multi-step models.
         """
         model = Sequential()
         model.add(Input(shape=input_shape))
@@ -59,7 +63,7 @@ class LSTMModelStrategy(KerasTimeSeriesBaseStrategy):
         model.add(Dropout(dropout_rate))
         model.add(KerasLSTM(units=32, activation=activation))
         model.add(Dropout(dropout_rate))
-        model.add(Dense(1))
+        model.add(Dense(output_steps))
 
         optimizer = Adam(learning_rate=learning_rate)
         model.compile(optimizer=optimizer, loss='mse', metrics=['mae', 'mse'])

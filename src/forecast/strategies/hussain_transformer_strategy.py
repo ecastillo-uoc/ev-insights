@@ -57,6 +57,7 @@ class HussainTransformerModelStrategy(KerasTimeSeriesBaseStrategy):
         key_dim: int = 64,
         dropout: float = 0.2,
         learning_rate: float = 0.001,
+        output_steps: int = 1,
         **_kwargs,
     ):
         """Build the simplified Transformer described in Hussain et al.
@@ -75,6 +76,9 @@ class HussainTransformerModelStrategy(KerasTimeSeriesBaseStrategy):
             Dropout rate applied inside MultiHeadAttention.
         learning_rate : float
             Adam optimiser learning rate.
+        output_steps : int
+            Number of output values.  1 for single-step; ``forecast_horizon``
+            for direct multi-step models.
         """
         inputs = Input(shape=input_shape)
 
@@ -93,8 +97,8 @@ class HussainTransformerModelStrategy(KerasTimeSeriesBaseStrategy):
         # dimension instead of the temporal dimension.
         x = GlobalAveragePooling1D()(x)
 
-        # Regression output — single Dense(1), no MLP head (Eq. 12)
-        outputs = Dense(1)(x)
+        # Regression output — no MLP head (Eq. 12)
+        outputs = Dense(output_steps)(x)
 
         model = Model(inputs, outputs)
         optimizer = Adam(learning_rate=learning_rate)

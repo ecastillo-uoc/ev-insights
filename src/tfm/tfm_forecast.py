@@ -300,11 +300,15 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 
                 predict_mode = None
             elif is_hussain:
-                # Schedule mode: pass training data as context so the model
-                # bootstraps from the last look_back training days.
-                predict_df = train_df.copy()
+                # Direct multi-step: seed from the first look_back days of
+                # test data so that predictions fall inside the test range
+                # (starting at test_start + look_back).  We cannot seed from
+                # training data because the predicted dates would land in the
+                # COVID gap where no valid data exists.
+                look_back = strategy_params.get('look_back', forecast_horizon)
+                predict_df = test_df.iloc[:look_back].copy()
                 predict_df['dataset_name'] = dataset
-                predict_mode = 'schedule'
+                predict_mode = 'direct_multistep'
             else:
                 predict_df = test_df.copy()
                 predict_df['dataset_name'] = dataset
@@ -320,20 +324,40 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 submode=predict_mode
             )
             predictions = predict_dict['predict']['values']
+            predict_dates = predict_dict['predict'].get('dates')
+            predict_actuals = predict_dict['predict'].get('actuals')
             
             # 5. Provide metrics
-            # Use actuals from predict output if available (backtest mode), else from test_df
-            predict_actuals = predict_dict['predict'].get('actuals')
-            if predict_actuals is not None:
-                actuals_array = np.array(predict_actuals)
-                preds_array = np.array(predictions)
-            else:
-                preds_array = np.array(predictions)
-                actuals_array = test_df['y'].values
+            # Align predictions and actuals using the dates returned by the
+            # predict method so that look_back / forecast_horizon offsets are
+            # properly accounted for.  The first look_back days of test data
+            # are consumed as seed context and have no corresponding predictions.
+            preds_array = np.array(predictions)
             
-            # Handling lengths
-            min_len = min(len(preds_array), len(actuals_array))
-            a, p = actuals_array[:min_len], preds_array[:min_len]
+            if predict_dates is not None:
+                predict_dates_idx = pd.to_datetime(predict_dates)
+                
+                if predict_actuals is not None:
+                    # Backtest mode: actuals already aligned with predictions
+                    actuals_array = np.array(predict_actuals)
+                else:
+                    # Direct multistep / schedule: look up actuals from full df
+                    available_mask = predict_dates_idx.isin(df.index)
+                    common_dates = predict_dates_idx[available_mask]
+                    actuals_array = df.loc[common_dates, 'y'].values
+                    preds_array = preds_array[available_mask]
+                    predict_dates_idx = common_dates
+                
+                min_len = min(len(preds_array), len(actuals_array))
+                a, p = actuals_array[:min_len], preds_array[:min_len]
+                # DataFrame with correct prediction-aligned dates for plotting
+                plot_actuals_df = pd.DataFrame({'y': a}, index=predict_dates_idx[:min_len])
+            else:
+                # Tree-based models: no dates in predict output — fall back to test_df
+                actuals_array = test_df['y'].values
+                min_len = min(len(preds_array), len(actuals_array))
+                a, p = actuals_array[:min_len], preds_array[:min_len]
+                plot_actuals_df = test_df.iloc[:min_len]
             mse_val = mean_squared_error(a, p)
             metrics = {
                 'MSE': mse_val,
@@ -362,7 +386,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             )
 
             plot_path_predict = f'output_plots/{dataset}_actual_vs_predict_{model_name}_{forecast_horizon}days.png'
-            plot_test_vs_predict(test_df.iloc[:min_len], preds_array[:min_len], dataset, model_name, forecast_horizon)
+            plot_test_vs_predict(plot_actuals_df, p, dataset, model_name, forecast_horizon)
 
             # 7. Log to MLflow (optional)
             if mlflow_tracking_uri and _MLFLOW_AVAILABLE and False:
@@ -658,6 +682,7 @@ def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=Non
             'activation': 'relu',
             'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
             'use_early_stopping': True,        # Article: EarlyStopping
+            'predict_mode': 'direct_multistep',
         }
 
         if 'ACN_JPL' in datasets:
@@ -697,6 +722,7 @@ def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_
             'dropout': 0.2,                   # Article Table 1
             'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
             'use_early_stopping': True,        # Article: EarlyStopping
+            'predict_mode': 'direct_multistep',
         }
 
         if 'ACN_JPL' in datasets:
@@ -735,6 +761,7 @@ def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=N
             'dropout': 0.2,                   # Article Table 1
             'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
             'use_early_stopping': True,        # Article: EarlyStopping
+            'predict_mode': 'direct_multistep',
         }
 
         if 'ACN_JPL' in datasets:
