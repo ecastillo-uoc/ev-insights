@@ -22,7 +22,7 @@ Key differences from our standard ``TransformerModelStrategy``:
 Article hyperparameters (Table 1):
   epochs=100, batch_size=32, learning_rate=0.001,
   dropout=0.2, activation=ReLU, scaler=MinMaxScaler.
-  look_back = prediction_period (30, 120, or 240 days).
+  look_back = forecast_horizon (30, 120, or 240 days).
 
 All shared train/predict pipeline logic lives in ``KerasTimeSeriesBaseStrategy``.
 """

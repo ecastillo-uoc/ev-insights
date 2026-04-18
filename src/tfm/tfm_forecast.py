@@ -41,7 +41,7 @@ from src.tfm.tfm_constants import COVID_START, COVID_END
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def plot_train_test_split(train, test, dataset_name, test_size, zoom_range=None):
+def plot_train_test_split(train, test, dataset_name, forecast_horizon, zoom_range=None):
     """Plot the real training data and test data split."""
     plt.figure(figsize=(12, 6))
     plt.plot(train.index, train['y'], label='Train', linewidth=1.5)
@@ -54,14 +54,14 @@ def plot_train_test_split(train, test, dataset_name, test_size, zoom_range=None)
     
     # Save full plot
     os.makedirs('output_plots', exist_ok=True)
-    plot_path = f'output_plots/{dataset_name}_train_test_split_{test_size}days.png'
+    plot_path = f'output_plots/{dataset_name}_train_test_split_{forecast_horizon}days.png'
     plt.savefig(plot_path)
     logging.info(f"Train/Test split plot saved to {plot_path}")
 
     # Save zoom plot if range is provided
     if zoom_range:
         plt.xlim(pd.to_datetime(zoom_range[0]), pd.to_datetime(zoom_range[1]))
-        plot_path_zoom = f'output_plots/train_test_split_{dataset_name}_{test_size}days_zoom.png'
+        plot_path_zoom = f'output_plots/train_test_split_{dataset_name}_{forecast_horizon}days_zoom.png'
         plt.savefig(plot_path_zoom)
         logging.info(f"Train/Test split zoom plot saved to {plot_path_zoom}")
 
@@ -70,7 +70,7 @@ def plot_train_test_split(train, test, dataset_name, test_size, zoom_range=None)
 
 
 
-def plot_test_vs_predict(test, predictions, dataset_name, model_name, test_size):
+def plot_test_vs_predict(test, predictions, dataset_name, model_name, forecast_horizon):
     """Plot the test data (actual) against predictions."""
     min_len = min(len(test), len(predictions))
     if min_len < len(test) or min_len < len(predictions):
@@ -80,7 +80,7 @@ def plot_test_vs_predict(test, predictions, dataset_name, model_name, test_size)
     plt.figure(figsize=(12, 6))
     plt.plot(test.index, test['y'], label='Test (Actual)', linewidth=1.5)
     plt.plot(test.index, predictions, label='Predictions', linestyle='--', linewidth=1.5, color='red')
-    plt.title(f'Actual vs Predictions for {dataset_name} ({test_size} days)\nModel: {model_name}')
+    plt.title(f'Actual vs Predictions for {dataset_name} ({forecast_horizon} days)\nModel: {model_name}')
     plt.xlabel('Date')
     plt.ylabel('Energy Demand (kWh)')
     plt.legend()
@@ -88,7 +88,7 @@ def plot_test_vs_predict(test, predictions, dataset_name, model_name, test_size)
     
     # Save plot
     os.makedirs('output_plots', exist_ok=True)
-    plot_path = f'output_plots/{dataset_name}_actual_vs_predict_{model_name}_{test_size}days.png'
+    plot_path = f'output_plots/{dataset_name}_actual_vs_predict_{model_name}_{forecast_horizon}days.png'
     plt.savefig(plot_path)
     plt.close()
     logging.info(f"Actual vs Predict plot saved to {plot_path}")
@@ -577,7 +577,7 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
 #   hybrid transformer model." Sci Rep 15, 13555 (2025).
 #
 # Key differences from our default models:
-#   * look_back = prediction_period (30, 120, 240) — not a fixed 14
+#   * look_back = forecast_horizon (30, 120, 240) — not a fixed 14
 #   * dropout = 0.2   (vs. 0.1 for our Transformer/Hybrid)
 #   * Transformer uses a single Dense(ReLU) → MHA → GAP → Dense(1) arch
 #     (no residual, no LayerNorm, no feed-forward block, no MLP head)
@@ -589,7 +589,7 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
 # =============================================================================
 
 def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
-    """LSTM with Hussain et al. hyperparams: look_back = prediction_period, dropout=0.2."""
+    """LSTM with Hussain et al. hyperparams: look_back = forecast_horizon, dropout=0.2."""
     split_date_str = "2021-01-01"
 
     strategy_jpl = {
@@ -665,7 +665,7 @@ def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_
 
 
 def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
-    """Hybrid LSTM-Transformer with Hussain et al. hyperparams: look_back = prediction_period, dropout=0.2."""
+    """Hybrid LSTM-Transformer with Hussain et al. hyperparams: look_back = forecast_horizon, dropout=0.2."""
     split_date_str = "2021-01-01"
 
     strategy_jpl = {
