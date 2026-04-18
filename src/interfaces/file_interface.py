@@ -5,7 +5,6 @@ import logging
 import csv
 from pathlib import Path
 import pandas as pd
-from pprint import pprint
 from datetime import datetime, timedelta
 from dateutil import parser
 

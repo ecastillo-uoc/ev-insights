@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from pprint import pprint
 from src.services.service import Service
 from src.analysis.analysis import init_analysis
 

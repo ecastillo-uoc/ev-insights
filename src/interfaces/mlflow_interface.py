@@ -2,7 +2,6 @@ import os
 import requests
 import time
 from pathlib import Path
-from pprint import pprint
 from src.interfaces.interface import Interface
 import mlflow
 from mlflow import MlflowClient

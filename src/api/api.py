@@ -1,5 +1,4 @@
 import os
-from pprint import pprint
 from fastapi import FastAPI
 from src.api.v1.endpoints.analysis import router as analysis_router_v1
 from src.api.v1.endpoints.ingestion import router as ingestion_router_v1

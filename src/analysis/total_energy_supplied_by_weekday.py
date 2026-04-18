@@ -1,7 +1,6 @@
 import os
 import pandas as pd
 import plotly.express as px
-from pprint import pprint
 from src.analysis.analysis import Analysis
 from src.analysis.plot_utils import save_and_show_plotly
 

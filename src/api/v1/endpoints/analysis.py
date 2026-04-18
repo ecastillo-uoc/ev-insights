@@ -1,7 +1,6 @@
 import os
 import json
 from pathlib import Path
-from pprint import pprint
 from fastapi import APIRouter, Depends
 from src.api.v1.models.analysis import Stats
 from src.__main__ import main

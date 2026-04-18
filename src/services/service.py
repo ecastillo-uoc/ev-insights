@@ -4,7 +4,6 @@ from pathlib import Path
 from src.interfaces.interface import init_interface
 from src.utils.path_utils import normalize_path
 from datetime import datetime
-from pprint import pprint
 
 SERVICES = {"analysis", "forecast", "ingestion", "admin"}
 

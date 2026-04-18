@@ -2,7 +2,6 @@ import os
 import json
 import logging
 from pathlib import Path
-from pprint import pprint
 from fastapi import APIRouter, Depends
 from src.api.v1.models.forecast import TrainModelsDataParams, PredictModelsDataParams
 from src.__main__ import main

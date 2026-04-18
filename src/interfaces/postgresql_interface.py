@@ -6,7 +6,6 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 import pandas as pd
-from pprint import pprint
 from pathlib import Path
 
 from src.interfaces.interface import Interface

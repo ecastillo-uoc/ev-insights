@@ -1,5 +1,4 @@
 import os
-from pprint import pprint
 from src.services.service import Service
 from src.utils.console import Colors
 
