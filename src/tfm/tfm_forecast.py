@@ -526,7 +526,9 @@ def optimize_lstm(datasets, n_trials, mlflow_tracking_uri=None):
 
 if __name__ == "__main__":
     
-    datasets = ['Dundee', 'ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
+    datasets = ['Dundee', 'ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 
+                #'BeLib', 
+                'AMB_Barcelona']
     #datasets = ['ACN_Caltech', 'ACN_JPL']
     #datasets = ['Dundee']
     li_forecast_horizons = [1, 7, 30, 120]
