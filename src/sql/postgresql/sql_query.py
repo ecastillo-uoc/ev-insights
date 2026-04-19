@@ -35,9 +35,9 @@ insert_charging_stations = """
 """
 
 insert_charging_sessions = """
-    INSERT INTO evinsights."ChargingSession" (plug_in_datetime, plug_out_datetime, charge_end_datetime, charge_end_datetime_presence, 
+    INSERT INTO evinsights."ChargingSession" (orig_session_id, plug_in_datetime, plug_out_datetime, charge_end_datetime, charge_end_datetime_presence, 
                                              energy_supplied, fk_dataset_id, fk_charging_station_id, fk_user_id) 
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
 
 insert_users = """

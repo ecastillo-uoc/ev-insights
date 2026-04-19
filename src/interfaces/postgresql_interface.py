@@ -311,13 +311,16 @@ class PostgreSql(Interface):
 
         cursor = self.db.cursor()
         data = data.fillna("")  # TODO Should this be performed once before the start of data ingestion?
-        charging_sessions_data = data[['plug_in_datetime',
-                                       'plug_out_datetime',
-                                       'charge_end_datetime',
-                                       'charge_end_datetime_presence',
-                                       'energy_supplied',
-                                       'charging_station_id',
-                                       'user_id', ]].drop_duplicates()
+        session_columns = ['plug_in_datetime',
+                          'plug_out_datetime',
+                          'charge_end_datetime',
+                          'charge_end_datetime_presence',
+                          'energy_supplied',
+                          'charging_station_id',
+                          'user_id']
+        if 'orig_session_id' in data.columns:
+            session_columns.insert(0, 'orig_session_id')
+        charging_sessions_data = data[session_columns].drop_duplicates()
 
         inserted_count = 0
         for index, row in charging_sessions_data.iterrows():
@@ -325,7 +328,8 @@ class PostgreSql(Interface):
             charging_station_id = charging_stations.get(str(row['charging_station_id']))
             user_id = users.get(str(row['user_id']))
             try:
-                data_row = (row['plug_in_datetime'] if 'plug_in_datetime' in row and not pd.isna(row['plug_in_datetime']) and not row['plug_in_datetime'] == ''  else None,
+                data_row = (row['orig_session_id'] if 'orig_session_id' in row and row['orig_session_id'] != '' and not pd.isna(row['orig_session_id']) else None,
+                            row['plug_in_datetime'] if 'plug_in_datetime' in row and not pd.isna(row['plug_in_datetime']) and not row['plug_in_datetime'] == ''  else None,
                             row['plug_out_datetime'] if 'plug_out_datetime' in row and not pd.isna(row['plug_out_datetime']) and not row['plug_out_datetime'] == ''  else None,
                             row['charge_end_datetime'] if 'charge_end_datetime' in row and not pd.isna(row['charge_end_datetime']) and not row['charge_end_datetime'] == '' else None,
                             row['charge_end_datetime_presence'],

@@ -432,6 +432,7 @@ class File(Interface):
         df['user_id'] = pd.NA
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
+        df['orig_session_id'] = pd.NA
         df = df[self.dataframe_columns]
         
         return df
@@ -458,6 +459,7 @@ class File(Interface):
         df['max_charging_power'] = pd.NA
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
+        df['orig_session_id'] = pd.NA
         df = df[self.dataframe_columns]
         return df
     
@@ -469,7 +471,7 @@ class File(Interface):
         Args:
             df (pd.DataFrame): The input DataFrame containing raw data.
             SDR ID	Site	CP ID	Connector Type	Consum(kWh)	Duration	Start	End	Postcode
-
+            Session Data Record ID
 
         Returns:
             pd.DataFrame: The processed DataFrame with standardized columns and additional fields.
@@ -479,7 +481,7 @@ class File(Interface):
 
         # normalize names
         df.rename(columns={
-                           'SDR ID': 'session_id', 
+                           'SDR ID': 'orig_session_id',  
                            'Site': 'charging_station_id', 
                            'CP ID': 'charging_station_id',
                            'Connector Type': 'connector',
@@ -531,6 +533,7 @@ class File(Interface):
         df['max_charging_power'] = pd.NA
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
+        df['orig_session_id'] = pd.NA
         df = df[self.dataframe_columns]
         return df
 
@@ -555,6 +558,7 @@ class File(Interface):
         df['charging_station_id'] = df.apply(lambda row: '{}_{}'.format(row['ChargePoint'], row['Connector']), axis=1)
         df['ev_id'] = pd.NA
         df['max_charging_power'] = pd.NA
+        df['orig_session_id'] = pd.NA
         df = df[self.dataframe_columns]
         return df
 
@@ -585,6 +589,7 @@ class File(Interface):
         df['energy_supplied'] = df["L'énergie (Wh)"] / 1000
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
+        df['orig_session_id'] = pd.NA
         df = df[self.dataframe_columns]
         return df
 
@@ -605,7 +610,7 @@ class File(Interface):
                         # disconnectTime
                         # doneChargingTime
                         "kWhDelivered": "energy_supplied",
-                        # sessionID
+                        "sessionID": "orig_session_id",
                         # siteID
                         # spaceID
                         "stationID": "charging_station_id",
@@ -647,6 +652,7 @@ class File(Interface):
         df['max_charging_power'] = pd.NA
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
+        df['orig_session_id'] = pd.NA
         df = df[self.dataframe_columns]
         return df
 

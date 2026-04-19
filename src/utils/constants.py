@@ -1,4 +1,5 @@
 DEFAULT_DATAFRAME_COLUMNS = [
+    'orig_session_id',               # Original session ID from source dataset, if any
     'plug_in_datetime',              # When vehicle is plugged-in (timezone-less)
     'plug_out_datetime',             # When vehicle is plugged-out (timezone-less)
     'charge_end_datetime',           # When charging session ends (timezone-less)
