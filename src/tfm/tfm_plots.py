@@ -37,16 +37,67 @@ def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'times
             
     save_path_str = str(save_path)
 
-    plt.figure(figsize=(12, 6))
-    
     # Optional sorting if not already sorted
     dataset = dataset.sort_values(by=time_col)
-    
-    plt.plot(dataset[time_col], dataset[energy_col], linestyle='-', linewidth=1, alpha=0.8)
-    plt.title(f"'{dataset_name}' Energy over time ")
-    plt.xlabel('Timestamp')
-    plt.ylabel('Energy Provided (kWh)')
-    plt.grid(True, linestyle='--', alpha=0.4)
+
+    has_station_count = 'station_count' in dataset.columns
+    has_session_count = 'session_count' in dataset.columns
+    has_duration = 'avg_session_duration_s' in dataset.columns
+
+    n_extra = sum([has_station_count, has_session_count, has_duration])
+
+    if n_extra > 0:
+        n_subplots = 1 + n_extra
+        height_ratios = [3] + [1] * n_extra
+        fig, axes = plt.subplots(n_subplots, 1, figsize=(12, 4 + 2 * n_extra), sharex=True,
+                                 gridspec_kw={'height_ratios': height_ratios})
+        ax1 = axes[0]
+        ax_extra = list(axes[1:])
+    else:
+        fig, ax1 = plt.subplots(1, 1, figsize=(12, 6))
+        ax_extra = []
+
+    ax1.plot(dataset[time_col], dataset[energy_col], linestyle='-', linewidth=1, alpha=0.8, color='tab:blue', label='Energy (kWh)')
+    ax1.set_title(f"'{dataset_name}' Energy over time")
+    ax1.set_ylabel('Energy Provided (kWh)')
+    ax1.grid(True, linestyle='--', alpha=0.4)
+    ax1.legend(loc='upper left')
+
+    ax_idx = 0
+    if has_station_count:
+        ax2 = ax_extra[ax_idx]; ax_idx += 1
+        ax1_right = ax1.twinx()
+        station_ma = dataset['station_count'].rolling(window=7, min_periods=1).mean()
+        ax1_right.plot(dataset[time_col], station_ma, linestyle='--', linewidth=1.2, alpha=0.7, color='tab:orange', label='Stations (7d MA)')
+        ax1_right.set_ylabel('Distinct Stations (7d MA)', color='tab:orange')
+        ax1_right.tick_params(axis='y', labelcolor='tab:orange')
+        ax1_right.legend(loc='upper right')
+
+        ax2.bar(dataset[time_col], dataset['station_count'], alpha=0.6, color='tab:orange', width=1.0, label='Distinct Stations')
+        ax2.set_ylabel('Distinct Stations')
+        ax2.grid(True, linestyle='--', alpha=0.4)
+        ax2.legend(loc='upper left')
+
+    if has_session_count:
+        ax3 = ax_extra[ax_idx]; ax_idx += 1
+        ax3.bar(dataset[time_col], dataset['session_count'], alpha=0.6, color='tab:green', width=1.0, label='Daily Sessions')
+        ax3.set_ylabel('Daily Sessions')
+        ax3.grid(True, linestyle='--', alpha=0.4)
+        ax3.legend(loc='upper left')
+
+    if has_duration:
+        ax4 = ax_extra[ax_idx]; ax_idx += 1
+        duration_h = dataset['avg_session_duration_s'] / 3600.0
+        ax4.plot(dataset[time_col], duration_h, linestyle='-', linewidth=1, alpha=0.8, color='tab:purple', label='Avg Session Duration (h)')
+        ax4.set_ylabel('Avg Duration (h)')
+        ax4.grid(True, linestyle='--', alpha=0.4)
+        ax4.legend(loc='upper left')
+
+    if ax_extra:
+        ax_extra[-1].set_xlabel('Timestamp')
+    else:
+        ax1.set_xlabel('Timestamp')
+
     plt.tight_layout()
     
     if save_path:
@@ -760,8 +811,8 @@ def main():
 
     # fetch and plot
     # li_ds = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
-    #li_ds = [('Norway_12loc', 'OSL_T'), ('Norway_12loc', 'OSL_S'), 'ACN_Caltech']
-    li_ds = []
+    # li_ds = [('Norway_12loc', 'OSL_T'), ('Norway_12loc', 'OSL_S'), 'ACN_Caltech']
+    li_ds = ['Dundee']
     for item in li_ds:
         if isinstance(item, tuple):
             ds, site = item
@@ -772,7 +823,7 @@ def main():
         print(f"\n--- Processing dataset: {ds}" + (f", site: {site}" if site else "") + " ---")
 
         # Energy
-        # fetch_and_plot_dataset_trends(ds, db_config, FIG_DIR, site_name=site)
+        fetch_and_plot_dataset_trends(ds, db_config, FIG_DIR, site_name=site)
         # fetch_and_plot_energy_by_weekday(ds, db_config, FIG_DIR, site_name=site)
         # fetch_and_plot_energy_by_month(ds, db_config, FIG_DIR, site_name=site)
         # fetch_and_plot_time_serie_decomposition(ds, db_config, FIG_DIR, site_name=site)
@@ -787,12 +838,13 @@ def main():
         if site:
             fetch_and_plot_session_boxplots_by_specific_site(ds, site, db_config, FIG_DIR)
         else:
-            fetch_and_plot_session_boxplots_by_site(ds, db_config, FIG_DIR)
+            pass
+            #fetch_and_plot_session_boxplots_by_site(ds, db_config, FIG_DIR)
             # Also if no site is provided, we might want to plot the overall grouping by site
-            fetch_and_plot_energy_trends_by_site(ds, db_config, FIG_DIR)
-            fetch_and_plot_charges_trends_by_site(ds, db_config, FIG_DIR)
+            #fetch_and_plot_energy_trends_by_site(ds, db_config, FIG_DIR)
+            #fetch_and_plot_charges_trends_by_site(ds, db_config, FIG_DIR)
 
-    fetch_and_plot_session_boxplots_by_station(city='Sant Cugat del Vall?s', db_config=db_config, fig_dir=FIG_DIR)
+    # fetch_and_plot_session_boxplots_by_station(city='Sant Cugat del Vall?s', db_config=db_config, fig_dir=FIG_DIR)
     # fetch_and_plot_session_boxplots_by_station(station_ids=(141, 142), db_config=db_config, fig_dir=FIG_DIR)
 
 
