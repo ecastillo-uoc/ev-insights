@@ -219,7 +219,7 @@ class PostgreSql(Interface):
 
         # Ensure we capture all relevant columns for charging stations
         allowed_columns = [
-            id_column, 'manufacturer', 'model', 'type', 'num_plugs', 
+            id_column, 'manufacturer', 'model', 'station_type', 'num_plugs', 
             'max_charging_power', 'max_discharging_power',
             'ocpp_version', 'longitude', 'latitude', 'postal_code'
         ]
@@ -231,7 +231,7 @@ class PostgreSql(Interface):
             data_row = (row[id_column] if id_column in row and row[id_column] != '' else None,
                         row['manufacturer'] if 'manufacturer' in row and row['manufacturer'] != '' else None,
                         row['model'] if 'model' in row and row['model'] != '' else None,
-                        row['type'] if 'type' in row and row['type'] != '' else None,
+                        row['station_type'] if 'station_type' in row and row['station_type'] != '' else None,
                         row['num_plugs'] if 'num_plugs' in row and row['num_plugs'] != '' else None,
                         row['max_charging_power'] if 'max_charging_power' in row and row['max_charging_power'] != '' else None,
                         row['max_discharging_power'] if 'max_discharging_power' in row and row['max_discharging_power'] != '' else None,
