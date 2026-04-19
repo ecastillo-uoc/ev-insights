@@ -32,7 +32,13 @@ def fetch_dataset_energy_trends(dataset_name: str, db_config: dict = None, site_
         DATE(cs.plug_out_datetime) as timestamp, 
         SUM(cs.energy_supplied) as energy_kwh,
         COUNT(DISTINCT cs.fk_charging_station_id) as station_count,
-        EXTRACT(EPOCH FROM AVG(charge_end_datetime - plug_in_datetime)) as avg_session_duration_s,
+        EXTRACT(EPOCH FROM AVG(
+            CASE
+                WHEN charge_end_datetime - plug_in_datetime >= INTERVAL '0' THEN charge_end_datetime - plug_in_datetime
+                WHEN plug_out_datetime - plug_in_datetime >= INTERVAL '0' THEN plug_out_datetime - plug_in_datetime
+                ELSE INTERVAL '0'
+            END
+        )) as avg_session_duration_s,
         COUNT(DISTINCT cs.id) as session_count
     FROM 
         evinsights."ChargingSession" cs
