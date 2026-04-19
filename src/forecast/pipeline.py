@@ -32,9 +32,11 @@ scale**.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import os
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 import numpy as np
@@ -103,6 +105,82 @@ def _make_strategy(model_type: str):
         entry = _STRATEGY_REGISTRY['lstm']
     cls, attr_key = entry
     return cls(), attr_key
+
+
+# ── Metrics persistence ────────────────────────────────────────────────────
+
+def _build_metrics_record(
+    experiment_name: str,
+    model_type: str,
+    dataset: str,
+    forecast_horizon: int,
+    split_date_str: str,
+    strategy_params: dict,
+    metrics: dict,
+) -> dict:
+    """Flatten one experiment run into a single row dict for the metrics CSV.
+
+    Scalar ``strategy_params`` values are stored inline under ``param_<key>``;
+    complex values (lists, dicts) are JSON-encoded strings so the CSV stays
+    flat and human-readable.
+    """
+    record: dict = {
+        'timestamp': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+        'experiment_name': experiment_name,
+        'model_type': model_type,
+        'dataset': dataset,
+        'forecast_horizon': forecast_horizon,
+        'split_date': split_date_str,
+    }
+    for k, v in strategy_params.items():
+        if k == 'forecast_horizon':
+            continue  # already captured above
+        if isinstance(v, (int, float, str, bool)) or v is None:
+            record[f'param_{k}'] = v
+        else:
+            record[f'param_{k}'] = json.dumps(v)
+    record.update(metrics)
+    return record
+
+
+def _upsert_metrics_csv(
+    records: List[dict],
+    output_dir: str = 'output_metrics',
+    filename: str = 'forecast_metrics.csv',
+) -> str:
+    """Persist experiment metrics to a CSV used as a running database.
+
+    Records are keyed on ``(experiment_name, dataset, forecast_horizon)``.
+    Existing rows that match an incoming key are *replaced*; all other rows
+    are kept intact, so no previous run is ever silently discarded.
+
+    Returns the path to the written CSV file.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    csv_path = os.path.join(output_dir, filename)
+
+    new_df = pd.DataFrame(records)
+    key_cols = ['experiment_name', 'dataset', 'forecast_horizon']
+
+    if os.path.exists(csv_path):
+        try:
+            existing_df = pd.read_csv(csv_path)
+        except Exception as exc:
+            logger.warning("Could not read existing metrics CSV (%s); starting fresh.", exc)
+            existing_df = pd.DataFrame()
+
+        if not existing_df.empty and all(c in existing_df.columns for c in key_cols):
+            new_keys = set(new_df[key_cols].apply(tuple, axis=1))
+            keep_mask = ~existing_df[key_cols].apply(tuple, axis=1).isin(new_keys)
+            combined_df = pd.concat([existing_df[keep_mask], new_df], ignore_index=True)
+        else:
+            combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+    else:
+        combined_df = new_df
+
+    combined_df.to_csv(csv_path, index=False)
+    logger.info("Metrics upserted → %s (%d total rows)", csv_path, len(combined_df))
+    return csv_path
 
 
 # ── Main pipeline ──────────────────────────────────────────────────────────
@@ -352,11 +430,17 @@ def run_forecast_pipeline(
                 len(a), look_back,
             )
 
-            results_summary.append({
-                'dataset': dataset,
-                'forecast_horizon': forecast_horizon,
-                **metrics,
-            })
+            results_summary.append(
+                _build_metrics_record(
+                    experiment_name=model_name,
+                    model_type=model_type,
+                    dataset=dataset,
+                    forecast_horizon=forecast_horizon,
+                    split_date_str=split_date_str,
+                    strategy_params=strategy_params,
+                    metrics=metrics,
+                )
+            )
 
             # 6. Plots ─────────────────────────────────────────────────
             zoom_range = strategy_params.get('zoom_range')
@@ -436,6 +520,8 @@ def run_forecast_pipeline(
                     logger.warning("MLflow logging failed (non-blocking): %s", mlflow_err)
 
     summary_df = pd.DataFrame(results_summary)
-    logger.info("\\nFinal Benchmark Summary:\\n%s", summary_df.to_string())
-    summary_df.to_csv('forecast_metrics_summary.csv', index=False)
-    logger.info("Metrics saved to forecast_metrics_summary.csv")
+    metric_cols = ['experiment_name', 'dataset', 'forecast_horizon', 'MSE', 'RMSE', 'MAE', 'MAPE', 'SMAPE']
+    display_cols = [c for c in metric_cols if c in summary_df.columns]
+    logger.info("\nFinal Benchmark Summary:\n%s", summary_df[display_cols].to_string())
+    if results_summary:
+        _upsert_metrics_csv(results_summary)
