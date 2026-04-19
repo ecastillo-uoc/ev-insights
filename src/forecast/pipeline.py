@@ -267,7 +267,12 @@ def run_forecast_pipeline(
 
             # 5. Metrics ────────────────────────────────────────────────
             preds_array = np.array(predictions)
-            look_back = trained_model_objects.get('look_back', 30)
+            # Tree models predict from engineered features — no warm-up window.
+            # Neural models store look_back in the model-objects dict.
+            if model_type in ('xgboost', 'lightgbm'):
+                look_back = 0
+            else:
+                look_back = trained_model_objects.get('look_back', 30)
 
             if predict_dates:
                 predict_dates_idx = pd.to_datetime(predict_dates)
