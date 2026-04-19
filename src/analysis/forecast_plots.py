@@ -32,12 +32,12 @@ def plot_train_test_split(
     """
     plt.figure(figsize=(12, 6))
     plt.plot(train.index, train['y'], label='Train', linewidth=1.5, color='#1f77b4')
-    plt.plot(test.index, test['y'], label='Test (Actual)', linewidth=1.5, color='#ff7f0e')
+    plt.plot(test.index, test['y'], label='Test', linewidth=1.5, color='#ff7f0e')
 
     split_date = train.index.max()
     plt.axvline(x=split_date, color='grey', linestyle='--', linewidth=1, label='Train / Test split')
 
-    title = f'Train vs Test Split for {dataset_name}'
+    title = f'Train/Test Split for {dataset_name}'
     if model_name:
         title += f'\nModel: {model_name}'
     plt.title(title)
@@ -79,7 +79,7 @@ def plot_test_vs_predict(
     test = test.iloc[:min_len]
     predictions = predictions[:min_len]
     plt.figure(figsize=(12, 6))
-    plt.plot(test.index, test['y'], label='Test (Actual)', linewidth=1.5)
+    plt.plot(test.index, test['y'], label='Test (Actual)', linewidth=1.5, color='green')
     plt.plot(test.index, predictions, label='Predictions', linestyle='--', linewidth=1.5, color='red')
     plt.title(f'Actual vs Predictions for {dataset_name} ({forecast_horizon} days)\nModel: {model_name}')
     plt.xlabel('Date')
