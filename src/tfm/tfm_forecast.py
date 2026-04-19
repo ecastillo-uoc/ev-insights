@@ -83,7 +83,7 @@ def get_dataset_config(dataset_name, hussain=False):
             },
         }
     else:
-        _configs = {
+        _configs_pre_covid = {
             'ACN_JPL': {
                 'split_date': '2021-01-01',
                 'train_range': ('2019-01-01', '2019-09-30'),
@@ -95,6 +95,25 @@ def get_dataset_config(dataset_name, hussain=False):
                 'train_range': ('2019-01-01', '2019-06-30'),
                 'test_range': ('2019-07-01', '2019-12-15'),
                 'zoom_range': ('2019-07-01', '2019-12-15'),
+            },
+            'Dundee': {
+                'split_date': '2023-09-01',
+                'zoom_range': ('2023-09-01', '2024-06-01'),
+            },
+        }
+
+        _configs = {
+            'ACN_JPL': {
+                'split_date': '2021-01-01',
+                'train_range': ('2018-09-01', '2020-08-05'),
+                'test_range': ('2020-11-17', '2021-03-31'),
+                'zoom_range': ('2021-01-01', '2021-03-31'),
+            },
+            'ACN_Caltech': {
+                'split_date': '2021-01-01',
+                'train_range': ('2018-09-01', '2020-08-05'),
+                'test_range': ('2020-11-17', '2021-03-31'),
+                'zoom_range': ('2021-01-01', '2021-03-31'),
             },
             'Dundee': {
                 'split_date': '2023-09-01',
@@ -479,8 +498,8 @@ def optimize_lstm(datasets, n_trials, mlflow_tracking_uri=None):
 if __name__ == "__main__":
     
     #datasets = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
-    #datasets = ['ACN_Caltech', 'ACN_JPL']
-    datasets = ['Dundee']
+    datasets = ['ACN_Caltech', 'ACN_JPL']
+    #datasets = ['Dundee']
     li_forecast_horizons = [1, 7, 30, 120]
     #datasets = ['ACN_JPL']
     #li_forecast_horizons = [30]
@@ -494,14 +513,14 @@ if __name__ == "__main__":
     #optimize_lstm(datasets, n_trials, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
     # tree based
-    execute_lightgbm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
-    execute_xgboost(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    # execute_lightgbm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    # execute_xgboost(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
     execute_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
     execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
     execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
     # Hussain et al. (2025) article-variant models
-    execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
-    execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
-    execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    # execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    # execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    # execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
