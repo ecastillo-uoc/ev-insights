@@ -78,6 +78,29 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         When *feature_columns* is non-empty the returned array includes
         ``[target] + feature_columns`` with target always at column 0.
         Otherwise returns ``(n, 1)`` — backward compatible.
+
+        Parameters
+        ----------
+        subset_df : pd.DataFrame
+            Subset of the full DataFrame for a single dataset, with a
+            ``DatetimeIndex``.
+        target_column : str
+            Name of the target column (e.g. ``'y'``).
+        params : dict
+            Strategy parameters.  Checked for ``train_range`` (tuple of
+            start/end date strings) or ``train_start_date`` / ``train_split_date``
+            fallbacks.
+        split_date : str or None
+            Default upper bound of the training window when ``train_range``
+            is not provided.
+        feature_columns : list[str] or None
+            Additional columns to include alongside the target.  When ``None``
+            or empty, only the target column is returned.
+
+        Returns
+        -------
+        np.ndarray
+            2-D array of shape ``(n_train_rows, 1 + len(feature_columns))``.
         """
         cols = [target_column] + (feature_columns or [])
         if isinstance(subset_df.index, pd.DatetimeIndex):
@@ -108,12 +131,36 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         """MinMax-scale *data* and build sliding-window sequences.
 
         Supports multivariate input: *data* may have shape ``(n, k)`` where
-        ``k >= 1``.  X windows include ALL columns while y targets use only
-        column 0 (the target).  Returns ``(X, y, scaler, target_scaler)``.
+        ``k >= 1``.  X windows include **all** columns while y targets use
+        only column 0 (the target).
 
-        ``scaler`` is fitted on all columns (for input windows).
-        ``target_scaler`` is fitted on column 0 only (for inverse transform).
-        When ``k == 1`` both scalers are equivalent — backward compatible.
+        Parameters
+        ----------
+        data : np.ndarray
+            2-D array of shape ``(n_samples, n_features)`` where column 0 is
+            the prediction target and remaining columns are exogenous features
+            (e.g. calendar features).
+        look_back : int
+            Number of past time steps in each input window.
+        forecast_horizon : int, default 1
+            Number of future steps in the target vector *y*.  When ``<= 1``
+            (default) each sample maps to a single next-step target.  When
+            ``> 1`` the targets are a contiguous slice of length
+            *forecast_horizon* — used by direct multi-step models.
+
+        Returns
+        -------
+        X : np.ndarray
+            3-D array ``(n_windows, look_back, n_features)``.
+        y : np.ndarray
+            1-D (single-step) or 2-D (multi-step) target array.
+        scaler : MinMaxScaler
+            Fitted on **all** columns — used to scale input windows and to
+            reconstruct feature rows during recursive prediction.
+        target_scaler : MinMaxScaler
+            Fitted on **column 0 only** — used for inverse-transforming
+            predictions back to the original target scale.  When
+            ``n_features == 1`` this is functionally identical to *scaler*.
         """
         scaler = MinMaxScaler()
         scaled_data = scaler.fit_transform(data)
@@ -151,11 +198,26 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
     ) -> Tuple[Any, MinMaxScaler, MinMaxScaler, int, int | None, List[str], dict] | None:
         """Extract model bundle components from *model_objects*.
 
-        Returns ``(model, scaler, target_scaler, look_back, forecast_horizon,
-        feature_columns, params)`` or ``None`` on failure.
-
         Backward compatible: old saved models without ``target_scaler`` or
         ``feature_columns`` fall back to ``scaler`` and ``[]`` respectively.
+
+        Parameters
+        ----------
+        model_objects : dict or Any
+            Model bundle dict produced by :meth:`train`.  Expected keys:
+            ``keras_model``, ``scaler``, and optionally ``target_scaler``,
+            ``look_back``, ``forecast_horizon``, ``feature_columns``, ``params``.
+        strategy_name : str
+            Human-readable name used in error messages.
+        logger : logging.Logger
+            Logger instance for error reporting.
+
+        Returns
+        -------
+        tuple or None
+            ``(model, scaler, target_scaler, look_back, forecast_horizon,
+            feature_columns, params)`` on success; ``None`` if the bundle
+            format is unrecognised.
         """
         if isinstance(model_objects, dict) and 'keras_model' in model_objects:
             return (
@@ -174,7 +236,21 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
     def _resolve_predict_bounds(params: dict, forecast_horizon: int | None = None) -> Tuple[int, str | None, str | None]:
         """Return ``(forecast_horizon, predict_start_date, predict_end_date)``.
 
+        Resolves the effective prediction date window from *params*, falling
+        back to *forecast_horizon* when ``test_range`` is absent.
 
+        Parameters
+        ----------
+        params : dict
+            Strategy/model parameters.  Checked for ``forecast_horizon``,
+            ``predict_start_date``, ``predict_end_date``, and ``test_range``.
+        forecast_horizon : int or None
+            Default horizon when *params* does not specify one.
+
+        Returns
+        -------
+        tuple[int, str | None, str | None]
+            ``(forecast_horizon, predict_start_date, predict_end_date)``.
         """
         default_days = forecast_horizon if forecast_horizon is not None else 30
         forecast_horizon = params.get('forecast_horizon', default_days)
@@ -200,7 +276,45 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         target_scaler: MinMaxScaler | None = None,
         feature_columns: List[str] | None = None,
     ) -> dict:
-        """Run **schedule** (multi-step recursive) prediction for each dataset."""
+        """Run **schedule** (multi-step recursive) prediction for each dataset.
+
+        Starting from the last *look_back* observations, the model predicts
+        one step ahead, the prediction is appended to the input window (with
+        calendar features recomputed for the new date when present), and the
+        process repeats *forecast_horizon* times.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Full dataset with a ``dataset_name`` column and ``DatetimeIndex``.
+        target_column : str
+            Name of the target column.
+        dataset_names : list[str]
+            Datasets to iterate over.
+        model : keras.Model
+            Trained Keras model.
+        scaler : MinMaxScaler
+            Fitted on all input columns (target + features).
+        look_back : int
+            Window size expected by the model.
+        forecast_horizon : int
+            Number of future steps to predict.
+        predict_start_date, predict_end_date : str or None
+            Optional date bounds to filter the seed data.
+        target_scaler : MinMaxScaler or None
+            Scaler fitted on the target column only.  Falls back to *scaler*
+            when ``None``.
+        feature_columns : list[str] or None
+            Exogenous feature columns.  When non-empty, each recursive step
+            uses :func:`~src.forecast.feature_engineering.compute_calendar_row`
+            to reconstruct feature values for the predicted date.
+
+        Returns
+        -------
+        dict
+            Keys: ``prediction``, ``values``, ``dates``, ``value``, ``date``,
+            ``created_at``.
+        """
         output_dict: Dict[str, Any] = {}
 
         for dataset_name in dataset_names:
@@ -252,12 +366,12 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
 
                 if feat_cols:
                     # Reconstruct the unscaled row for the new date
-                    from tfm.tfm_forecast import _compute_calendar_row
+                    from src.forecast.feature_engineering import compute_calendar_row
                     pred_unscaled = effective_ts.inverse_transform(
                         np.array([[pred[0, 0]]])
                     )[0, 0]
                     new_date = future_dates[step]
-                    cal_values = _compute_calendar_row(new_date)
+                    cal_values = compute_calendar_row(new_date)
                     unscaled_row = np.array(
                         [[pred_unscaled] + [cal_values[c] for c in feat_cols]]
                     )
@@ -296,10 +410,43 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         target_scaler: MinMaxScaler | None = None,
         feature_columns: List[str] | None = None,
     ) -> dict:
-        """Run **direct multi-step** prediction: a single forward pass produces
-        all *forecast_horizon* values at once.
+        """Run **direct multi-step** prediction for each dataset.
 
+        A single forward pass produces all *forecast_horizon* values at once.
         Requires the model's output layer to be ``Dense(forecast_horizon)``.
+
+        Unlike :meth:`_predict_schedule`, no recursive feedback loop is used;
+        the model directly outputs the full prediction vector from the last
+        *look_back* observations.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Full dataset with ``dataset_name`` column and ``DatetimeIndex``.
+        target_column : str
+            Name of the target column.
+        dataset_names : list[str]
+            Datasets to iterate over.
+        model : keras.Model
+            Trained Keras model whose output shape is ``(batch, forecast_horizon)``.
+        scaler : MinMaxScaler
+            Fitted on all input columns.
+        look_back : int
+            Window size expected by the model.
+        forecast_horizon : int
+            Number of future steps the model outputs in a single pass.
+        predict_start_date, predict_end_date : str or None
+            Optional date bounds to filter the seed data.
+        target_scaler : MinMaxScaler or None
+            Scaler fitted on the target column only.
+        feature_columns : list[str] or None
+            Exogenous feature columns present in the input window.
+
+        Returns
+        -------
+        dict
+            Keys: ``prediction``, ``values``, ``dates``, ``value``, ``date``,
+            ``created_at``.
         """
         output_dict: Dict[str, Any] = {}
 
@@ -375,7 +522,38 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         target_scaler: MinMaxScaler | None = None,
         feature_columns: List[str] | None = None,
     ) -> dict:
-        """Run **backtest** (rolling one-step) prediction for each dataset."""
+        """Run **backtest** (rolling one-step) prediction for each dataset.
+
+        For each time step from ``look_back`` to the end of the dataset, the
+        model predicts one step ahead using **actual** recent data as context
+        (not its own past predictions).  This produces aligned prediction and
+        actual arrays suitable for metric computation.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Full dataset with ``dataset_name`` column and ``DatetimeIndex``.
+        target_column : str
+            Name of the target column.
+        dataset_names : list[str]
+            Datasets to iterate over.
+        model : keras.Model
+            Trained Keras model.
+        scaler : MinMaxScaler
+            Fitted on all input columns.
+        look_back : int
+            Window size expected by the model.
+        target_scaler : MinMaxScaler or None
+            Scaler fitted on the target column only.
+        feature_columns : list[str] or None
+            Exogenous feature columns present in the input window.
+
+        Returns
+        -------
+        dict
+            Keys: ``prediction``, ``values``, ``actuals``, ``dates``,
+            ``value``, ``date``, ``created_at``.
+        """
         output_dict: Dict[str, Any] = {}
 
         for dataset_name in dataset_names:

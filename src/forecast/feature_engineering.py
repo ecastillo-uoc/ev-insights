@@ -2,7 +2,7 @@
 Feature engineering and target transforms for the forecast pipeline.
 
 This module centralises all feature-construction logic that is shared across
-model strategies, keeping the pipeline orchestrator (``tfm_pipeline``) and the
+model strategies, keeping the pipeline orchestrator (``src.forecast.pipeline``) and the
 individual strategy files free of feature-level implementation details.
 
 Three orthogonal capabilities — each controlled by a boolean flag in

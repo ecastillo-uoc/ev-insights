@@ -1,40 +1,31 @@
-"""Backward-compatibility shim — canonical location is ``src.analysis.dataset_plots``."""
-from src.analysis.dataset_plots import *  # noqa: F401,F403
-from src.analysis.dataset_plots import (  # explicit re-exports for type checkers
-    fetch_and_plot_charges_by_month,
-    fetch_and_plot_charges_by_weekday,
-    fetch_and_plot_charges_time_serie_decomposition,
-    fetch_and_plot_charges_trends_by_site,
-    fetch_and_plot_covid_patterns,
-    fetch_and_plot_dataset_charges_trends,
-    fetch_and_plot_dataset_trends,
-    fetch_and_plot_energy_by_month,
-    fetch_and_plot_energy_by_weekday,
-    fetch_and_plot_energy_trends_by_site,
-    fetch_and_plot_multiple_datasets_trends,
-    fetch_and_plot_session_boxplots_by_site,
-    fetch_and_plot_session_boxplots_by_specific_site,
-    fetch_and_plot_session_boxplots_by_station,
-    fetch_and_plot_time_serie_decomposition,
-    plot_charges_by_month,
-    plot_charges_by_weekday,
-    plot_charges_by_weekday_covid,
-    plot_charges_trends,
-    plot_charges_trends_by_site,
-    plot_energy_by_month,
-    plot_energy_by_weekday,
-    plot_energy_by_weekday_covid,
-    plot_energy_consumption_trends,
-    plot_energy_consumption_trends_by_site,
-    plot_multiple_energy_consumption_trends,
-    plot_session_boxplots_by_site,
-    tag_covid_period,
-)
+"""
+EV charging dataset EDA plots — experiment runner.
+
+This module is the **entry point** for generating exploratory data analysis
+(EDA) visualisations used in the TFM thesis.  It iterates over configured
+datasets and calls the plotting functions from ``src.analysis.dataset_plots``
+to produce trend, decomposition, and box-plot figures.
+
+All plotting logic lives in :mod:`src.analysis.dataset_plots`; this module
+only handles dataset configuration and the ``main()`` loop.
+"""
+
 from pathlib import Path
+
+from src.analysis.dataset_plots import (
+    fetch_and_plot_dataset_trends,
+    fetch_and_plot_session_boxplots_by_specific_site,
+    fetch_and_plot_time_serie_decomposition,
+)
 
 
 def main():
-    """Main execution function (kept for backward compatibility)."""
+    """Generate EDA figures for the configured datasets.
+
+    Iterates over datasets in *li_ds*, producing energy-trend, time-series
+    decomposition, and (optionally) per-site session boxplot figures.
+    Output is saved to :file:`{FIG_DIR}`.
+    """
     FIG_DIR = Path('/home/ecastillo/dev/M2_882_TFM/tfm/doc/figures/')
 
     db_config = {
