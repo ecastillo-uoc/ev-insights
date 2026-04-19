@@ -218,6 +218,18 @@ def run_forecast_pipeline(
                 )
                 df_model = df_model.dropna()
                 train_df = train_df.dropna()
+
+                # Guard: lag features may consume most rows on small datasets
+                model_rows = df_model[df_model['dataset_name'] == dataset]
+                train_rows = model_rows[model_rows.index <= split_date]
+                test_rows = model_rows[model_rows.index > split_date]
+                if train_rows.empty or test_rows.empty:
+                    logger.warning(
+                        "Skipping %s / %dd: not enough data after lag features "
+                        "(train=%d, test=%d rows).",
+                        dataset, forecast_horizon, len(train_rows), len(test_rows),
+                    )
+                    continue
             else:
                 # Neural models: pass calendar columns as feature_columns
                 feature_cols = list(calendar_cols)
