@@ -1,50 +1,59 @@
+"""
+EV charging-station demand forecasting — experiment orchestrator.
+
+This module is the **top-level entry point** for running forecasting
+experiments.  It defines:
+
+* **Dataset configurations** — train/test splits and zoom ranges for each
+  dataset, both our own and the Hussain et al. (2025) article variants.
+* **``execute_*`` functions** — one per model type, each wiring the
+  appropriate ``strategy_params`` and calling
+  :func:`~src.tfm.tfm_pipeline.run_forecast_pipeline`.
+* **``optimize_lstm``** — Optuna-based hyper-parameter search.
+
+All computational logic lives elsewhere:
+
++-----------------------------------------+-------------------------------------------+
+| Responsibility                          | Module                                    |
++=========================================+===========================================+
+| Feature engineering (calendar, rolling, | ``src.forecast.feature_engineering``      |
+| lags, target transforms)                |                                           |
++-----------------------------------------+-------------------------------------------+
+| Pipeline orchestration (train → predict | ``src.tfm.tfm_pipeline``                 |
+| → metrics → plots → MLflow)             |                                           |
++-----------------------------------------+-------------------------------------------+
+| Model architectures                     | ``src.forecast.strategies.*``             |
++-----------------------------------------+-------------------------------------------+
+
+Three boolean flags in ``strategy_params`` control optional pre-processing
+applied uniformly to **all** strategies:
+
+* ``use_log_transform``  — ``log1p`` / ``expm1`` round-trip on target
+* ``use_differencing``   — first-order diff / per-date reconstruction
+* ``use_calendar_features`` — day-of-week, month, sin/cos, business day
+
+All default to ``False`` so existing behaviour is unchanged.  They can be
+combined freely, yielding up to 8 experiment configurations.
+"""
 import os
-import math
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from sqlalchemy import create_engine
 import sys
 import logging
-from datetime import timedelta
+
+import pandas as pd
 
 # Add src to python path if not present
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Own modules
 from src.utils.console import Colors
-
-# forecast
-from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
-
-from src.forecast.strategies import (
-    LSTMModelStrategy, TransformerModelStrategy, HussainTransformerModelStrategy,
-    LightGBMModelStrategy, XGBoostModelStrategy, HybridTransformerLSTMModelStrategy,
-    HussainHybridModelStrategy,
-)
-from src.forecast.model_persistence import save_model, load_model
-from src.forecast.strategies.utils_ts import smape
-
-# MLflow (optional, for experiment tracking)
-try:
-    import mlflow
-    import joblib
-    import tempfile
-    _MLFLOW_AVAILABLE = True
-except ImportError:
-    _MLFLOW_AVAILABLE = False
+from src.tfm.tfm_pipeline import run_forecast_pipeline
+from src.tfm.tfm_data_fetcher import fetch_daily_energy_for_forecast
 
 # Optimization
 import optuna
 from src.tfm.param_optimization import objective_lstm, objective_transformer
 
-# Data preparation
-from src.tfm.tfm_data_fetcher import fetch_daily_energy_for_forecast
-from src.tfm.tfm_constants import COVID_START, COVID_END
-
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
 
 def plot_train_test_split(train, test, dataset_name, forecast_horizon, zoom_range=None, model_name=None):
@@ -110,6 +119,47 @@ def plot_test_vs_predict(test, predictions, dataset_name, model_name, forecast_h
     plt.close()
     logging.info(f"Actual vs Predict plot saved to {plot_path}")
 
+CALENDAR_FEATURE_COLS = [
+    'day_of_week', 'month', 'day_of_year_sin', 'day_of_year_cos',
+    'is_business_day',
+]
+
+
+def _compute_calendar_row(date):
+    """Return a dict of calendar feature values for a single date.
+
+    Must produce exactly the same values as _add_calendar_features() so that
+    neural schedule-mode predictions (Phase 2) recompute features consistently.
+    """
+    ts = pd.Timestamp(date)
+    return {
+        'day_of_week': ts.dayofweek,
+        'month': ts.month,
+        'day_of_year_sin': np.sin(2 * np.pi * ts.dayofyear / 365.25),
+        'day_of_year_cos': np.cos(2 * np.pi * ts.dayofyear / 365.25),
+        'is_business_day': int(pd.tseries.offsets.BDay().is_on_offset(ts)),
+    }
+
+
+def _add_calendar_features(df):
+    """Add calendar features to a DatetimeIndex DataFrame.
+
+    All features use int or float dtype (never category) for
+    compatibility with LightGBM's select_dtypes filter.
+
+    Returns (df_with_features, list_of_added_column_names).
+    """
+    df = df.copy()
+    df['day_of_week']     = df.index.dayofweek
+    df['month']           = df.index.month
+    df['day_of_year_sin'] = np.sin(2 * np.pi * df.index.dayofyear / 365.25)
+    df['day_of_year_cos'] = np.cos(2 * np.pi * df.index.dayofyear / 365.25)
+    df['is_business_day'] = df.index.map(
+        lambda x: int(pd.tseries.offsets.BDay().is_on_offset(x))
+    )
+    return df, list(CALENDAR_FEATURE_COLS)
+
+
 def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type="lstm", model_suffix="",
                           mlflow_tracking_uri=None):
     
@@ -129,6 +179,33 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
         if df.empty:
             logging.warning(f"No data found for {dataset}. Skipping.")
             continue
+
+        # --- Forward target transforms (Phase 0) ---
+        # Applied BEFORE train/test split so every strategy sees the
+        # transformed 'y'.  Inverse transforms are applied after prediction,
+        # before metrics.  Order: log first, then diff.
+        use_log_transform = strategy_params.get('use_log_transform', False)
+        use_differencing  = strategy_params.get('use_differencing', False)
+
+        df_original_y = df['y'].copy()          # pristine copy for reference
+        df_before_diff = None                    # populated only when differencing
+
+        if use_log_transform:
+            df['y'] = np.log1p(df['y'])
+            logging.info("Applied log1p transform to target.")
+
+        if use_differencing:
+            df_before_diff = df['y'].copy()      # in log-space if log was applied
+            df['y'] = df['y'].diff()
+            df = df.iloc[1:]                     # drop first NaN from .diff()
+            logging.info("Applied first-order differencing to target.")
+
+        # --- Calendar features (optional, all model types) ---
+        use_calendar_features = strategy_params.get('use_calendar_features', False)
+        calendar_cols = []
+        if use_calendar_features:
+            df, calendar_cols = _add_calendar_features(df)
+            logging.info(f"Added calendar features: {calendar_cols}")
 
         for forecast_horizon in li_forecast_horizons:
             logging.info(f"Prediction window: {forecast_horizon} days")
@@ -264,8 +341,35 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 feature_cols = [f'lag_{i}' for i in range(1, forecast_horizon + 1)]
                 lag_df_model = pd.concat([df_model['y'].shift(i).rename(f'lag_{i}') for i in range(1, forecast_horizon + 1)], axis=1)
                 lag_train = pd.concat([train_df['y'].shift(i).rename(f'lag_{i}') for i in range(1, forecast_horizon + 1)], axis=1)
-                df_model = pd.concat([df_model, lag_df_model], axis=1).dropna()
-                train_df = pd.concat([train_df, lag_train], axis=1).dropna()
+                df_model = pd.concat([df_model, lag_df_model], axis=1)
+                train_df = pd.concat([train_df, lag_train], axis=1)
+
+                # --- Rolling means (shift(1) to avoid leakage) ---
+                df_model['rolling_7d_mean']  = df_model['y'].shift(1).rolling(7).mean()
+                df_model['rolling_30d_mean'] = df_model['y'].shift(1).rolling(30).mean()
+                train_df['rolling_7d_mean']  = train_df['y'].shift(1).rolling(7).mean()
+                train_df['rolling_30d_mean'] = train_df['y'].shift(1).rolling(30).mean()
+
+                # --- Deeper fixed lags (deduplicate with existing) ---
+                for lag_val in [7, 14, 30]:
+                    col_name = f'lag_{lag_val}'
+                    if col_name not in df_model.columns:
+                        df_model[col_name] = df_model['y'].shift(lag_val)
+                        train_df[col_name] = train_df['y'].shift(lag_val)
+
+                feature_cols += ['rolling_7d_mean', 'rolling_30d_mean']
+                feature_cols += [f'lag_{v}' for v in [7, 14, 30]
+                                 if f'lag_{v}' not in feature_cols]
+
+                # Calendar features (Phase 1c)
+                if calendar_cols:
+                    feature_cols += calendar_cols
+
+                df_model = df_model.dropna()
+                train_df = train_df.dropna()
+            else:
+                # Neural models: pass calendar columns as feature_columns
+                feature_cols = list(calendar_cols)
 
             logging.info(f"Training model with split_date={split_date_str}...")
             trained_models_dict = strategy.train(
@@ -352,7 +456,32 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 actuals_array = test_df['y'].values
                 min_len = min(len(preds_array), len(actuals_array))
                 a, p = actuals_array[:min_len], preds_array[:min_len]
+                predict_dates_idx = test_df.index[:min_len]
                 plot_actuals_df = test_df.iloc[:min_len]
+
+            # --- Inverse target transforms (Phase 0) ---
+            # Undo in reverse order: diff first, then log.
+            if use_differencing and df_before_diff is not None:
+                p_recon = np.empty_like(p)
+                a_recon = np.empty_like(a)
+                for i, date in enumerate(predict_dates_idx[:min_len]):
+                    prev_date = date - pd.Timedelta(days=1)
+                    if prev_date in df_before_diff.index:
+                        prev_val = df_before_diff.loc[prev_date]
+                    else:
+                        # Fallback: cumulative from last known value
+                        prev_val = df_before_diff.iloc[-1] if i == 0 else p_recon[i - 1]
+                    p_recon[i] = prev_val + p[i]
+                    a_recon[i] = prev_val + a[i]
+                p, a = p_recon, a_recon
+
+            if use_log_transform:
+                p = np.expm1(p)
+                a = np.expm1(a)
+
+            # Rebuild plot_actuals_df with inverse-transformed values
+            plot_actuals_df = pd.DataFrame({'y': a}, index=predict_dates_idx[:min_len])
+
             mse_val = mean_squared_error(a, p)
             metrics = {
                 'MSE': mse_val,
@@ -474,7 +603,7 @@ def get_dataset_config(dataset_name, hussain=False):
             },
             'Dundee': {
                 'split_date': '2023-09-01',
-                'zoom_range': ('2023-10-01', '2023-11-30'),
+                'zoom_range': ('2023-09-01', '2024-06-01'),
             },
         }
     else:
@@ -493,7 +622,7 @@ def get_dataset_config(dataset_name, hussain=False):
             },
             'Dundee': {
                 'split_date': '2023-09-01',
-                'zoom_range': ('2023-10-01', '2023-11-30'),
+                'zoom_range': ('2023-09-01', '2024-06-01'),
             },
         }
 
@@ -515,6 +644,9 @@ def execute_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
         'learning_rate': 0.001,
         'dropout_rate': 0.2,
         'activation': 'relu',
+        'use_log_transform': False,
+        'use_differencing': False,
+        'use_calendar_features': False,
     }
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds)
@@ -534,6 +666,9 @@ def execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None
         'num_transformer_blocks': 2,
         'dropout': 0.1,
         'mlp_dropout': 0.1,
+        'use_log_transform': False,
+        'use_differencing': False,
+        'use_calendar_features': False,
     }
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds)
@@ -543,10 +678,13 @@ def execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None
 def execute_lightgbm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     strategy_params_lgbm = {
         'li_forecast_horizons': li_forecast_horizons,
-        'num_leaves': 10,
+        'num_leaves': 31,
         'learning_rate': 0.02,
-        'max_depth': 5,
+        'max_depth': 8,
         'early_stopping_rounds': 200,
+        'use_log_transform': False,
+        'use_differencing': False,
+        'use_calendar_features': False,
     }
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds)
@@ -557,7 +695,10 @@ def execute_xgboost(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     strategy_params_xgb = {
         'li_forecast_horizons': li_forecast_horizons,
         'random_state': 16,
-        'test_size': 0.20
+        'test_size': 0.20,
+        'use_log_transform': False,
+        'use_differencing': False,
+        'use_calendar_features': False,
     }
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds)
@@ -575,6 +716,9 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
         'd_model': 128,
         'num_heads': 4,
         'dropout': 0.1,
+        'use_log_transform': False,
+        'use_differencing': False,
+        'use_calendar_features': False,
     }
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds)
@@ -624,6 +768,9 @@ def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=Non
                 'activation': 'relu',
                 'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
                 'use_early_stopping': True,        # Article: EarlyStopping
+                'use_log_transform': False,
+                'use_differencing': False,
+                'use_calendar_features': False,
             }
             params = {**strategy_params, **ranges}
             run_forecast_pipeline([ds], params, split_date_str,
@@ -647,6 +794,9 @@ def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_
                 'dropout': 0.2,                   # Article Table 1
                 'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
                 'use_early_stopping': True,        # Article: EarlyStopping
+                'use_log_transform': False,
+                'use_differencing': False,
+                'use_calendar_features': False,
             }
             params = {**strategy_params, **ranges}
             run_forecast_pipeline([ds], params, split_date_str,
@@ -669,6 +819,9 @@ def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=N
                 'dropout': 0.2,                   # Article Table 1
                 'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
                 'use_early_stopping': True,        # Article: EarlyStopping
+                'use_log_transform': False,
+                'use_differencing': False,
+                'use_calendar_features': False,
             }
             params = {**strategy_params, **ranges}
             run_forecast_pipeline([ds], params, split_date_str,

@@ -71,12 +71,15 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         target_column: str,
         params: dict,
         split_date: str | None,
+        feature_columns: List[str] | None = None,
     ) -> np.ndarray:
-        """Return the 2-D numpy array of training target values.
+        """Return the 2-D numpy array of training values.
 
-        Applies ``train_range`` or individual start/end boundaries, falling
-        back to the full column when no datetime index is available.
+        When *feature_columns* is non-empty the returned array includes
+        ``[target] + feature_columns`` with target always at column 0.
+        Otherwise returns ``(n, 1)`` — backward compatible.
         """
+        cols = [target_column] + (feature_columns or [])
         if isinstance(subset_df.index, pd.DatetimeIndex):
             train_mask = pd.Series(True, index=subset_df.index)
             train_range = params.get('train_range')
@@ -93,48 +96,48 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                 train_end_boundary = split_date or params.get('train_split_date')
                 if train_end_boundary:
                     train_mask &= (subset_df.index <= pd.to_datetime(train_end_boundary))
-            return subset_df[train_mask][[target_column]].values
-        return subset_df[[target_column]].values
+            return subset_df[train_mask][cols].values
+        return subset_df[cols].values
 
     @staticmethod
     def _scale_and_create_sequences(
         data: np.ndarray,
         look_back: int,
         forecast_horizon: int = 1,
-    ) -> Tuple[np.ndarray, np.ndarray, MinMaxScaler]:
+    ) -> Tuple[np.ndarray, np.ndarray, MinMaxScaler, MinMaxScaler]:
         """MinMax-scale *data* and build sliding-window sequences.
 
-        When *forecast_horizon* is 1 (default), targets are next-step scalars
-        and the method is backward-compatible with all existing models.
+        Supports multivariate input: *data* may have shape ``(n, k)`` where
+        ``k >= 1``.  X windows include ALL columns while y targets use only
+        column 0 (the target).  Returns ``(X, y, scaler, target_scaler)``.
 
-        When *forecast_horizon* > 1 (direct multi-step), each target ``y[i]``
-        is a vector of the next *forecast_horizon* values — enabling a single
-        forward pass to predict the whole horizon at once.
-
-        Returns ``(X, y, scaler)`` where *X* has shape
-        ``(n_samples, look_back, 1)`` ready for Keras models.
+        ``scaler`` is fitted on all columns (for input windows).
+        ``target_scaler`` is fitted on column 0 only (for inverse transform).
+        When ``k == 1`` both scalers are equivalent — backward compatible.
         """
         scaler = MinMaxScaler()
         scaled_data = scaler.fit_transform(data)
 
+        # Separate scaler for inverse-transforming single-column predictions
+        target_scaler = MinMaxScaler()
+        target_scaler.fit(data[:, 0:1])
+
+        n_cols = data.shape[1]
+
         X, y = [], []
         if forecast_horizon <= 1:
-            # ---- single-step targets (backward-compatible) ----
             for i in range(len(scaled_data) - look_back):
-                X.append(scaled_data[i:(i + look_back), 0])
-                y.append(scaled_data[i + look_back, 0])
+                X.append(scaled_data[i:(i + look_back), :])      # ALL columns
+                y.append(scaled_data[i + look_back, 0])           # target only
         else:
-            # ---- direct multi-step targets ----
             for i in range(len(scaled_data) - look_back - forecast_horizon + 1):
-                X.append(scaled_data[i:(i + look_back), 0])
+                X.append(scaled_data[i:(i + look_back), :])       # ALL columns
                 y.append(scaled_data[(i + look_back):(i + look_back + forecast_horizon), 0])
 
         X = np.array(X)
         y = np.array(y)
-
-        if len(X) > 0:
-            X = np.reshape(X, (X.shape[0], X.shape[1], 1))
-        return X, y, scaler
+        # X shape is already (n_samples, look_back, n_cols) — no reshape needed
+        return X, y, scaler, target_scaler
 
     # ------------------------------------------------------------------
     # Shared predict helpers
@@ -145,17 +148,23 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         model_objects: Any,
         strategy_name: str,
         logger: logging.Logger,
-    ) -> Tuple[Any, MinMaxScaler, int, int | None, dict] | None:
-        """Extract ``(model, scaler, look_back, forecast_horizon, params)`` from *model_objects*.
+    ) -> Tuple[Any, MinMaxScaler, MinMaxScaler, int, int | None, List[str], dict] | None:
+        """Extract model bundle components from *model_objects*.
 
-        Returns ``None`` when the expected dict layout is not found.
+        Returns ``(model, scaler, target_scaler, look_back, forecast_horizon,
+        feature_columns, params)`` or ``None`` on failure.
+
+        Backward compatible: old saved models without ``target_scaler`` or
+        ``feature_columns`` fall back to ``scaler`` and ``[]`` respectively.
         """
         if isinstance(model_objects, dict) and 'keras_model' in model_objects:
             return (
                 model_objects['keras_model'],
                 model_objects['scaler'],
+                model_objects.get('target_scaler', model_objects['scaler']),
                 model_objects.get('look_back', 30),
                 model_objects.get('forecast_horizon'),
+                model_objects.get('feature_columns', []),
                 model_objects.get('params', {}),
             )
         logger.error(f"{strategy_name} requires a dict with keras_model and scaler.")
@@ -188,6 +197,8 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         forecast_horizon: int,
         predict_start_date: str | None,
         predict_end_date: str | None,
+        target_scaler: MinMaxScaler | None = None,
+        feature_columns: List[str] | None = None,
     ) -> dict:
         """Run **schedule** (multi-step recursive) prediction for each dataset."""
         output_dict: Dict[str, Any] = {}
@@ -213,23 +224,14 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                 )
                 continue
 
-            data = subset[[target_column]].values[-look_back:]
+            effective_ts = target_scaler if target_scaler is not None else scaler
+            feat_cols = feature_columns or []
+            cols = [target_column] + feat_cols
+            data = subset[cols].values[-look_back:]
             scaled_data = scaler.transform(data)
             current_seq = scaled_data.copy()
-            predictions = []
 
-            for _ in range(forecast_horizon):
-                pred = model.predict(current_seq[np.newaxis, :, :], verbose=0)
-                predictions.append(pred[0, 0])
-                current_seq = np.roll(current_seq, -1, axis=0)
-                current_seq[-1, 0] = pred[0, 0]
-
-            predictions_unscaled = scaler.inverse_transform(
-                np.array(predictions).reshape(-1, 1)
-            )
-            predictions_series = predictions_unscaled.flatten().tolist()
-
-            # Determine last date for future date range
+            # Determine last date for future date range (moved before loop)
             if isinstance(subset.index, pd.DatetimeIndex):
                 last_date = subset.index[-1]
             elif 'plug_in_datetime' in subset.columns:
@@ -241,6 +243,33 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                 periods=forecast_horizon,
                 freq='D',
             )
+
+            predictions = []
+            for step in range(forecast_horizon):
+                pred = model.predict(current_seq[np.newaxis, :, :], verbose=0)
+                predictions.append(pred[0, 0])
+                current_seq = np.roll(current_seq, -1, axis=0)
+
+                if feat_cols:
+                    # Reconstruct the unscaled row for the new date
+                    from tfm.tfm_forecast import _compute_calendar_row
+                    pred_unscaled = effective_ts.inverse_transform(
+                        np.array([[pred[0, 0]]])
+                    )[0, 0]
+                    new_date = future_dates[step]
+                    cal_values = _compute_calendar_row(new_date)
+                    unscaled_row = np.array(
+                        [[pred_unscaled] + [cal_values[c] for c in feat_cols]]
+                    )
+                    scaled_row = scaler.transform(unscaled_row)
+                    current_seq[-1, :] = scaled_row[0, :]
+                else:
+                    current_seq[-1, 0] = pred[0, 0]
+
+            predictions_unscaled = effective_ts.inverse_transform(
+                np.array(predictions).reshape(-1, 1)
+            )
+            predictions_series = predictions_unscaled.flatten().tolist()
 
             output_dict.update({
                 self.output_key: predictions_series,
@@ -264,6 +293,8 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         forecast_horizon: int,
         predict_start_date: str | None,
         predict_end_date: str | None,
+        target_scaler: MinMaxScaler | None = None,
+        feature_columns: List[str] | None = None,
     ) -> dict:
         """Run **direct multi-step** prediction: a single forward pass produces
         all *forecast_horizon* values at once.
@@ -293,15 +324,18 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                 continue
 
             # Take the last look_back values as input seed
-            data = subset[[target_column]].values[-look_back:]
+            effective_ts = target_scaler if target_scaler is not None else scaler
+            feat_cols = feature_columns or []
+            cols = [target_column] + feat_cols
+            data = subset[cols].values[-look_back:]
             scaled_data = scaler.transform(data)
 
             # Single forward pass → (1, forecast_horizon) output
             pred_scaled = model.predict(
-                scaled_data.reshape(1, look_back, 1), verbose=0,
+                scaled_data[np.newaxis, :, :], verbose=0,
             )
             # pred_scaled shape: (1, forecast_horizon)
-            predictions_unscaled = scaler.inverse_transform(
+            predictions_unscaled = effective_ts.inverse_transform(
                 pred_scaled.reshape(-1, 1),
             )
             predictions_series = predictions_unscaled.flatten().tolist()
@@ -338,6 +372,8 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         model,
         scaler: MinMaxScaler,
         look_back: int,
+        target_scaler: MinMaxScaler | None = None,
+        feature_columns: List[str] | None = None,
     ) -> dict:
         """Run **backtest** (rolling one-step) prediction for each dataset."""
         output_dict: Dict[str, Any] = {}
@@ -347,7 +383,10 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             if subset.empty:
                 continue
 
-            all_data = subset[[target_column]].values
+            effective_ts = target_scaler if target_scaler is not None else scaler
+            feat_cols = feature_columns or []
+            cols = [target_column] + feat_cols
+            all_data = subset[cols].values
             scaled_all = scaler.transform(all_data)
 
             if len(scaled_all) <= look_back:
@@ -358,15 +397,15 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
 
             predictions_scaled = []
             for i in range(look_back, len(scaled_all)):
-                seq = scaled_all[i - look_back:i].reshape(1, look_back, 1)
+                seq = scaled_all[i - look_back:i][np.newaxis, :, :]
                 pred = model.predict(seq, verbose=0)
                 predictions_scaled.append(pred[0, 0])
 
-            predictions_unscaled = scaler.inverse_transform(
+            predictions_unscaled = effective_ts.inverse_transform(
                 np.array(predictions_scaled).reshape(-1, 1)
             ).flatten().tolist()
 
-            actuals_unscaled = all_data[look_back:].flatten().tolist()
+            actuals_unscaled = all_data[look_back:, 0].flatten().tolist()
 
             if isinstance(subset.index, pd.DatetimeIndex):
                 pred_dates = subset.index[look_back:].strftime('%Y-%m-%d').tolist()
@@ -430,10 +469,12 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                     continue
 
                 # --- Filter + scale + window ---
+                effective_feature_cols = feature_columns if feature_columns else []
                 data = self._filter_train_data(
                     subset_df, target_column, strategy_params, split_date,
+                    feature_columns=effective_feature_cols,
                 )
-                X, y, scaler = self._scale_and_create_sequences(
+                X, y, scaler, target_scaler = self._scale_and_create_sequences(
                     data, look_back, forecast_horizon=output_steps,
                 )
 
@@ -457,8 +498,10 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                     'model': {
                         'keras_model': model,
                         'scaler': scaler,
+                        'target_scaler': target_scaler,
                         'look_back': look_back,
                         'forecast_horizon': forecast_horizon,
+                        'feature_columns': effective_feature_cols,
                     },
                     'metrics': {},
                     'artifacts': {},
@@ -533,7 +576,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             )
             if unpacked is None:
                 return output_dict
-            model, scaler, look_back, forecast_horizon, params = unpacked
+            model, scaler, target_scaler, look_back, forecast_horizon, feature_columns_stored, params = unpacked
 
             forecast_horizon, predict_start_date, predict_end_date = (
                 self._resolve_predict_bounds(params, forecast_horizon)
@@ -544,17 +587,23 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                     df, target_column, dataset_names,
                     model, scaler, look_back,
                     forecast_horizon, predict_start_date, predict_end_date,
+                    target_scaler=target_scaler,
+                    feature_columns=feature_columns_stored,
                 )
             elif submode == 'direct_multistep':
                 result = self._predict_direct_multistep(
                     df, target_column, dataset_names,
                     model, scaler, look_back,
                     forecast_horizon, predict_start_date, predict_end_date,
+                    target_scaler=target_scaler,
+                    feature_columns=feature_columns_stored,
                 )
             else:
                 result = self._predict_backtest(
                     df, target_column, dataset_names,
                     model, scaler, look_back,
+                    target_scaler=target_scaler,
+                    feature_columns=feature_columns_stored,
                 )
 
             output_dict['predict'].update(result)
