@@ -312,6 +312,21 @@ def run_forecast_pipeline(
             p, a = apply_inverse_transforms(p, a, predict_dates_idx[:min_len], transform_state)
             plot_actuals_df = pd.DataFrame({'y': a}, index=predict_dates_idx[:min_len])
 
+            # Drop NaN pairs (inverse transforms may produce NaN on boundary dates)
+            valid_mask = ~(np.isnan(a) | np.isnan(p))
+            if not valid_mask.all():
+                n_nan = (~valid_mask).sum()
+                logger.warning(
+                    "%s / %dd: dropping %d NaN rows after inverse transforms (%d remain).",
+                    dataset, forecast_horizon, n_nan, valid_mask.sum(),
+                )
+                a, p = a[valid_mask], p[valid_mask]
+                predict_dates_idx = predict_dates_idx[valid_mask]
+                plot_actuals_df = pd.DataFrame({'y': a}, index=predict_dates_idx)
+            if len(a) == 0:
+                logger.warning("Skipping %s / %dd: no valid data after NaN removal.", dataset, forecast_horizon)
+                continue
+
             mse_val = mean_squared_error(a, p)
             metrics = {
                 'MSE': mse_val,
