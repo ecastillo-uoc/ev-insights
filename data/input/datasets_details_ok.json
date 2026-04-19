@@ -159,7 +159,7 @@
         "text_quotes": "\"",
         "decimal": ","
     },
-        {
+    {
         "dataset_name": "BeLib",
         "dataset_url": "https://www.data.gouv.fr/datasets/belib-reseau-parisien-de-bornes-de-recharges-accelerees-22-kw-ac-dc-pour-vehicules-electriques",
         "dataset_description": "The data set captures charging data from public 22 kW charging stations in the Paris Belib charging infrastructure from April to May 2017. ",
@@ -169,6 +169,26 @@
         "dataset_city": "Paris",
         "dataset_active": "True",
         "dataset_file_name": "merged_belib_transactions.csv",
+        "dataset_sheet_name": "",
+        "dataset_file_type": "csv",
+        "dataset_delimiter": ",",
+        "dataset_encoding": "UTF-8",
+        "dataset_license": "Open Data Commons Open Database License (ODbL)",
+        "dataset_charging_point_type": "public",
+        "dataset_notes": "",
+        "text_quotes": "\"",
+        "decimal": ","
+    },
+    {
+        "dataset_name": "Dundee",
+        "dataset_url": "https://data.dundeecity.gov.uk/datasets/8b443deaf9174b7aa9d3e10eaa906422/about",
+        "dataset_description": "This file contains charging data from sessions completed at DCC-owned public charge points in Dundee, UK. The data is collected from 2021 and is expected to be updated until 2025.",
+        "dataset_owner": "",
+        "dataset_country": "UK",
+        "dataset_region": "",
+        "dataset_city": "",
+        "dataset_active": "True",
+        "dataset_file_name": "Public_EV_Charge_Point_Usage*.csv",
         "dataset_sheet_name": "",
         "dataset_file_type": "csv",
         "dataset_delimiter": ",",

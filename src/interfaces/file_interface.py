@@ -190,29 +190,40 @@ class File(Interface):
             self.logger.info(f"Gathering {Colors.BLUE}{dataset_info['dataset_name']}{Colors.NORMAL} dataset")
             # Use 'dataset_directory' if specified, otherwise 'dataset_folder', otherwise 'dataset_name'
             folder_name = dataset_info.get('dataset_directory', dataset_info.get('dataset_folder', dataset_info['dataset_name']))
-            dataset_name = dataset_info.get('dataset_file_name')
-            if folder_name is None or dataset_name is None:
+            dataset_file_name = dataset_info.get('dataset_file_name')
+            if folder_name is None or dataset_file_name is None:
                 raise ValueError("Currently processing path requires both dataset_directory/folder and dataset_name")
 
-            # Type checker now knows they are definitely strings
-            input_file = Path(self.input_dir) / folder_name / dataset_name
+            folder_path = Path(self.input_dir) / folder_name
+            input_file = folder_path / dataset_file_name
 
-            self.logger.info(input_file)
-
+            # Resolve file(s): exact match first, then treat as glob pattern
             if input_file.is_file():
-                df_orig = pd.DataFrame()
+                files_to_read_data = [input_file]
+            else:
+                files_to_read_data = sorted(folder_path.glob(dataset_file_name))
+                if not files_to_read_data:
+                    raise Exception("No files matching '%s' in '%s'. Please check dataset name '%s'" %
+                                    (dataset_file_name, folder_path, dataset_info['dataset_name']))
 
-                dataset_type = dataset_info.get('dataset_file_type')
-                self.logger.info(f"Dataset type: {Colors.YELLOW}{dataset_type}{Colors.NORMAL}") 
+            self.logger.info(f"Found {len(files_to_read_data)} file(s) for {dataset_info['dataset_name']}: "
+                             f"{[f.name for f in files_to_read_data]}")
+
+            dataset_type = dataset_info.get('dataset_file_type')
+            self.logger.info(f"Dataset type: {Colors.YELLOW}{dataset_type}{Colors.NORMAL}")
+
+            dfs = []
+            for current_file in files_to_read_data:
+                self.logger.info(f"Reading {current_file}")
 
                 if dataset_type == 'csv':
                     _delimiter = dataset_info.get('dataset_delimiter')
                     _encoding = dataset_info.get('dataset_encoding')
                     _text_quotes = dataset_info.get('text_quotes','"').replace('\'','')
                     _decimal = dataset_info.get('decimal',',')
-                    
+
                     read_csv_args = {
-                        "filepath_or_buffer": input_file,
+                        "filepath_or_buffer": current_file,
                         "delimiter": _delimiter,
                         "encoding": _encoding,
                         "nrows": limit_rows,
@@ -223,27 +234,25 @@ class File(Interface):
                     else:
                         read_csv_args["quoting"] = csv.QUOTE_NONE
 
-                    df_orig = pd.read_csv(**read_csv_args)
+                    dfs.append(pd.read_csv(**read_csv_args))
 
-                if dataset_type == 'xlsx':
-                    df_orig = pd.read_excel(io=input_file, sheet_name=dataset_info['dataset_sheet_name'],
-                                            engine='openpyxl', nrows=limit_rows)
+                elif dataset_type == 'xlsx':
+                    dfs.append(pd.read_excel(io=current_file, sheet_name=dataset_info['dataset_sheet_name'],
+                                             engine='openpyxl', nrows=limit_rows))
 
-                if dataset_type == 'json':
+                elif dataset_type == 'json':
                     try:
-                        data = json.loads(input_file.read_text())
+                        data = json.loads(current_file.read_text())
                         # TODO: Generalize "items" json flattening may be an issue
-                        df_orig = pd.json_normalize(data, '_items').head(self.limit_rows)
+                        dfs.append(pd.json_normalize(data, '_items').head(self.limit_rows))
                     except json.JSONDecodeError as e:
-                        self.logger.error(f"Failed to parse JSON file {input_file}: {e}")
-                        continue # Skip this dataset and continue
-                
-                if df_orig is not None:
-                    datasets.update({dataset_info['dataset_name']: {"info": dataset_info,
-                                                                  "data": df_orig}})
-            else:
-                raise Exception("File '%s' does not exist. Please check dataset name '%s' and file name '%s'" %
-                                (input_file, dataset_info['dataset_name'], dataset_info.get('dataset_file_name')))
+                        self.logger.error(f"Failed to parse JSON file {current_file}: {e}")
+                        continue
+
+            if dfs:
+                df_orig = pd.concat(dfs, ignore_index=True)
+                datasets.update({dataset_info['dataset_name']: {"info": dataset_info,
+                                                                "data": df_orig}})
 
         return datasets
 
