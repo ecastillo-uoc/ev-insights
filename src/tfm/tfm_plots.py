@@ -68,12 +68,12 @@ def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'times
         ax2 = ax_extra[ax_idx]; ax_idx += 1
         ax1_right = ax1.twinx()
         station_ma = dataset['station_count'].rolling(window=7, min_periods=1).mean()
-        ax1_right.plot(dataset[time_col], station_ma, linestyle='--', linewidth=1.2, alpha=0.7, color='tab:orange', label='Stations (7d MA)')
-        ax1_right.set_ylabel('Distinct Stations (7d MA)', color='tab:orange')
+        ax1_right.plot(dataset[time_col], station_ma, linestyle='--', linewidth=1.2, alpha=0.7, color='tab:orange', label='Distinct used Stations (7d MA)')
+        ax1_right.set_ylabel('Distinct used Stations (7d MA)', color='tab:orange')
         ax1_right.tick_params(axis='y', labelcolor='tab:orange')
         ax1_right.legend(loc='upper right')
 
-        ax2.bar(dataset[time_col], dataset['station_count'], alpha=0.6, color='tab:orange', width=1.0, label='Distinct Stations')
+        ax2.bar(dataset[time_col], dataset['station_count'], alpha=0.6, color='tab:orange', width=1.0, label='Distinct daily used Stations')
         ax2.set_ylabel('Distinct Stations')
         ax2.grid(True, linestyle='--', alpha=0.4)
         ax2.legend(loc='upper left')
@@ -88,8 +88,10 @@ def plot_energy_consumption_trends(dataset: pd.DataFrame, time_col: str = 'times
     if has_duration:
         ax4 = ax_extra[ax_idx]; ax_idx += 1
         duration_h = dataset['avg_session_duration_s'] / 3600.0
-        ax4.plot(dataset[time_col], duration_h, linestyle='-', linewidth=1, alpha=0.8, color='tab:purple', label='Avg Session Duration (h)')
-        ax4.set_ylabel('Avg Duration (h)')
+        p99 = duration_h.quantile(0.99)
+        ax4.plot(dataset[time_col], duration_h, linestyle='-', linewidth=1, alpha=0.8, color='tab:purple', label='Daily Avg Session Duration (h)')
+        ax4.set_ylabel('Daily Avg Duration (h)')
+        ax4.set_ylim(0, p99*1.1)
         ax4.grid(True, linestyle='--', alpha=0.4)
         ax4.legend(loc='upper left')
 
@@ -826,7 +828,7 @@ def main():
         fetch_and_plot_dataset_trends(ds, db_config, FIG_DIR, site_name=site)
         # fetch_and_plot_energy_by_weekday(ds, db_config, FIG_DIR, site_name=site)
         # fetch_and_plot_energy_by_month(ds, db_config, FIG_DIR, site_name=site)
-        # fetch_and_plot_time_serie_decomposition(ds, db_config, FIG_DIR, site_name=site)
+        fetch_and_plot_time_serie_decomposition(ds, db_config, FIG_DIR, site_name=site)
         
         # Sessions / Charges
         # fetch_and_plot_dataset_charges_trends(ds, db_config, FIG_DIR, site_name=site)
