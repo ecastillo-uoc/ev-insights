@@ -30,8 +30,8 @@ insert_dataset_info = """
 
 insert_charging_stations = """
     INSERT INTO evinsights."ChargingStation" (orig_id, manufacturer, model, type, num_plugs, max_charging_power, max_discharging_power, 
-                                           ocpp_version, longitude, latitude, dataset_id)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                           ocpp_version, longitude, latitude, postal_code, dataset_id)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
 
 insert_charging_sessions = """

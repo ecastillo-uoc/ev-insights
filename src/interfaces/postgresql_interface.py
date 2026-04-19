@@ -221,7 +221,7 @@ class PostgreSql(Interface):
         allowed_columns = [
             id_column, 'manufacturer', 'model', 'type', 'num_plugs', 
             'max_charging_power', 'max_discharging_power',
-            'ocpp_version', 'longitude', 'latitude'
+            'ocpp_version', 'longitude', 'latitude', 'postal_code'
         ]
         charging_station_columns = [col for col in allowed_columns if col in data.columns]
         charging_stations_data = data[charging_station_columns].drop_duplicates()
@@ -238,6 +238,7 @@ class PostgreSql(Interface):
                         row['ocpp_version'] if 'ocpp_version' in row and row['ocpp_version'] != '' else None,
                         row['longitude'] if 'longitude' in row and row['longitude'] != '' else None,
                         row['latitude'] if 'latitude' in row and row['latitude'] != '' else None,
+                        row['postal_code'] if 'postal_code' in row and row['postal_code'] != '' else None,
                         dataset_id)
             cursor.execute(sql_query.insert_charging_stations, data_row)
             inserted_count += cursor.rowcount

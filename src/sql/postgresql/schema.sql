@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS evinsights."ChargingStation"
     num_plugs integer,
     max_charging_power numeric(12, 3),
     max_discharging_power numeric(12, 3),
+    postal_code text COLLATE pg_catalog."default",
     dataset_id integer,
     ocpp_version varchar(10),
 

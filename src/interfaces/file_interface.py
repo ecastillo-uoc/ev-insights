@@ -357,6 +357,8 @@ class File(Interface):
             df["energy_year_Wh"] = None
         if "power_W_avg" not in df.columns:
             df["power_W_avg"] = None
+        if "postal_code" not in df.columns:
+            df["postal_code"] = None
 
         # Logic to infer connector if not present
         if "connector" not in df.columns:
@@ -457,6 +459,54 @@ class File(Interface):
         df['ev_id'] = pd.NA
         df['ev_max_charging_power'] = pd.NA
         df = df[self.dataframe_columns]
+        return df
+    
+
+    def prepare_dataset_dundee(self, df):
+        """
+        Prepares the dataset for the 'Dundee' source by renaming columns and adding required fields.
+
+        Args:
+            df (pd.DataFrame): The input DataFrame containing raw data.
+            SDR ID	Site	CP ID	Connector Type	Consum(kWh)	Duration	Start	End	Postcode
+
+
+        Returns:
+            pd.DataFrame: The processed DataFrame with standardized columns and additional fields.
+        """
+        _logger.info(f"Ingestion: Preparing {Colors.BLUE}Dundee{Colors.NORMAL} dataset")
+        _logger.debug(df.columns.to_list())
+
+        # normalize names
+        df.rename(columns={
+                           'SDR ID': 'session_id', 
+                           'Site': 'charging_station_id', 
+                           'CP ID': 'charging_station_id',
+                           'Connector Type': 'connector',
+                           'Consum(kWh)': 'energy_supplied',
+                           'Site':'orig_ds',
+                           'Postcode': 'postal_code',
+                           }, 
+                           inplace=True)
+        
+        # map connector aliases
+        if 'connector' in df.columns:
+            df['connector'] = df['connector'].map(CONNECTOR_TYPE_ALIASES).fillna(df['connector'])
+
+        # process data
+        df['plug_in_datetime'] = pd.to_datetime(df.Start, format='%Y-%m-%d %H:%M:%S')
+        df['charge_end_datetime'] = pd.to_datetime(df.End, format='%Y-%m-%d %H:%M:%S')
+        df['plug_out_datetime'] = df['charge_end_datetime']
+        df['charge_end_datetime_presence'] = True
+        df['user_id'] = pd.NA
+        df['max_charging_power'] = pd.NA
+        df['ev_id'] = pd.NA
+        df['ev_max_charging_power'] = pd.NA
+        output_columns = list(self.dataframe_columns)
+        if 'postal_code' in df.columns:
+            output_columns.append('postal_code')
+        df = df[output_columns]
+
         return df
 
     def prepare_dataset_harvard_dataverse(self, df):
@@ -620,8 +670,8 @@ class File(Interface):
         """
         columns = set(df.columns)
         
-        # Check against Session columns
-        if columns == set(self.dataframe_columns):
+        # Check against Session columns (allow extra columns like postal_code)
+        if set(self.dataframe_columns).issubset(columns):
             return True
             
         # Check against EV columns
@@ -700,6 +750,7 @@ class File(Interface):
             'Elaad': self.prepare_dataset_Elaad,
             'Harvard_dataverse': self.prepare_dataset_harvard_dataverse,
             'OLEV': self.prepare_dataset_olev,
+            'Dundee': self.prepare_dataset_dundee, 
 
             # 'Hanse_und_Universitaetsstadt_Rostock': self.prepare_dataset_hanse_und_universitaetsstadt_rostock, 
         }
