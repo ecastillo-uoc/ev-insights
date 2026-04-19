@@ -55,6 +55,11 @@ from src.forecast.optimization import objective_lstm, objective_transformer
 # Configure basic logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Minimum look-back window for all non-Hussain neural models.
+# For horizons shorter than this, look_back is clamped to MIN_LOOK_BACK.
+# For horizons equal to or longer than this, look_back = forecast_horizon.
+MIN_LOOK_BACK = 14
+
 
 def get_dataset_config(dataset_name, hussain=False):
     """Return (split_date_str, ranges_dict) for a given dataset.
@@ -142,22 +147,24 @@ def execute_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     mlflow_tracking_uri : str or None
         MLflow server URI.  ``None`` disables tracking.
     """
-    strategy_params_lstm = {
-        'epochs': 100, 
-        'batch_size': 32,
-        'look_back': 14,           # 2 weeks look back
-        'li_forecast_horizons': li_forecast_horizons,
-        'learning_rate': 0.001,
-        'dropout_rate': 0.2,
-        'activation': 'relu',
-        'use_log_transform': False,
-        'use_differencing': False,
-        'use_calendar_features': False,
-    }
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds)
-        params = {**strategy_params_lstm, **ranges}
-        run_forecast_pipeline([ds], params, split_date_str, mlflow_tracking_uri=mlflow_tracking_uri)
+        for forecast_horizon in li_forecast_horizons:
+            look_back = max(MIN_LOOK_BACK, forecast_horizon)
+            strategy_params_lstm = {
+                'epochs': 100,
+                'batch_size': 32,
+                'look_back': look_back,
+                'li_forecast_horizons': [forecast_horizon],
+                'learning_rate': 0.001,
+                'dropout_rate': 0.2,
+                'activation': 'relu',
+                'use_log_transform': False,
+                'use_differencing': False,
+                'use_calendar_features': False,
+            }
+            params = {**strategy_params_lstm, **ranges}
+            run_forecast_pipeline([ds], params, split_date_str, mlflow_tracking_uri=mlflow_tracking_uri)
 
 def execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     """Run Transformer forecasts for each dataset × forecast horizon.
@@ -171,26 +178,28 @@ def execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None
     mlflow_tracking_uri : str or None
         MLflow server URI.  ``None`` disables tracking.
     """
-    strategy_params_transformer = {
-        'epochs': 100, 
-        'batch_size': 32,
-        'look_back': 14,
-        'li_forecast_horizons': li_forecast_horizons,
-        'learning_rate': 0.001,
-        'head_size': 128,
-        'num_heads': 4,
-        'ff_dim': 4,
-        'num_transformer_blocks': 2,
-        'dropout': 0.1,
-        'mlp_dropout': 0.1,
-        'use_log_transform': False,
-        'use_differencing': False,
-        'use_calendar_features': False,
-    }
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds)
-        params = {**strategy_params_transformer, **ranges}
-        run_forecast_pipeline([ds], params, split_date_str, model_type="transformer", mlflow_tracking_uri=mlflow_tracking_uri)
+        for forecast_horizon in li_forecast_horizons:
+            look_back = max(MIN_LOOK_BACK, forecast_horizon)
+            strategy_params_transformer = {
+                'epochs': 100,
+                'batch_size': 32,
+                'look_back': look_back,
+                'li_forecast_horizons': [forecast_horizon],
+                'learning_rate': 0.001,
+                'head_size': 128,
+                'num_heads': 4,
+                'ff_dim': 4,
+                'num_transformer_blocks': 2,
+                'dropout': 0.1,
+                'mlp_dropout': 0.1,
+                'use_log_transform': False,
+                'use_differencing': False,
+                'use_calendar_features': False,
+            }
+            params = {**strategy_params_transformer, **ranges}
+            run_forecast_pipeline([ds], params, split_date_str, model_type="transformer", mlflow_tracking_uri=mlflow_tracking_uri)
 
 def execute_lightgbm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     """Run LightGBM forecasts for each dataset × forecast horizon.
@@ -257,23 +266,25 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     mlflow_tracking_uri : str or None
         MLflow server URI.  ``None`` disables tracking.
     """
-    strategy_params_hybrid = {
-        'epochs': 100, 
-        'batch_size': 32,
-        'look_back': 14,
-        'li_forecast_horizons': li_forecast_horizons,
-        'learning_rate': 0.001,
-        'd_model': 128,
-        'num_heads': 4,
-        'dropout': 0.1,
-        'use_log_transform': False,
-        'use_differencing': False,
-        'use_calendar_features': False,
-    }
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds)
-        params = {**strategy_params_hybrid, **ranges}
-        run_forecast_pipeline([ds], params, split_date_str, model_type="hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
+        for forecast_horizon in li_forecast_horizons:
+            look_back = max(MIN_LOOK_BACK, forecast_horizon)
+            strategy_params_hybrid = {
+                'epochs': 100,
+                'batch_size': 32,
+                'look_back': look_back,
+                'li_forecast_horizons': [forecast_horizon],
+                'learning_rate': 0.001,
+                'd_model': 128,
+                'num_heads': 4,
+                'dropout': 0.1,
+                'use_log_transform': False,
+                'use_differencing': False,
+                'use_calendar_features': False,
+            }
+            params = {**strategy_params_hybrid, **ranges}
+            run_forecast_pipeline([ds], params, split_date_str, model_type="hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
 
 
 # =============================================================================
@@ -284,7 +295,7 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
 #   hybrid transformer model." Sci Rep 15, 13555 (2025).
 #
 # Key differences from our default models:
-#   * look_back = forecast_horizon (30, 120, 240) — not a fixed 14
+#   * look_back = forecast_horizon (30, 120, 240) — vs. max(MIN_LOOK_BACK, h) for our models
 #   * dropout = 0.2   (vs. 0.1 for our Transformer/Hybrid)
 #   * ReduceLROnPlateau + EarlyStopping callbacks (article text, Section IV)
 #   * Transformer uses a single Dense(ReLU) → MHA → GAP → Dense(1) arch
