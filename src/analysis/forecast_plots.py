@@ -25,6 +25,7 @@ def plot_train_test_split(
     forecast_horizon: int,
     zoom_range=None,
     model_name: str | None = None,
+    warm_up_days: int = 0,
 ) -> str:
     """Plot the target variable with distinct colours for train and test periods.
 
@@ -36,6 +37,11 @@ def plot_train_test_split(
 
     split_date = train.index.max()
     plt.axvline(x=split_date, color='grey', linestyle='--', linewidth=1, label='Train / Test split')
+
+    if warm_up_days > 0 and warm_up_days < len(test):
+        eval_start = test.index[warm_up_days]
+        plt.axvspan(test.index[0], eval_start, alpha=0.12, color='orange', label='Warm-up (look_back)')
+        plt.axvline(x=eval_start, color='orange', linestyle=':', linewidth=1, label='Eval start')
 
     title = f'Train/Test Split for {dataset_name}'
     if model_name:

@@ -267,8 +267,9 @@ def run_forecast_pipeline(
 
             # 5. Metrics ────────────────────────────────────────────────
             preds_array = np.array(predictions)
+            look_back = trained_model_objects.get('look_back', 30)
 
-            if predict_dates is not None:
+            if predict_dates:
                 predict_dates_idx = pd.to_datetime(predict_dates)
                 if predict_actuals is not None:
                     actuals_array = np.array(predict_actuals)
@@ -282,11 +283,13 @@ def run_forecast_pipeline(
                 a, p = actuals_array[:min_len], preds_array[:min_len]
                 plot_actuals_df = pd.DataFrame({'y': a}, index=predict_dates_idx[:min_len])
             else:
-                actuals_array = test_df['y'].values
+                # Fallback: _predict_backtest returns predictions starting at
+                # test[look_back:], so align actuals and dates accordingly.
+                actuals_array = test_df['y'].values[look_back:]
                 min_len = min(len(preds_array), len(actuals_array))
                 a, p = actuals_array[:min_len], preds_array[:min_len]
-                predict_dates_idx = test_df.index[:min_len]
-                plot_actuals_df = test_df.iloc[:min_len]
+                predict_dates_idx = test_df.index[look_back:look_back + min_len]
+                plot_actuals_df = pd.DataFrame({'y': a}, index=predict_dates_idx)
 
             # Inverse target transforms — metrics are in original kWh scale
             p, a = apply_inverse_transforms(p, a, predict_dates_idx[:min_len], transform_state)
@@ -304,6 +307,12 @@ def run_forecast_pipeline(
                 'SMAPE': smape(p, a),
             }
             logger.info("Metrics for %s (%d days): %s", dataset, forecast_horizon, metrics)
+            logger.info(
+                "Evaluation window: %s to %s (%d points, look_back=%d warm-up excluded)",
+                predict_dates_idx[0].strftime('%Y-%m-%d'),
+                predict_dates_idx[-1].strftime('%Y-%m-%d'),
+                len(a), look_back,
+            )
 
             results_summary.append({
                 'dataset': dataset,
@@ -313,9 +322,11 @@ def run_forecast_pipeline(
 
             # 6. Plots ─────────────────────────────────────────────────
             zoom_range = strategy_params.get('zoom_range')
+            warm_up = look_back if model_type not in ('xgboost', 'lightgbm') else 0
             plot_path_split = plot_train_test_split(
                 train_df_plot, test_df_plot, dataset, forecast_horizon,
                 zoom_range=zoom_range, model_name=model_name,
+                warm_up_days=warm_up,
             )
             plot_path_predict = (
                 f'output_plots/{dataset}_actual_vs_predict_{model_name}_{forecast_horizon}days.png'
