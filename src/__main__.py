@@ -13,13 +13,6 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 def main(config_file=None, config_json=None, datasets_list=None, datasets_details_file=None):
     
-    # Init logger
-    Logger(config=config['utils']['logger'], filename="main")
-    logger = logging.getLogger(__name__)
-    logger.info("Start main")
-
-    logger.debug(f"[main] main called. Service: {config_json.get('service') if config_json else 'None'}, datasets_list={datasets_list}")
-
     service = None
     output = []
 
@@ -39,6 +32,12 @@ def main(config_file=None, config_json=None, datasets_list=None, datasets_detail
 
         service_name = config_json['service']
         config = config_json['services'][service_name]
+
+        # Init logger (must be after config is loaded)
+        Logger(config=config['utils']['logger'], filename="main")
+        logger = logging.getLogger(__name__)
+        logger.info("Start main")
+        logger.debug(f"[main] main called. Service: {service_name}, datasets_list={datasets_list}")
 
         # Override datasets_list and datasets_details_file from CLI arguments if provided
         if 'input' in config.get('interfaces', {}):

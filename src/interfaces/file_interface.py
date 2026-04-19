@@ -505,8 +505,8 @@ class File(Interface):
             df['connector'] = df['connector'].map(CONNECTOR_TYPE_ALIASES).fillna(df['connector'])
 
         # process data
-        df['plug_in_datetime'] = pd.to_datetime(df.Start, format='%Y-%m-%d %H:%M:%S')
-        df['charge_end_datetime'] = pd.to_datetime(df.End, format='%Y-%m-%d %H:%M:%S')
+        df['plug_in_datetime'] = pd.to_datetime(df.Start, dayfirst=True)
+        df['charge_end_datetime'] = pd.to_datetime(df.End, dayfirst=True)
         df['plug_out_datetime'] = df['charge_end_datetime']
         df['charge_end_datetime_presence'] = True
         df['user_id'] = pd.NA

@@ -105,6 +105,44 @@ def render_ingestion_page():
 
     if selected_datasets:
         st.markdown(f"**Selected Datasets ({len(selected_datasets)}):** {', '.join(selected_datasets)}")
+
+        # Show file count preview for datasets with glob patterns
+        if selected_details_file and selected_config_file:
+            try:
+                with open(selected_config_file, 'r', encoding='utf-8') as f:
+                    cfg = json.load(f)
+                service_name = cfg.get('service', '')
+                input_cfg = cfg.get('services', {}).get(service_name, {}).get('interfaces', {}).get('input', {})
+                input_dir = input_cfg.get('input_dir', '')
+                if input_dir:
+                    input_dir_path = Path(input_dir)
+
+                with open(selected_details_file, 'r', encoding='utf-8') as f:
+                    details_data = json.load(f)
+
+                for ds_name in selected_datasets:
+                    ds_info = next((d for d in details_data if d.get('dataset_name') == ds_name), None)
+                    if ds_info:
+                        file_pattern = ds_info.get('dataset_file_name', '')
+                        folder = ds_info.get('dataset_directory', ds_info.get('dataset_folder', ds_name))
+                        folder_path = input_dir_path / folder
+                        exact_file = folder_path / file_pattern
+                        if exact_file.is_file():
+                            st.info(f"📁 **{ds_name}**: 1 file (`{file_pattern}`)")
+                        else:
+                            matched = sorted(folder_path.glob(file_pattern)) if folder_path.is_dir() else []
+                            if matched:
+                                file_names = [f.name for f in matched]
+                                st.info(f"📁 **{ds_name}**: {len(matched)} file(s) matching `{file_pattern}`")
+                                with st.expander(f"Files for {ds_name}"):
+                                    for fname in file_names:
+                                        st.text(f"  • {fname}")
+                            elif not folder_path.is_dir():
+                                st.warning(f"📁 **{ds_name}**: folder not found (`{folder_path}`)")
+                            else:
+                                st.warning(f"📁 **{ds_name}**: no files matching `{file_pattern}` in `{folder_path}`")
+            except Exception as e:
+                logger.debug(f"Could not resolve file counts: {e}")
     else:
         st.markdown("**Selected Datasets:** *None selected - Using defaults from Config File*")
 
