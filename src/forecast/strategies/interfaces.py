@@ -1,3 +1,10 @@
+"""Abstract base classes for the Strategy pattern.
+
+Defines the two strategy interfaces that :class:`GenericForecast` composes:
+
+* :class:`PredictionTargetStrategy` — data preparation (feature engineering, validation).
+* :class:`ModelStrategy` — ML model lifecycle (train, predict).
+"""
 from abc import ABC, abstractmethod
 import pandas as pd
 

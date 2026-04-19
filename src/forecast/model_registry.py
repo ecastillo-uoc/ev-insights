@@ -1,3 +1,10 @@
+"""Enum-keyed model strategy registry.
+
+Maps :class:`ModelStrategyType` enum members to :class:`ModelStrategyInfo`
+dataclasses that bundle the display name, description, strategy class, and
+default hyperparameters.  Used by the UI and by :func:`init_forecast` to
+instantiate strategies dynamically.
+"""
 from enum import Enum
 from dataclasses import dataclass
 from typing import Type, Dict, Any

@@ -88,6 +88,7 @@ def list_models(models_dir: str) -> list[str]:
 # --- Private helpers ---
 
 def _save_keras(model_obj: dict, model_name: str, models_path: Path, forecaster_name: str, train_params: dict = None):
+    """Save a Keras model, its scaler, and metadata to *models_path*."""
     keras_path = models_path / f"{model_name}.keras"
     scaler_path = models_path / f"{model_name}_scaler.pkl"
     meta_path = models_path / f"{model_name}_meta.pkl"
@@ -103,6 +104,7 @@ def _save_keras(model_obj: dict, model_name: str, models_path: Path, forecaster_
 
 
 def _save_native(model_obj, model_name: str, models_path: Path, forecaster_name: str):
+    """Save a LightGBM/XGBoost model as ``.ubj``, rotating existing files."""
     model_file = models_path / f"{model_name}.ubj"
     if model_file.exists():
         ts = datetime.now().strftime('%Y%m%d%H%M%S%f')[:-3]
@@ -112,6 +114,7 @@ def _save_native(model_obj, model_name: str, models_path: Path, forecaster_name:
 
 
 def _load_keras(model_name: str, models_path: Path):
+    """Load a Keras model, scaler, and metadata from *models_path*."""
     from keras.models import load_model as keras_load_model
     keras_path = models_path / f"{model_name}.keras"
     scaler_path = models_path / f"{model_name}_scaler.pkl"
@@ -161,11 +164,13 @@ def _load_native(algo: str, ubj_path: Path):
 
 
 def _load_lgb(ubj_path: Path):
+    """Load a LightGBM Booster from a ``.ubj`` file."""
     import lightgbm as lgb
     return lgb.Booster(model_file=str(ubj_path))
 
 
 def _load_xgb(ubj_path: Path):
+    """Load an XGBoost model from a ``.ubj`` file."""
     import xgboost as xgb
     model = xgb.XGBRegressor()
     model.load_model(str(ubj_path))

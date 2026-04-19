@@ -1,3 +1,10 @@
+"""Enum-keyed prediction target registry.
+
+Maps :class:`PredictionTarget` enum members to :class:`PredictionTargetInfo`
+dataclasses that bundle the display name, description, strategy class,
+default SQL fields, custom parameters, and ``__init__`` keyword arguments.
+Used by the UI and by :func:`init_forecast` to instantiate data strategies.
+"""
 from enum import Enum
 from dataclasses import dataclass
 from typing import Type, Dict, Any, Callable

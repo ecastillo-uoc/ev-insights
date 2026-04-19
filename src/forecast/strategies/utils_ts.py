@@ -1,4 +1,8 @@
-""" utils time related """
+"""Time-series feature engineering helpers.
+
+Provides lag-feature construction, cyclic time features, and the symmetric
+mean absolute percentage error (sMAPE) metric.
+"""
 import numpy as np
 import pandas as pd
 
@@ -37,6 +41,21 @@ def add_timefeat_df(df_):
     return df
 
 def smape(preds, target):
+    """Symmetric Mean Absolute Percentage Error.
+
+    Parameters
+    ----------
+    preds : array-like
+        Predicted values.
+    target : array-like
+        Actual (ground-truth) values.
+
+    Returns
+    -------
+    float
+        sMAPE value in the range [0, 200].  Pairs where both
+        ``preds`` and ``target`` are zero are excluded.
+    """
     n = len(preds)
     masked_arr = ~((preds == 0) & (target == 0))
     preds, target = preds[masked_arr], target[masked_arr]

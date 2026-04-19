@@ -1,3 +1,10 @@
+"""Abstract base class for all forecasters and the ``init_forecast`` factory.
+
+``Forecast`` defines the lifecycle contract (load → check → features → run)
+and common state shared by every forecaster.  ``init_forecast`` creates a
+concrete instance either from the registries or from a pre-wired definition
+class.
+"""
 import os
 import copy
 import logging
@@ -22,6 +29,11 @@ from .model_registry import (
 from src.utils.output import save_results_to_json
 
 class Forecast(ABC):
+    """Abstract base class for all forecaster implementations.
+
+    Subclasses must implement :meth:`feature_engineering`, :meth:`run`,
+    :meth:`train`, and :meth:`predict`.
+    """
     def __init__(self, id: int, name: str, algo: str, info: str, actor: str, actor_id: int, date: datetime.date, enabled: bool,
                  full_custom_mode: bool, mode: str, submode: str, models_dir: str, model_name: str, show_images: bool, save_images: bool,
                  save_results: bool, input_interface: Interface, output_interface: Interface, mlflow_interface: Interface, output_dir: str,
@@ -63,6 +75,7 @@ class Forecast(ABC):
         return
 
     def load_data(self, df: pd.DataFrame, prediction=None, model=None):
+        """Inject data, a pre-trained model, or previous predictions."""
         if df is not None:
             self.df = df
             self.datasets_names = self.df['dataset_name'].unique()
@@ -74,6 +87,7 @@ class Forecast(ABC):
         return
 
     def check_data(self):
+        """Basic data validation — drops rows with NaT ``plug_in_datetime``."""
         # Remove NaT values from plug_in_datetime
         if self.df is not None:
             if 'plug_in_datetime' in self.df.columns:
@@ -97,9 +111,11 @@ class Forecast(ABC):
         pass
 
     def save_output_to_file(self):
+        """Persist ``self.results`` as JSON to the configured output directory."""
         save_results_to_json(self.results, self.output_dir, self.name)
 
     def get_train_results(self, keys=None):
+        """Return training results, optionally filtered to *keys*."""
         results = copy.deepcopy(self.results)
         if keys:
             for key in self.results[self.mode]:
@@ -112,6 +128,7 @@ class Forecast(ABC):
         return results
 
     def get_predict_results(self):
+        """Return the full prediction results dict."""
         return self.results
 
     @staticmethod
@@ -168,6 +185,27 @@ def import_class(module_path, class_name):
 
 
 def init_forecast(config, models_dir, input_interface=None, output_interface=None, mlflow_interface=None):
+    """Factory: create a Forecast instance from a config dict.
+
+    If the config contains ``prediction_target`` and/or ``model_strategy``
+    keys, strategies are resolved dynamically from the registries and
+    composed into a :class:`GenericForecast`.  Otherwise, falls back to
+    importing a pre-wired class from ``forecast_definitions``.
+
+    Parameters
+    ----------
+    config : dict
+        Forecast configuration (must contain at least ``name``).
+    models_dir : str
+        Filesystem directory for model persistence.
+    input_interface, output_interface, mlflow_interface : Interface or None
+        Optional I/O backends.
+
+    Returns
+    -------
+    Forecast or None
+        ``None`` when ``enabled`` is ``False``.
+    """
     logger = logging.getLogger('init_forecast')
     forecast = None
     forecast_name = config["name"]

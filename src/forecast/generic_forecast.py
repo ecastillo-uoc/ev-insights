@@ -1,3 +1,9 @@
+"""Strategy-composing forecast implementation.
+
+A :class:`GenericForecast` holds one :class:`PredictionTargetStrategy`
+(data side) and one :class:`ModelStrategy` (ML side), delegating every
+lifecycle step to the appropriate strategy.
+"""
 from .forecast import Forecast
 from .strategies.interfaces import PredictionTargetStrategy, ModelStrategy
 
@@ -12,6 +18,7 @@ _STRATEGY_ATTRS_KEY = {
 }
 
 class GenericForecast(Forecast):
+    """Forecast that composes a data strategy and a model strategy."""
     def __init__(self, data_strategy: PredictionTargetStrategy, model_strategy: ModelStrategy, **kwargs):
         super().__init__(**kwargs)
         self.data_strategy = data_strategy
@@ -21,9 +28,11 @@ class GenericForecast(Forecast):
         self._gf_logger = logging.getLogger('generic_forecast')
         
     def check_data(self):
+        """Delegate data validation to the data strategy."""
         self.df = self.data_strategy.check_data(self.df)
 
     def feature_engineering(self):
+        """Delegate feature engineering to the data strategy."""
         self.df, self.feature_columns, self.target_columns = self.data_strategy.feature_engineering(
             self.df, self.custom_params
         )
@@ -39,6 +48,7 @@ class GenericForecast(Forecast):
             self.df.attrs[attrs_key] = self.custom_params
 
     def train(self):
+        """Train the model via the model strategy and store results."""
         # Assuming single target for now or handling list inside strategy
         target_col = self.target_columns[0] if self.target_columns else None
         self._attach_custom_params()
@@ -74,9 +84,8 @@ class GenericForecast(Forecast):
             self.model_strategy = LSTMModelStrategy()
 
     def predict(self):
+        """Generate predictions via the model strategy and store results."""
         target_col = self.target_columns[0] if self.target_columns else None
-
-        # Auto-detect and correct model strategy mismatch
         self._resolve_model_strategy()
         self._attach_custom_params()
         
@@ -104,6 +113,7 @@ class GenericForecast(Forecast):
         self.results.update(output)
 
     def run(self):
+        """Execute train, predict, or both depending on ``self.mode``."""
         if self.mode == "train":
             self.train()
         elif self.mode == "predict":

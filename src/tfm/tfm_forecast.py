@@ -112,6 +112,17 @@ def get_dataset_config(dataset_name, hussain=False):
 
 
 def execute_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
+    """Run LSTM forecasts for each dataset × forecast horizon.
+
+    Parameters
+    ----------
+    datasets : list[str]
+        Dataset identifiers (e.g. ``['ACN_Caltech', 'ACN_JPL']``).
+    li_forecast_horizons : list[int]
+        Forecast horizons in days (e.g. ``[1, 7, 30, 120]``).
+    mlflow_tracking_uri : str or None
+        MLflow server URI.  ``None`` disables tracking.
+    """
     strategy_params_lstm = {
         'epochs': 100, 
         'batch_size': 32,
@@ -130,6 +141,17 @@ def execute_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
         run_forecast_pipeline([ds], params, split_date_str, mlflow_tracking_uri=mlflow_tracking_uri)
 
 def execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
+    """Run Transformer forecasts for each dataset × forecast horizon.
+
+    Parameters
+    ----------
+    datasets : list[str]
+        Dataset identifiers.
+    li_forecast_horizons : list[int]
+        Forecast horizons in days.
+    mlflow_tracking_uri : str or None
+        MLflow server URI.  ``None`` disables tracking.
+    """
     strategy_params_transformer = {
         'epochs': 100, 
         'batch_size': 32,
@@ -152,6 +174,17 @@ def execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None
         run_forecast_pipeline([ds], params, split_date_str, model_type="transformer", mlflow_tracking_uri=mlflow_tracking_uri)
 
 def execute_lightgbm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
+    """Run LightGBM forecasts for each dataset × forecast horizon.
+
+    Parameters
+    ----------
+    datasets : list[str]
+        Dataset identifiers.
+    li_forecast_horizons : list[int]
+        Forecast horizons in days.
+    mlflow_tracking_uri : str or None
+        MLflow server URI.  ``None`` disables tracking.
+    """
     strategy_params_lgbm = {
         'li_forecast_horizons': li_forecast_horizons,
         'num_leaves': 31,
@@ -168,6 +201,17 @@ def execute_lightgbm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
         run_forecast_pipeline([ds], params, split_date_str, model_type="lightgbm", mlflow_tracking_uri=mlflow_tracking_uri)
 
 def execute_xgboost(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
+    """Run XGBoost forecasts for each dataset × forecast horizon.
+
+    Parameters
+    ----------
+    datasets : list[str]
+        Dataset identifiers.
+    li_forecast_horizons : list[int]
+        Forecast horizons in days.
+    mlflow_tracking_uri : str or None
+        MLflow server URI.  ``None`` disables tracking.
+    """
     strategy_params_xgb = {
         'li_forecast_horizons': li_forecast_horizons,
         'random_state': 16,
@@ -183,6 +227,17 @@ def execute_xgboost(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
 
 
 def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
+    """Run Hybrid LSTM-Transformer forecasts for each dataset × forecast horizon.
+
+    Parameters
+    ----------
+    datasets : list[str]
+        Dataset identifiers.
+    li_forecast_horizons : list[int]
+        Forecast horizons in days.
+    mlflow_tracking_uri : str or None
+        MLflow server URI.  ``None`` disables tracking.
+    """
     strategy_params_hybrid = {
         'epochs': 100, 
         'batch_size': 32,
@@ -305,6 +360,26 @@ def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=N
 
 
 def optimize_lstm(datasets, n_trials, mlflow_tracking_uri=None):
+    """Run Optuna LSTM hyperparameter search for a single dataset.
+
+    Uses :func:`~src.forecast.optimization.objective_lstm` as the Optuna
+    objective.  After the study completes, retrains a final model with the
+    best hyperparameters and saves it to ``output_models/``.
+
+    Parameters
+    ----------
+    datasets : list[str]
+        Dataset identifiers.  Only the **first** element is used.
+    n_trials : int
+        Number of Optuna trials.
+    mlflow_tracking_uri : str or None
+        MLflow server URI.  ``None`` disables tracking.
+
+    .. warning::
+       ``split_date_str`` and ``li_forecast_horizons`` are currently read as
+       free variables from the ``if __name__ == '__main__'`` block.  Calling
+       this function from outside that block will raise ``NameError``.
+    """
     # Extract dataset name from list
     dataset_name = datasets[0] if datasets else None
     if not dataset_name:
