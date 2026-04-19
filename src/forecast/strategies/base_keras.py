@@ -600,6 +600,13 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                 'created_at': datetime.now(),
             })
 
+        if not output_dict:
+            raise ValueError(
+                f"_predict_backtest produced no predictions: all datasets were empty "
+                f"or had fewer rows than look_back={look_back}. "
+                f"Datasets: {dataset_names}"
+            )
+
         return output_dict
 
     # ------------------------------------------------------------------

@@ -273,6 +273,12 @@ def run_forecast_pipeline(
                 dataset_names=[dataset],
                 submode=predict_mode,
             )
+            if 'values' not in predict_dict.get('predict', {}):
+                logger.warning(
+                    "Skipping %s / %dd: predict returned no values.",
+                    dataset, forecast_horizon,
+                )
+                continue
             predictions = predict_dict['predict']['values']
             predict_dates = predict_dict['predict'].get('dates')
             predict_actuals = predict_dict['predict'].get('actuals')
