@@ -450,44 +450,78 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
     summary_df.to_csv('forecast_metrics_summary.csv', index=False)
     logging.info("Metrics saved to forecast_metrics_summary.csv")
 
-def execute_lstm(datsets, li_forecast_horizons, mlflow_tracking_uri=None): 
-    # fetch and plot
-    split_date_str = "2021-01-01"
+
+def get_dataset_config(dataset_name, hussain=False):
+    """Return (split_date_str, ranges_dict) for a given dataset.
+
+    ranges_dict may contain 'train_range', 'test_range', 'zoom_range'.
+    When a key is absent, run_forecast_pipeline uses the split_date fallback.
+    """
+    if hussain:
+        # Hussain et al. article splits (COVID data intentionally included)
+        _configs = {
+            'ACN_JPL': {
+                'split_date': '2021-01-01',
+                'train_range': ('2018-09-01', '2020-08-05'),
+                'test_range': ('2020-11-17', '2021-03-31'),
+                'zoom_range': ('2021-01-01', '2021-03-31'),
+            },
+            'ACN_Caltech': {
+                'split_date': '2021-01-01',
+                'train_range': ('2018-09-01', '2020-08-05'),
+                'test_range': ('2020-11-17', '2021-03-31'),
+                'zoom_range': ('2021-01-01', '2021-03-31'),
+            },
+            'Dundee': {
+                'split_date': '2023-09-01',
+                'zoom_range': ('2023-10-01', '2023-11-30'),
+            },
+        }
+    else:
+        _configs = {
+            'ACN_JPL': {
+                'split_date': '2021-01-01',
+                'train_range': ('2019-01-01', '2019-09-30'),
+                'test_range': ('2019-10-01', '2020-03-01'),
+                'zoom_range': ('2019-10-01', '2020-03-01'),
+            },
+            'ACN_Caltech': {
+                'split_date': '2021-01-01',
+                'train_range': ('2019-01-01', '2019-06-30'),
+                'test_range': ('2019-07-01', '2019-12-15'),
+                'zoom_range': ('2019-07-01', '2019-12-15'),
+            },
+            'Dundee': {
+                'split_date': '2023-09-01',
+                'zoom_range': ('2023-10-01', '2023-11-30'),
+            },
+        }
+
+    if dataset_name not in _configs:
+        raise ValueError(f"Unknown dataset '{dataset_name}'. Known: {list(_configs.keys())}")
+
+    cfg = _configs[dataset_name]
+    split_date = cfg['split_date']
+    ranges = {k: v for k, v in cfg.items() if k != 'split_date'}
+    return split_date, ranges
+
+
+def execute_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     strategy_params_lstm = {
         'epochs': 100, 
         'batch_size': 32,
         'look_back': 14,           # 2 weeks look back
         'li_forecast_horizons': li_forecast_horizons,
-        'learning_rate': 0.001,    # Default used if missing
-        'dropout_rate': 0.2,       # Default used if missing
-        'activation': 'relu',      # Default used if missing
+        'learning_rate': 0.001,
+        'dropout_rate': 0.2,
+        'activation': 'relu',
     }
-
-    strategy_jpl = {
-        'train_range': ('2019-01-01', '2019-09-30'), # Optional train
-        'test_range': ('2019-10-01', '2020-03-01'), # Optional test
-        'zoom_range': ('2019-10-01', '2020-03-01') # Concrete daterange for zoomed plot
-    }
-
-    # Merge base LSTM strategy params with the JPL specific overrides
-    strategy_params_lstm_jpl = {**strategy_params_lstm, **strategy_jpl}
-
-    # run_forecast_pipeline(['ACN_JPL'], strategy_params_lstm_jpl, split_date_str)
-
-
-    strategy_caltech = {
-        'train_range': ('2019-01-01', '2019-06-30'), # Optional train
-        'test_range': ('2019-07-01', '2019-12-15'), # Optional test
-        'zoom_range': ('2019-07-01', '2019-12-15') # Concrete daterange for zoomed plot
-    }
-
-    # Merge base LSTM strategy params with the JPL specific overrides
-    strategy_params_lstm_caltech = {**strategy_params_lstm, **strategy_caltech}
-
-    run_forecast_pipeline(['ACN_Caltech'], strategy_params_lstm_caltech, split_date_str, mlflow_tracking_uri=mlflow_tracking_uri)
+    for ds in datasets:
+        split_date_str, ranges = get_dataset_config(ds)
+        params = {**strategy_params_lstm, **ranges}
+        run_forecast_pipeline([ds], params, split_date_str, mlflow_tracking_uri=mlflow_tracking_uri)
 
 def execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
-    split_date_str = "2021-01-01"
     strategy_params_transformer = {
         'epochs': 100, 
         'batch_size': 32,
@@ -501,97 +535,37 @@ def execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None
         'dropout': 0.1,
         'mlp_dropout': 0.1,
     }
-
-    strategy_jpl = {
-        'train_range': ('2019-01-01', '2019-09-30'), 
-        'test_range': ('2019-10-01', '2020-03-01'), 
-        'zoom_range': ('2019-10-01', '2020-03-01') 
-    }
-
-    strategy_params_transformer_jpl = {**strategy_params_transformer, **strategy_jpl}
-
-    # Only run if ACN_JPL is in datasets
-    if 'ACN_JPL' in datasets:
-        run_forecast_pipeline(['ACN_JPL'], strategy_params_transformer_jpl, split_date_str, model_type="transformer", mlflow_tracking_uri=mlflow_tracking_uri)
-
-    strategy_caltech = {
-        'train_range': ('2019-01-01', '2019-06-30'),
-        'test_range': ('2019-07-01', '2019-12-15'), 
-        'zoom_range': ('2019-07-01', '2019-12-15') 
-    }
-
-    strategy_params_transformer_caltech = {**strategy_params_transformer, **strategy_caltech}
-
-    # Only run if ACN_Caltech is in datasets
-    if 'ACN_Caltech' in datasets:
-        run_forecast_pipeline(['ACN_Caltech'], strategy_params_transformer_caltech, split_date_str, model_type="transformer", mlflow_tracking_uri=mlflow_tracking_uri)
+    for ds in datasets:
+        split_date_str, ranges = get_dataset_config(ds)
+        params = {**strategy_params_transformer, **ranges}
+        run_forecast_pipeline([ds], params, split_date_str, model_type="transformer", mlflow_tracking_uri=mlflow_tracking_uri)
 
 def execute_lightgbm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
-    split_date_str = "2021-01-01"
     strategy_params_lgbm = {
         'li_forecast_horizons': li_forecast_horizons,
-        # Default LightGBM specific params can be passed here
         'num_leaves': 10,
         'learning_rate': 0.02,
         'max_depth': 5,
         'early_stopping_rounds': 200,
     }
-
-    strategy_jpl = {
-        'train_range': ('2019-01-01', '2019-09-30'), 
-        'test_range': ('2019-10-01', '2020-03-01'), 
-        'zoom_range': ('2019-10-01', '2020-03-01') 
-    }
-
-    strategy_params_lgbm_jpl = {**strategy_params_lgbm, **strategy_jpl}
-
-    if 'ACN_JPL' in datasets:
-        run_forecast_pipeline(['ACN_JPL'], strategy_params_lgbm_jpl, split_date_str, model_type="lightgbm", mlflow_tracking_uri=mlflow_tracking_uri)
-
-    strategy_caltech = {
-        'train_range': ('2019-01-01', '2019-06-30'),
-        'test_range': ('2019-07-01', '2019-12-15'), 
-        'zoom_range': ('2019-07-01', '2019-12-15') 
-    }
-
-    strategy_params_lgbm_caltech = {**strategy_params_lgbm, **strategy_caltech}
-
-    if 'ACN_Caltech' in datasets:
-        run_forecast_pipeline(['ACN_Caltech'], strategy_params_lgbm_caltech, split_date_str, model_type="lightgbm", mlflow_tracking_uri=mlflow_tracking_uri)
+    for ds in datasets:
+        split_date_str, ranges = get_dataset_config(ds)
+        params = {**strategy_params_lgbm, **ranges}
+        run_forecast_pipeline([ds], params, split_date_str, model_type="lightgbm", mlflow_tracking_uri=mlflow_tracking_uri)
 
 def execute_xgboost(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
-    split_date_str = "2021-01-01"
     strategy_params_xgb = {
         'li_forecast_horizons': li_forecast_horizons,
         'random_state': 16,
         'test_size': 0.20
     }
-
-    strategy_jpl = {
-        'train_range': ('2019-01-01', '2019-09-30'), 
-        'test_range': ('2019-10-01', '2020-03-01'), 
-        'zoom_range': ('2019-10-01', '2020-03-01') 
-    }
-
-    strategy_params_xgb_jpl = {**strategy_params_xgb, **strategy_jpl}
-
-    if 'ACN_JPL' in datasets:
-        run_forecast_pipeline(['ACN_JPL'], strategy_params_xgb_jpl, split_date_str, model_type="xgboost", mlflow_tracking_uri=mlflow_tracking_uri)
-
-    strategy_caltech = {
-        'train_range': ('2019-01-01', '2019-06-30'),
-        'test_range': ('2019-07-01', '2019-12-15'), 
-        'zoom_range': ('2019-07-01', '2019-12-15') 
-    }
-
-    strategy_params_xgb_caltech = {**strategy_params_xgb, **strategy_caltech}
-
-    if 'ACN_Caltech' in datasets:
-        run_forecast_pipeline(['ACN_Caltech'], strategy_params_xgb_caltech, split_date_str, model_type="xgboost", mlflow_tracking_uri=mlflow_tracking_uri)
+    for ds in datasets:
+        split_date_str, ranges = get_dataset_config(ds)
+        params = {**strategy_params_xgb, **ranges}
+        run_forecast_pipeline([ds], params, split_date_str, model_type="xgboost", mlflow_tracking_uri=mlflow_tracking_uri)
 
 
 def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
-    split_date_str = "2021-01-01"
     strategy_params_hybrid = {
         'epochs': 100, 
         'batch_size': 32,
@@ -602,28 +576,10 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
         'num_heads': 4,
         'dropout': 0.1,
     }
-
-    strategy_jpl = {
-        'train_range': ('2019-01-01', '2019-09-30'), 
-        'test_range': ('2019-10-01', '2020-03-01'), 
-        'zoom_range': ('2019-10-01', '2020-03-01') 
-    }
-
-    strategy_params_hybrid_jpl = {**strategy_params_hybrid, **strategy_jpl}
-
-    if 'ACN_JPL' in datasets:
-        run_forecast_pipeline(['ACN_JPL'], strategy_params_hybrid_jpl, split_date_str, model_type="hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
-
-    strategy_caltech = {
-        'train_range': ('2019-01-01', '2019-06-30'),
-        'test_range': ('2019-07-01', '2019-12-15'), 
-        'zoom_range': ('2019-07-01', '2019-12-15') 
-    }
-
-    strategy_params_hybrid_caltech = {**strategy_params_hybrid, **strategy_caltech}
-
-    if 'ACN_Caltech' in datasets:
-        run_forecast_pipeline(['ACN_Caltech'], strategy_params_hybrid_caltech, split_date_str, model_type="hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
+    for ds in datasets:
+        split_date_str, ranges = get_dataset_config(ds)
+        params = {**strategy_params_hybrid, **ranges}
+        run_forecast_pipeline([ds], params, split_date_str, model_type="hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
 
 
 # =============================================================================
@@ -655,115 +611,67 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
 
 def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     """LSTM with Hussain et al. hyperparams: look_back = forecast_horizon, dropout=0.2."""
-    split_date_str = "2021-01-01"
-
-    # Article splits: train ~24 months (Sep 2018 – Aug 2020), test ~7 months (Sep 2020 – Mar 2021).
-    # COVID period is intentionally included, consistent with the original paper.
-    strategy_article = {
-        'train_range': ('2018-09-01', '2020-08-05'),
-        'test_range': ('2020-11-17', '2021-03-31'),
-        #'zoom_range': ('2020-09-01', '2021-03-31'),
-        'zoom_range': ('2021-01-01', '2021-03-31'),
-    }
-
-    for forecast_horizon in li_forecast_horizons:
-        strategy_params = {
-            'epochs': 100,
-            'batch_size': 32,
-            'look_back': forecast_horizon,       # Article: look_back = prediction period
-            'li_forecast_horizons': [forecast_horizon],
-            'learning_rate': 0.001,
-            'dropout_rate': 0.2,              # Article Table 1
-            'activation': 'relu',
-            'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
-            'use_early_stopping': True,        # Article: EarlyStopping
-        }
-
-        if 'ACN_JPL' in datasets:
-            params_jpl = {**strategy_params, **strategy_article}
-            run_forecast_pipeline(['ACN_JPL'], params_jpl, split_date_str,
-                                  model_type="hussain_lstm", mlflow_tracking_uri=mlflow_tracking_uri)
-
-        if 'ACN_Caltech' in datasets:
-            params_caltech = {**strategy_params, **strategy_article}
-            run_forecast_pipeline(['ACN_Caltech'], params_caltech, split_date_str,
+    for ds in datasets:
+        split_date_str, ranges = get_dataset_config(ds, hussain=True)
+        for forecast_horizon in li_forecast_horizons:
+            strategy_params = {
+                'epochs': 100,
+                'batch_size': 32,
+                'look_back': forecast_horizon,       # Article: look_back = prediction period
+                'li_forecast_horizons': [forecast_horizon],
+                'learning_rate': 0.001,
+                'dropout_rate': 0.2,              # Article Table 1
+                'activation': 'relu',
+                'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
+                'use_early_stopping': True,        # Article: EarlyStopping
+            }
+            params = {**strategy_params, **ranges}
+            run_forecast_pipeline([ds], params, split_date_str,
                                   model_type="hussain_lstm", mlflow_tracking_uri=mlflow_tracking_uri)
 
 
 def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     """Simplified Transformer from Hussain et al.: Dense→MHA→GAP→Dense(1)."""
-    split_date_str = "2021-01-01"
-
-    # Article splits: train ~24 months (Sep 2018 – Aug 2020), test ~7 months (Sep 2020 – Mar 2021).
-    # COVID period is intentionally included, consistent with the original paper.
-    strategy_article = {
-        'train_range': ('2018-09-01', '2020-08-05'),
-        'test_range': ('2020-11-17', '2021-03-31'),
-        #'zoom_range': ('2020-09-01', '2021-03-31'),
-        'zoom_range': ('2021-01-01', '2021-03-31'),
-    }
-
-    for forecast_horizon in li_forecast_horizons:
-        strategy_params = {
-            'epochs': 100,
-            'batch_size': 32,
-            'look_back': forecast_horizon,       # Article: look_back = prediction period
-            'li_forecast_horizons': [forecast_horizon],
-            'learning_rate': 0.001,
-            'encoding_dim': 64,
-            'num_heads': 4,
-            'key_dim': 64,
-            'dropout': 0.2,                   # Article Table 1
-            'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
-            'use_early_stopping': True,        # Article: EarlyStopping
-        }
-
-        if 'ACN_JPL' in datasets:
-            params_jpl = {**strategy_params, **strategy_article}
-            run_forecast_pipeline(['ACN_JPL'], params_jpl, split_date_str,
-                                  model_type="hussain_transformer", mlflow_tracking_uri=mlflow_tracking_uri)
-
-        if 'ACN_Caltech' in datasets:
-            params_caltech = {**strategy_params, **strategy_article}
-            run_forecast_pipeline(['ACN_Caltech'], params_caltech, split_date_str,
+    for ds in datasets:
+        split_date_str, ranges = get_dataset_config(ds, hussain=True)
+        for forecast_horizon in li_forecast_horizons:
+            strategy_params = {
+                'epochs': 100,
+                'batch_size': 32,
+                'look_back': forecast_horizon,       # Article: look_back = prediction period
+                'li_forecast_horizons': [forecast_horizon],
+                'learning_rate': 0.001,
+                'encoding_dim': 64,
+                'num_heads': 4,
+                'key_dim': 64,
+                'dropout': 0.2,                   # Article Table 1
+                'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
+                'use_early_stopping': True,        # Article: EarlyStopping
+            }
+            params = {**strategy_params, **ranges}
+            run_forecast_pipeline([ds], params, split_date_str,
                                   model_type="hussain_transformer", mlflow_tracking_uri=mlflow_tracking_uri)
 
 
 def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     """Hybrid LSTM-Transformer with Hussain et al. hyperparams: look_back = forecast_horizon, dropout=0.2."""
-    split_date_str = "2021-01-01"
-
-    # Article splits: train ~24 months (Sep 2018 – Aug 2020), test ~7 months (Sep 2020 – Mar 2021).
-    # COVID period is intentionally included, consistent with the original paper.
-    strategy_article = {
-        'train_range': ('2018-09-01', '2020-08-05'),
-        'test_range': ('2020-11-17', '2021-03-31'),
-        #'zoom_range': ('2020-09-01', '2021-03-31'),
-        'zoom_range': ('2021-01-01', '2021-03-31'),
-    }
-
-    for forecast_horizon in li_forecast_horizons:
-        strategy_params = {
-            'epochs': 100,
-            'batch_size': 32,
-            'look_back': forecast_horizon,       # Article: look_back = prediction period
-            'li_forecast_horizons': [forecast_horizon],
-            'learning_rate': 0.001,
-            'd_model': 128,
-            'num_heads': 4,
-            'dropout': 0.2,                   # Article Table 1
-            'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
-            'use_early_stopping': True,        # Article: EarlyStopping
-        }
-
-        if 'ACN_JPL' in datasets:
-            params_jpl = {**strategy_params, **strategy_article}
-            run_forecast_pipeline(['ACN_JPL'], params_jpl, split_date_str,
-                                  model_type="hussain_hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
-
-        if 'ACN_Caltech' in datasets:
-            params_caltech = {**strategy_params, **strategy_article}
-            run_forecast_pipeline(['ACN_Caltech'], params_caltech, split_date_str,
+    for ds in datasets:
+        split_date_str, ranges = get_dataset_config(ds, hussain=True)
+        for forecast_horizon in li_forecast_horizons:
+            strategy_params = {
+                'epochs': 100,
+                'batch_size': 32,
+                'look_back': forecast_horizon,       # Article: look_back = prediction period
+                'li_forecast_horizons': [forecast_horizon],
+                'learning_rate': 0.001,
+                'd_model': 128,
+                'num_heads': 4,
+                'dropout': 0.2,                   # Article Table 1
+                'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
+                'use_early_stopping': True,        # Article: EarlyStopping
+            }
+            params = {**strategy_params, **ranges}
+            run_forecast_pipeline([ds], params, split_date_str,
                                   model_type="hussain_hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
 
 
@@ -866,12 +774,13 @@ def optimize_lstm(datasets, n_trials, mlflow_tracking_uri=None):
 
 if __name__ == "__main__":
     
-    datasets = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
+    #datasets = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
     #datasets = ['ACN_Caltech', 'ACN_JPL']
+    datasets = ['Dundee']
     li_forecast_horizons = [1, 7, 30, 120]
     #datasets = ['ACN_JPL']
     #li_forecast_horizons = [30]
-    split_date_str = "2021-01-01"
+    split_date_str = "2023-09-01"
     n_trials = 5
 
     # MLflow tracking (set to None to disable)
