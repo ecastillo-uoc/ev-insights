@@ -24,7 +24,8 @@ DEFAULT_CHARGING_STATION_DATAFRAME_COLUMNS = [
     'latitude',
     'connector',
     'energy_year_Wh',
-    'power_W_avg'
+    'power_W_avg',
+    'postal_code'
 ]
 
 DEFAULT_CHARGING_POINT_TYPES = [
@@ -44,6 +45,10 @@ DEFAULT_CONNECTOR_TYPES = [
 
 # Mapping of various connector names to standard database codes
 CONNECTOR_TYPE_ALIASES = {
+
+    'rapid': 'T3',
+    'ultra_rapid': 'T3',
+
     # Type 2 (Mennekes)
     'Type 2': 'T2',
     'Type2': 'T2',

@@ -255,6 +255,10 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
                 train_df['dataset_name'] = dataset
                 train_df.attrs['lstm_params'] = strategy_params
             
+            # Keep unmodified copies for plotting (lag dropna can shrink / empty the df)
+            train_df_plot = train_df.copy()
+            test_df_plot = test_df.copy()
+
             feature_cols = []
             if model_type in ["xgboost", "lightgbm"]:
                 feature_cols = [f'lag_{i}' for i in range(1, forecast_horizon + 1)]
@@ -372,7 +376,7 @@ def run_forecast_pipeline(datasets, strategy_params, split_date_str, model_type=
             # 6. Plot real vs predictions
             zoom_range = strategy_params.get('zoom_range', None)
             plot_path_split = plot_train_test_split(
-                train_df, test_df, dataset, forecast_horizon,
+                train_df_plot, test_df_plot, dataset, forecast_horizon,
                 zoom_range=zoom_range, model_name=model_name
             )
 
@@ -864,7 +868,7 @@ if __name__ == "__main__":
     
     datasets = ['ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 'BeLib', 'AMB_Barcelona']
     #datasets = ['ACN_Caltech', 'ACN_JPL']
-    li_forecast_horizons = [1, 7, 30, 120, 240]
+    li_forecast_horizons = [1, 7, 30, 120]
     #datasets = ['ACN_JPL']
     #li_forecast_horizons = [30]
     split_date_str = "2021-01-01"
