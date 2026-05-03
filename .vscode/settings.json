@@ -1,7 +1,8 @@
 {
 
    "python.linting.pylintEnabled": true,
-    "python.pythonPath": "/usr/bin/python3",
+    "python.pythonPath": "/home/ecastillo/dev/M2_882_TFM/venv311tfm/bin/python",
+    "python.defaultInterpreterPath": "/home/ecastillo/dev/M2_882_TFM/venv311tfm/bin/python",
     "git.ignoreLimitWarning": true,
     "esbonio.server.enabled": true,
     "search.useIgnoreFiles": false,
