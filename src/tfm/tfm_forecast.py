@@ -177,7 +177,7 @@ def execute_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
                 'learning_rate': 0.001,
                 'dropout_rate': 0.2,
                 'activation': 'relu',
-                'use_log_transform': False,
+                'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
             }
@@ -212,7 +212,7 @@ def execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None
                 'num_transformer_blocks': 2,
                 'dropout': 0.1,
                 'mlp_dropout': 0.1,
-                'use_log_transform': False,
+                'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
             }
@@ -237,7 +237,7 @@ def execute_lightgbm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
         'learning_rate': 0.02,
         'max_depth': 8,
         'early_stopping_rounds': 200,
-        'use_log_transform': False,
+        'use_log_transform': True,
         'use_differencing': False,
         'use_calendar_features': False,
     }
@@ -262,7 +262,7 @@ def execute_xgboost(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
         'li_forecast_horizons': li_forecast_horizons,
         'random_state': 16,
         'test_size': 0.20,
-        'use_log_transform': False,
+        'use_log_transform': True,
         'use_differencing': False,
         'use_calendar_features': False,
     }
@@ -297,7 +297,7 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
                 'd_model': 128,
                 'num_heads': 4,
                 'dropout': 0.1,
-                'use_log_transform': False,
+                'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
             }
@@ -347,7 +347,7 @@ def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=Non
                 'activation': 'relu',
                 'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
                 'use_early_stopping': True,        # Article: EarlyStopping
-                'use_log_transform': False,
+                'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
             }
@@ -373,7 +373,7 @@ def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_
                 'dropout': 0.2,                   # Article Table 1
                 'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
                 'use_early_stopping': True,        # Article: EarlyStopping
-                'use_log_transform': False,
+                'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
             }
@@ -398,7 +398,7 @@ def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=N
                 'dropout': 0.2,                   # Article Table 1
                 'use_lr_scheduler': True,          # Article: ReduceLROnPlateau
                 'use_early_stopping': True,        # Article: EarlyStopping
-                'use_log_transform': False,
+                'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
             }
@@ -526,7 +526,10 @@ def optimize_lstm(datasets, n_trials, mlflow_tracking_uri=None):
 
 if __name__ == "__main__":
     
-    datasets = ['Dundee', 'ACN_Caltech', 'ACN_JPL', 'ACN_Office001', 
+    datasets = ['Dundee', 
+                #'ACN_Caltech', 
+                # 'ACN_JPL', 
+                #'ACN_Office001', 
                 #'BeLib', 
                 #'AMB_Barcelona'
                 ]
