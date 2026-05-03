@@ -978,7 +978,7 @@ def run_all_cases(
     return all_results
 
 
-if __name__ == "__main__":
+def old_main():
     
     datasets = ['Dundee', 
                 #'ACN_Caltech', 
@@ -1013,3 +1013,9 @@ if __name__ == "__main__":
     #execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
     #execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
     #execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+
+
+if __name__ == "__main__":
+    MLFLOW_TRACKING_URI = None
+    run_all_cases()
+    
