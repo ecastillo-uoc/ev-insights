@@ -192,7 +192,8 @@ def run_forecast_pipeline(
     model_type: str = "lstm",
     model_suffix: str = "",
     mlflow_tracking_uri: str | None = None,
-) -> None:
+    output_dir: str | None = None,
+) -> Dict[int, dict]:
     """Execute the full forecast pipeline for one or more datasets.
 
     This is the **single entry point** called by every ``execute_*`` function
@@ -211,8 +212,10 @@ def run_forecast_pipeline(
     models_dir = 'output_models'
     os.makedirs(models_dir, exist_ok=True)
     li_forecast_horizons = strategy_params.get('li_forecast_horizons', [1])
+    plots_dir = output_dir if output_dir else 'output_plots'
 
     results_summary: List[dict] = []
+    horizon_metrics: Dict[int, dict] = {}
 
     for dataset in datasets:
         logger.info("--- Processing Dataset: %s ---", dataset)
@@ -429,6 +432,7 @@ def run_forecast_pipeline(
                 predict_dates_idx[-1].strftime('%Y-%m-%d'),
                 len(a), look_back,
             )
+            horizon_metrics[forecast_horizon] = metrics
 
             results_summary.append(
                 _build_metrics_record(
@@ -448,12 +452,12 @@ def run_forecast_pipeline(
             plot_path_split = plot_train_test_split(
                 train_df_plot, test_df_plot, dataset, forecast_horizon,
                 zoom_range=zoom_range, model_name=model_name,
-                warm_up_days=warm_up,
+                warm_up_days=warm_up, plots_dir=plots_dir,
             )
-            plot_path_predict = (
-                f'output_plots/{dataset}_actual_vs_predict_{model_name}_{forecast_horizon}days.png'
+            plot_path_predict = plot_test_vs_predict(
+                plot_actuals_df, p, dataset, model_name, forecast_horizon,
+                plots_dir=plots_dir,
             )
-            plot_test_vs_predict(plot_actuals_df, p, dataset, model_name, forecast_horizon)
 
             # 7. MLflow (optional) ─────────────────────────────────────
             if mlflow_tracking_uri and _MLFLOW_AVAILABLE and False:
@@ -525,3 +529,4 @@ def run_forecast_pipeline(
     logger.info("\nFinal Benchmark Summary:\n%s", summary_df[display_cols].to_string())
     if results_summary:
         _upsert_metrics_csv(results_summary)
+    return horizon_metrics

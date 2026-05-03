@@ -26,10 +26,16 @@ def plot_train_test_split(
     zoom_range=None,
     model_name: str | None = None,
     warm_up_days: int = 0,
+    plots_dir: str = 'output_plots',
 ) -> str:
     """Plot the target variable with distinct colours for train and test periods.
 
     Returns the path of the saved full-range plot.
+
+    Parameters
+    ----------
+    plots_dir : str
+        Directory where the plot file is saved.  Defaults to ``'output_plots'``.
     """
     plt.figure(figsize=(12, 6))
     plt.plot(train.index, train['y'], label='Train', linewidth=1.5, color='#1f77b4')
@@ -52,15 +58,15 @@ def plot_train_test_split(
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
 
-    os.makedirs('output_plots', exist_ok=True)
+    os.makedirs(plots_dir, exist_ok=True)
     suffix = f'_{model_name}' if model_name else ''
-    plot_path = f'output_plots/{dataset_name}_train_test_split{suffix}_{forecast_horizon}days.png'
+    plot_path = os.path.join(plots_dir, f'{dataset_name}_train_test_split{suffix}_{forecast_horizon}days.png')
     plt.savefig(plot_path)
     logger.info("Train/Test split plot saved to %s", plot_path)
 
     if zoom_range:
         plt.xlim(pd.to_datetime(zoom_range[0]), pd.to_datetime(zoom_range[1]))
-        plot_path_zoom = f'output_plots/{dataset_name}_train_test_split{suffix}_{forecast_horizon}days_zoom.png'
+        plot_path_zoom = os.path.join(plots_dir, f'{dataset_name}_train_test_split{suffix}_{forecast_horizon}days_zoom.png')
         plt.savefig(plot_path_zoom)
         logger.info("Train/Test split zoom plot saved to %s", plot_path_zoom)
 
@@ -74,8 +80,20 @@ def plot_test_vs_predict(
     dataset_name: str,
     model_name: str,
     forecast_horizon: int,
-) -> None:
-    """Plot test data (actual) against predictions and save to disk."""
+    plots_dir: str = 'output_plots',
+) -> str:
+    """Plot test data (actual) against predictions and save to disk.
+
+    Parameters
+    ----------
+    plots_dir : str
+        Directory where the plot file is saved.  Defaults to ``'output_plots'``.
+
+    Returns
+    -------
+    str
+        Path of the saved plot file.
+    """
     min_len = min(len(test), len(predictions))
     if min_len < len(test) or min_len < len(predictions):
         logger.warning(
@@ -93,8 +111,9 @@ def plot_test_vs_predict(
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
 
-    os.makedirs('output_plots', exist_ok=True)
-    plot_path = f'output_plots/{dataset_name}_actual_vs_predict_{model_name}_{forecast_horizon}days.png'
+    os.makedirs(plots_dir, exist_ok=True)
+    plot_path = os.path.join(plots_dir, f'{dataset_name}_actual_vs_predict_{model_name}_{forecast_horizon}days.png')
     plt.savefig(plot_path)
     plt.close()
     logger.info("Actual vs Predict plot saved to %s", plot_path)
+    return plot_path

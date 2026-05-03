@@ -35,9 +35,15 @@ applied uniformly to **all** strategies:
 All default to ``False`` so existing behaviour is unchanged.  They can be
 combined freely, yielding up to 8 experiment configurations.
 """
+import json
 import os
 import sys
 import logging
+import shutil
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -522,6 +528,454 @@ def optimize_lstm(datasets, n_trials, mlflow_tracking_uri=None):
     logging.info(f"  - Plots: output_plots/")
     logging.info(f"  - Metrics: forecast_metrics_summary.csv")
     logging.info("="*80)
+
+
+# =============================================================================
+# Full-set batch execution framework
+# =============================================================================
+#
+# Usage:
+#   from src.tfm.tfm_forecast import run_all_cases, ALL_DATASETS, ALL_FE_TAGS
+#   results = run_all_cases()          # runs all 72 cases
+#   results = run_all_cases(           # selective run
+#       datasets=['Dundee'],
+#       models=['lstm', 'lightgbm'],
+#       fe_tags=['log'],
+#   )
+#
+# Each case produces artifacts in:
+#   tfm/doc/vf/chapters/results/{dataset}_{model}_{fe_tag}/
+#     metadata.json   — config + per-horizon metrics + health flags
+#     case.tex        — LaTeX subsection fragment
+#     {dataset}_actual_vs_predict_{model}_{h}d_{dataset}_{h}days.png  (×4)
+#     {dataset}_train_test_split_{model}_{h}d_{dataset}_{h}days.png   (×4)
+# =============================================================================
+
+# ── Constants ──────────────────────────────────────────────────────────────
+
+# Directory under which per-case artifact folders are created
+_TFM_CHAPTERS_DIR = (
+    Path(__file__).resolve().parents[3]
+    / 'tfm' / 'doc' / 'vf' / 'chapters'
+)
+
+ALL_DATASETS: List[str] = ['Dundee', 'ACN_Caltech', 'ACN_JPL']
+ALL_MODELS: List[str] = [
+    'lightgbm', 'xgboost',
+    'lstm', 'transformer', 'hybrid',
+    'hussain_lstm', 'hussain_transformer', 'hussain_hybrid',
+]
+ALL_FE_TAGS: List[str] = ['log', 'log_cal', 'log_diff']
+ALL_HORIZONS: List[int] = [1, 7, 30, 120]
+
+# Models that use hussain=True splits and look_back == forecast_horizon
+_HUSSAIN_MODELS: frozenset = frozenset({'hussain_lstm', 'hussain_transformer', 'hussain_hybrid'})
+# Models that receive all horizons in a single pipeline call
+_TREE_MODELS: frozenset = frozenset({'lightgbm', 'xgboost'})
+
+# Three FE configurations — baseline plus two variants
+FE_VARIANTS: Dict[str, dict] = {
+    'log': {
+        'use_log_transform': True,
+        'use_differencing': False,
+        'use_calendar_features': False,
+    },
+    'log_cal': {
+        'use_log_transform': True,
+        'use_differencing': False,
+        'use_calendar_features': True,
+    },
+    'log_diff': {
+        'use_log_transform': True,
+        'use_differencing': True,
+        'use_calendar_features': False,
+    },
+}
+
+
+# ── CaseConfig dataclass ───────────────────────────────────────────────────
+
+@dataclass
+class CaseConfig:
+    """Configuration for one (dataset × model × feature_engineering) experiment case."""
+
+    dataset: str
+    model_type: str
+    fe_tag: str
+    fe_params: dict
+    li_forecast_horizons: List[int]
+    output_base_dir: Path
+    hussain: bool = field(init=False)
+
+    def __post_init__(self):
+        self.hussain = self.model_type in _HUSSAIN_MODELS
+
+    @property
+    def case_id(self) -> str:
+        return f"{self.dataset}_{self.model_type}_{self.fe_tag}"
+
+    @property
+    def case_dir(self) -> Path:
+        return self.output_base_dir / self.case_id
+
+
+# ── Strategy-params builder ────────────────────────────────────────────────
+
+def _build_strategy_params_for_case(
+    model_type: str,
+    fe_params: dict,
+    horizons: List[int],
+) -> dict:
+    """Return base strategy_params for a case, merging FE flags into model defaults.
+
+    The returned dict does **not** include ``look_back`` for neural models —
+    that is set per-horizon inside :func:`run_single_case`.
+    """
+    is_hussain = model_type in _HUSSAIN_MODELS
+    base: dict = {
+        'li_forecast_horizons': list(horizons),
+        **fe_params,
+    }
+
+    if model_type in ('lstm', 'hussain_lstm'):
+        base.update({
+            'epochs': 100,
+            'batch_size': 32,
+            'learning_rate': 0.001,
+            'dropout_rate': 0.2,
+            'activation': 'relu',
+        })
+        if is_hussain:
+            base.update({'use_lr_scheduler': True, 'use_early_stopping': True})
+
+    elif model_type == 'transformer':
+        base.update({
+            'epochs': 100,
+            'batch_size': 32,
+            'learning_rate': 0.001,
+            'head_size': 128,
+            'num_heads': 4,
+            'ff_dim': 4,
+            'num_transformer_blocks': 2,
+            'dropout': 0.1,
+            'mlp_dropout': 0.1,
+        })
+
+    elif model_type == 'hussain_transformer':
+        base.update({
+            'epochs': 100,
+            'batch_size': 32,
+            'learning_rate': 0.001,
+            'encoding_dim': 64,
+            'num_heads': 4,
+            'key_dim': 64,
+            'dropout': 0.2,
+            'use_lr_scheduler': True,
+            'use_early_stopping': True,
+        })
+
+    elif model_type == 'hybrid':
+        base.update({
+            'epochs': 100,
+            'batch_size': 32,
+            'learning_rate': 0.001,
+            'd_model': 128,
+            'num_heads': 4,
+            'dropout': 0.1,
+        })
+
+    elif model_type == 'hussain_hybrid':
+        base.update({
+            'epochs': 100,
+            'batch_size': 32,
+            'learning_rate': 0.001,
+            'd_model': 128,
+            'num_heads': 4,
+            'dropout': 0.2,
+            'use_lr_scheduler': True,
+            'use_early_stopping': True,
+        })
+
+    elif model_type == 'lightgbm':
+        base.update({
+            'num_leaves': 31,
+            'learning_rate': 0.02,
+            'max_depth': 8,
+            'early_stopping_rounds': 200,
+        })
+
+    elif model_type == 'xgboost':
+        base.update({
+            'random_state': 16,
+            'test_size': 0.20,
+        })
+
+    return base
+
+
+# ── Health flags ───────────────────────────────────────────────────────────
+
+def _compute_health_flags(
+    all_metrics: Dict[int, dict],
+    requested_horizons: List[int],
+    smape_threshold: float = 30.0,
+) -> dict:
+    """Return health diagnostic flags derived from the experiment metrics."""
+    completed = set(all_metrics.keys())
+    requested = set(requested_horizons)
+    missing = sorted(requested - completed)
+
+    valid_smape = [
+        v for h, m in all_metrics.items()
+        if (v := m.get('SMAPE')) is not None and not (v != v)
+    ]
+    smape_ok = bool(valid_smape) and all(v < smape_threshold for v in valid_smape)
+
+    smape_per_horizon = {
+        f'{h}d': round(all_metrics[h].get('SMAPE', float('nan')), 2)
+        for h in sorted(completed)
+    }
+
+    return {
+        'smape_ok': smape_ok,
+        'smape_per_horizon': smape_per_horizon,
+        'horizons_completed': sorted(completed),
+        'horizons_missing': missing,
+        'all_horizons_completed': len(missing) == 0,
+    }
+
+
+# ── Single-case runner ─────────────────────────────────────────────────────
+
+def run_single_case(
+    case_config: CaseConfig,
+    mlflow_tracking_uri: Optional[str] = None,
+) -> dict:
+    """Execute one (dataset × model × FE) experiment case and emit artifacts.
+
+    Steps:
+
+    1. Resolve dataset config (split date + date ranges).
+    2. For tree models: one pipeline call with all horizons.
+       For neural models: one pipeline call per horizon (look_back varies).
+    3. Compute health flags from returned metrics.
+    4. Write ``metadata.json`` and ``case.tex`` to ``case_config.case_dir``.
+
+    Parameters
+    ----------
+    case_config : CaseConfig
+        Specification of the case to run.
+    mlflow_tracking_uri : str or None
+        Forwarded to :func:`~src.forecast.pipeline.run_forecast_pipeline`.
+
+    Returns
+    -------
+    dict
+        The metadata dict written to ``metadata.json``.
+    """
+    from src.tfm.latex_generator import generate_case_latex
+
+    logger = logging.getLogger(__name__)
+    case_id = case_config.case_id
+    logger.info("=" * 70)
+    logger.info("START CASE: %s", case_id)
+    logger.info("=" * 70)
+
+    split_date_str, ranges = get_dataset_config(
+        case_config.dataset, hussain=case_config.hussain
+    )
+
+    case_dir = case_config.case_dir
+    case_dir.mkdir(parents=True, exist_ok=True)
+
+    all_metrics: Dict[int, dict] = {}
+    look_back_map: Dict[int, int] = {}
+
+    if case_config.model_type in _TREE_MODELS:
+        # Single pipeline call handles all horizons internally
+        params = _build_strategy_params_for_case(
+            case_config.model_type,
+            case_config.fe_params,
+            case_config.li_forecast_horizons,
+        )
+        params.update(ranges)
+        returned = run_forecast_pipeline(
+            [case_config.dataset],
+            params,
+            split_date_str,
+            model_type=case_config.model_type,
+            output_dir=str(case_dir),
+            mlflow_tracking_uri=mlflow_tracking_uri,
+        )
+        if returned:
+            all_metrics.update(returned)
+        for h in case_config.li_forecast_horizons:
+            look_back_map[h] = 0  # tree models have no look_back warm-up
+
+    else:
+        # Neural models: one call per horizon with appropriate look_back
+        for h in case_config.li_forecast_horizons:
+            look_back = h if case_config.hussain else max(MIN_LOOK_BACK, h)
+            look_back_map[h] = look_back
+            params = _build_strategy_params_for_case(
+                case_config.model_type,
+                case_config.fe_params,
+                [h],
+            )
+            params['look_back'] = look_back
+            params.update(ranges)
+            returned = run_forecast_pipeline(
+                [case_config.dataset],
+                params,
+                split_date_str,
+                model_type=case_config.model_type,
+                output_dir=str(case_dir),
+                mlflow_tracking_uri=mlflow_tracking_uri,
+            )
+            if returned:
+                all_metrics.update(returned)
+
+    # Health flags
+    health = _compute_health_flags(all_metrics, case_config.li_forecast_horizons)
+
+    # Build metadata
+    metadata = {
+        'case_id': case_id,
+        'dataset': case_config.dataset,
+        'model': case_config.model_type,
+        'fe_tag': case_config.fe_tag,
+        'hussain_variant': case_config.hussain,
+        'fe_config': case_config.fe_params,
+        'split_date': split_date_str,
+        'horizons': case_config.li_forecast_horizons,
+        'look_back_per_horizon': look_back_map,
+        'metrics': {f'{h}d': m for h, m in sorted(all_metrics.items())},
+        'health': health,
+        'timestamp': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+    }
+
+    # Write metadata.json
+    meta_path = case_dir / 'metadata.json'
+    with open(meta_path, 'w', encoding='utf-8') as fh:
+        json.dump(metadata, fh, indent=2, ensure_ascii=False)
+    logger.info("Written: %s", meta_path)
+
+    # Generate and write case.tex
+    latex = generate_case_latex(case_id, metadata, case_dir)
+    tex_path = case_dir / 'case.tex'
+    tex_path.write_text(latex, encoding='utf-8')
+    logger.info("Written: %s", tex_path)
+
+    logger.info("DONE CASE: %s  |  health=%s", case_id, health)
+    return metadata
+
+
+# ── Full-set runner ────────────────────────────────────────────────────────
+
+def run_all_cases(
+    datasets: Optional[List[str]] = None,
+    models: Optional[List[str]] = None,
+    fe_tags: Optional[List[str]] = None,
+    horizons: Optional[List[int]] = None,
+    output_base_dir: Optional[Path] = None,
+    mlflow_tracking_uri: Optional[str] = None,
+    skip_existing: bool = False,
+) -> List[dict]:
+    """Run the full combinatorial set of experiment cases.
+
+    Parameters
+    ----------
+    datasets : list[str] or None
+        Datasets to include.  Defaults to :data:`ALL_DATASETS`.
+    models : list[str] or None
+        Model types to include.  Defaults to :data:`ALL_MODELS`.
+    fe_tags : list[str] or None
+        Feature-engineering variant tags.  Defaults to :data:`ALL_FE_TAGS`.
+    horizons : list[int] or None
+        Forecast horizons in days.  Defaults to :data:`ALL_HORIZONS`.
+    output_base_dir : Path or None
+        Root directory for case artifacts.  Defaults to
+        ``tfm/doc/vf/chapters/results/``.
+    mlflow_tracking_uri : str or None
+        Forwarded to :func:`run_single_case`.
+    skip_existing : bool
+        When ``True``, skip any case whose ``metadata.json`` already exists.
+
+    Returns
+    -------
+    list[dict]
+        List of metadata dicts, one per completed case.
+    """
+    logger = logging.getLogger(__name__)
+
+    _datasets  = datasets  or ALL_DATASETS
+    _models    = models    or ALL_MODELS
+    _fe_tags   = fe_tags   or ALL_FE_TAGS
+    _horizons  = horizons  or ALL_HORIZONS
+    _base_dir  = output_base_dir or (_TFM_CHAPTERS_DIR / 'results')
+
+    _base_dir.mkdir(parents=True, exist_ok=True)
+
+    total = len(_datasets) * len(_models) * len(_fe_tags)
+    logger.info(
+        "run_all_cases: %d datasets × %d models × %d FE variants = %d cases",
+        len(_datasets), len(_models), len(_fe_tags), total,
+    )
+
+    all_results: List[dict] = []
+    failed: List[str] = []
+    n = 0
+
+    for dataset in _datasets:
+        for model_type in _models:
+            for fe_tag in _fe_tags:
+                n += 1
+                fe_params = FE_VARIANTS[fe_tag]
+                case_config = CaseConfig(
+                    dataset=dataset,
+                    model_type=model_type,
+                    fe_tag=fe_tag,
+                    fe_params=fe_params,
+                    li_forecast_horizons=_horizons,
+                    output_base_dir=_base_dir,
+                )
+                if skip_existing and (case_config.case_dir / 'metadata.json').exists():
+                    logger.info("[%d/%d] SKIP (existing): %s", n, total, case_config.case_id)
+                    try:
+                        with open(case_config.case_dir / 'metadata.json', encoding='utf-8') as fh:
+                            all_results.append(json.load(fh))
+                    except Exception:
+                        pass
+                    continue
+
+                logger.info("[%d/%d] Running: %s", n, total, case_config.case_id)
+                try:
+                    meta = run_single_case(case_config, mlflow_tracking_uri=mlflow_tracking_uri)
+                    all_results.append(meta)
+                except Exception as exc:
+                    logger.error("FAILED case %s: %s", case_config.case_id, exc, exc_info=True)
+                    failed.append(case_config.case_id)
+
+    # ── Summary ──────────────────────────────────────────────────────────
+    logger.info("=" * 70)
+    logger.info("run_all_cases COMPLETE: %d/%d cases succeeded, %d failed",
+                len(all_results), total, len(failed))
+    if failed:
+        logger.warning("Failed cases: %s", failed)
+
+    # Print \input list for 04_resultados.tex
+    print("\n% === \\input list for 04_resultados.tex ===")
+    prev_dataset = None
+    for meta in all_results:
+        ds = meta.get('dataset', '')
+        cid = meta.get('case_id', '')
+        if ds != prev_dataset:
+            print(f"\n% --- {ds} ---")
+            prev_dataset = ds
+        print(fr"\IfFileExists{{chapters/results/{cid}/case.tex}}{{\input{{chapters/results/{cid}/case}}}}{{}}")
+    print("% ==========================================\n")
+
+    return all_results
 
 
 if __name__ == "__main__":
