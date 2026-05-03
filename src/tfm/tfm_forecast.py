@@ -50,6 +50,9 @@ import pandas as pd
 # Add src to python path if not present
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from src.utils.gpu_config import configure_gpu
+configure_gpu()
+
 from src.utils.console import Colors
 from src.forecast.pipeline import run_forecast_pipeline
 from src.data.data_fetcher import fetch_daily_energy_for_forecast
@@ -1018,4 +1021,3 @@ def old_main():
 if __name__ == "__main__":
     MLFLOW_TRACKING_URI = None
     run_all_cases()
-    

@@ -28,6 +28,11 @@ import pandas as pd
 from keras.callbacks import ReduceLROnPlateau, EarlyStopping
 from sklearn.preprocessing import MinMaxScaler
 
+# Ensure GPU is configured before any model is built (idempotent: no-op on
+# repeated calls or when running without a GPU).
+from src.utils.gpu_config import configure_gpu as _configure_gpu
+_configure_gpu()
+
 from .interfaces import ModelStrategy
 
 
