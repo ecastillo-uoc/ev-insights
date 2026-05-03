@@ -779,6 +779,7 @@ def run_single_case(
     from src.tfm.latex_generator import generate_case_latex
 
     logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
     case_id = case_config.case_id
     logger.info("=" * 70)
     logger.info("START CASE: %s", case_id)
@@ -910,6 +911,7 @@ def run_all_cases(
         List of metadata dicts, one per completed case.
     """
     logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
 
     _datasets  = datasets  or ALL_DATASETS
     _models    = models    or ALL_MODELS
@@ -1020,4 +1022,5 @@ def old_main():
 
 if __name__ == "__main__":
     MLFLOW_TRACKING_URI = None
+    print("Running all cases with MLflow tracking URI:", MLFLOW_TRACKING_URI)
     run_all_cases()
