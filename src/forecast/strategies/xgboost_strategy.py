@@ -184,6 +184,15 @@ class XGBoostModelStrategy(ModelStrategy):
                     dums = dums.reindex(columns=_weekday_ohe_cols, fill_value=0)
                     feats = feats.drop('plug_in_weekday', axis=1).join(dums)
                 if model_feature_names:
+                    # Drop duplicate columns before reindex — duplicates raise
+                    # ValueError("cannot reindex on an axis with duplicate labels").
+                    if feats.columns.duplicated().any():
+                        dup_cols = feats.columns[feats.columns.duplicated(keep=False)].tolist()
+                        self.logger.warning(
+                            "[XGBoost.predict] Duplicate columns detected (keeping first occurrence): %s",
+                            sorted(set(dup_cols)),
+                        )
+                        feats = feats.loc[:, ~feats.columns.duplicated()]
                     missing = [c for c in model_feature_names if c not in feats.columns]
                     if missing:
                         self.logger.warning(f"[XGBoost.predict] Columns missing after prep: {missing}")
