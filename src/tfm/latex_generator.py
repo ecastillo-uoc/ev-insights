@@ -183,10 +183,14 @@ def generate_case_latex(
 
     # ── Health note block ──────────────────────────────────────────────────
     if health_warnings:
-        health_block = r"""
-\begin{tcolorbox}[colback=yellow!10!white,colframe=orange!80!black,title=Advertencias de salud del caso]
-""" + '\n'.join(rf'\item {w}' for w in health_warnings) + r"""
-\end{tcolorbox}"""
+        health_block = (
+            r'\begin{tcolorbox}[colback=yellow!10!white,colframe=orange!80!black,'
+            r'title=Advertencias de salud del caso]' + '\n'
+            r'\begin{itemize}' + '\n'
+            + '\n'.join(rf'\item {w}' for w in health_warnings) + '\n'
+            r'\end{itemize}' + '\n'
+            r'\end{tcolorbox}'
+        )
     else:
         health_block = r'\textit{Estado: sin advertencias de salud.}'
 
