@@ -180,6 +180,15 @@ class LightGBMModelStrategy(ModelStrategy):
                 else:
                     subset_dates = None
 
+                # Deduplicate columns before selection — duplicate labels cause
+                # pandas to return one column per occurrence, inflating feature count.
+                if subset.columns.duplicated().any():
+                    dup_cols = sorted(set(subset.columns[subset.columns.duplicated(keep=False)].tolist()))
+                    self.logger.warning(
+                        "[LightGBM.predict] Duplicate columns in subset (keeping first): %s", dup_cols
+                    )
+                    subset = subset.loc[:, ~subset.columns.duplicated()]
+
                 if submode == 'schedule':
                     input_row = subset.iloc[[-1]].copy()
                     X = input_row[feature_columns]
