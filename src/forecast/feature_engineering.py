@@ -156,23 +156,30 @@ def add_tree_lag_features(
     """
     df = df.copy()
 
+    # Accumulate all new columns into a dict and concat once to avoid
+    # DataFrame fragmentation (PerformanceWarning from repeated inserts).
+    new_cols: dict = {}
+
     # 1. Horizon lags
     feature_cols = [f'lag_{i}' for i in range(1, forecast_horizon + 1)]
     for i in range(1, forecast_horizon + 1):
-        df[f'lag_{i}'] = df['y'].shift(i)
+        new_cols[f'lag_{i}'] = df['y'].shift(i)
 
     # 2. Rolling means — shift(1) avoids leakage (uses t-7…t-1, never t)
-    df['rolling_7d_mean']  = df['y'].shift(1).rolling(7).mean()
-    df['rolling_30d_mean'] = df['y'].shift(1).rolling(30).mean()
+    shifted = df['y'].shift(1)
+    new_cols['rolling_7d_mean']  = shifted.rolling(7).mean()
+    new_cols['rolling_30d_mean'] = shifted.rolling(30).mean()
     feature_cols += ['rolling_7d_mean', 'rolling_30d_mean']
 
     # 3. Deeper fixed lags — deduplicate with horizon lags already created
     for lag_val in [7, 14, 30]:
         col_name = f'lag_{lag_val}'
-        if col_name not in df.columns:
-            df[col_name] = df['y'].shift(lag_val)
+        if col_name not in new_cols:
+            new_cols[col_name] = df['y'].shift(lag_val)
         if col_name not in feature_cols:
             feature_cols.append(col_name)
+
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     # 4. Calendar features (already present in df if flag was set)
     if calendar_cols:

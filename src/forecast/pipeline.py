@@ -337,7 +337,11 @@ def run_forecast_pipeline(
                 predict_df = test_df.copy()
                 predict_df['dataset_name'] = dataset
                 common_idx = predict_df.index.intersection(df_model.index)
-                lag_cols_df = pd.DataFrame(df_model.loc[common_idx, feature_cols])
+                # Only copy feature columns not already present in predict_df
+                # (calendar cols are already in test_df via add_calendar_features;
+                # pulling them again from df_model would produce duplicate columns).
+                missing_feat_cols = [c for c in feature_cols if c not in predict_df.columns]
+                lag_cols_df = pd.DataFrame(df_model.loc[common_idx, missing_feat_cols])
                 predict_df = pd.concat([predict_df, lag_cols_df], axis=1).dropna()
                 predict_mode = None
             else:
