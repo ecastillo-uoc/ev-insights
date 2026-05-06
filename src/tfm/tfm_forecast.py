@@ -68,6 +68,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # For horizons shorter than this, look_back is clamped to MIN_LOOK_BACK.
 # For horizons equal to or longer than this, look_back = forecast_horizon.
 MIN_LOOK_BACK = 14
+# Fixed context window for our non-Hussain neural models.
+# Decoupled from forecast_horizon: 28 days captures two full weekly cycles,
+# covers significant ACF lags (7, 14, 28 days) and avoids anchoring predictions
+# to a stale demand regime when long horizons are used.
+LOOK_BACK_DAYS = 28
 
 
 def get_dataset_config(dataset_name, hussain=False):
@@ -177,7 +182,7 @@ def execute_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds)
         for forecast_horizon in li_forecast_horizons:
-            look_back = max(MIN_LOOK_BACK, forecast_horizon)
+            look_back = LOOK_BACK_DAYS
             strategy_params_lstm = {
                 'epochs': 100,
                 'batch_size': 32,
@@ -208,7 +213,7 @@ def execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds)
         for forecast_horizon in li_forecast_horizons:
-            look_back = max(MIN_LOOK_BACK, forecast_horizon)
+            look_back = LOOK_BACK_DAYS
             strategy_params_transformer = {
                 'epochs': 100,
                 'batch_size': 32,
@@ -296,7 +301,7 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds)
         for forecast_horizon in li_forecast_horizons:
-            look_back = max(MIN_LOOK_BACK, forecast_horizon)
+            look_back = LOOK_BACK_DAYS
             strategy_params_hybrid = {
                 'epochs': 100,
                 'batch_size': 32,

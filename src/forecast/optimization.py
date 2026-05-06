@@ -12,7 +12,7 @@ import logging
 import numpy as np
 import optuna
 from keras.callbacks import EarlyStopping
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import RobustScaler
 
 from src.forecast.strategies import LSTMModelStrategy, TransformerModelStrategy
 from src.forecast.strategies.utils_ts import smape
@@ -59,7 +59,7 @@ def objective_transformer(trial, train_df, target_column):
     subset_df = train_df.copy()
     y_raw = subset_df[[target_column]].values.astype(float)
 
-    scaler = MinMaxScaler()
+    scaler = RobustScaler()
     y_scaled = scaler.fit_transform(y_raw)
 
     look_back = transformer_params["look_back"]
@@ -132,7 +132,7 @@ def objective_lstm(trial, train_df, target_column):
     subset_df = train_df.copy()
     y_raw = subset_df[[target_column]].values.astype(float)
 
-    scaler = MinMaxScaler()
+    scaler = RobustScaler()
     y_scaled = scaler.fit_transform(y_raw)
 
     look_back = lstm_params["look_back"]

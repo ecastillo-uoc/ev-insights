@@ -5,7 +5,7 @@ Extracts the shared train/predict pipeline that is identical across all three ne
 model strategies:
 
   * Date-range filtering and train/test boundary resolution
-  * MinMaxScaler normalisation + sliding-window sequence construction
+  * RobustScaler normalisation + sliding-window sequence construction (with ±3.0 clip guard)
   * Schedule-mode multi-step recursive prediction
   * Backtest-mode rolling one-step prediction
   * Output-dict construction (params, model bundle, metrics / predictions)
@@ -26,7 +26,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 from keras.callbacks import ReduceLROnPlateau, EarlyStopping
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import RobustScaler
 
 # Ensure GPU is configured before any model is built (idempotent: no-op on
 # repeated calls or when running without a GPU).
@@ -132,7 +132,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         data: np.ndarray,
         look_back: int,
         forecast_horizon: int = 1,
-    ) -> Tuple[np.ndarray, np.ndarray, MinMaxScaler, MinMaxScaler]:
+    ) -> Tuple[np.ndarray, np.ndarray, RobustScaler, RobustScaler]:
         """MinMax-scale *data* and build sliding-window sequences.
 
         Supports multivariate input: *data* may have shape ``(n, k)`` where
@@ -159,19 +159,19 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             3-D array ``(n_windows, look_back, n_features)``.
         y : np.ndarray
             1-D (single-step) or 2-D (multi-step) target array.
-        scaler : MinMaxScaler
+        scaler : RobustScaler
             Fitted on **all** columns — used to scale input windows and to
             reconstruct feature rows during recursive prediction.
-        target_scaler : MinMaxScaler
+        target_scaler : RobustScaler
             Fitted on **column 0 only** — used for inverse-transforming
             predictions back to the original target scale.  When
             ``n_features == 1`` this is functionally identical to *scaler*.
         """
-        scaler = MinMaxScaler()
+        scaler = RobustScaler()
         scaled_data = scaler.fit_transform(data)
 
         # Separate scaler for inverse-transforming single-column predictions
-        target_scaler = MinMaxScaler()
+        target_scaler = RobustScaler()
         target_scaler.fit(data[:, 0:1])
 
         n_cols = data.shape[1]
@@ -200,7 +200,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         model_objects: Any,
         strategy_name: str,
         logger: logging.Logger,
-    ) -> Tuple[Any, MinMaxScaler, MinMaxScaler, int, int | None, List[str], dict] | None:
+    ) -> Tuple[Any, RobustScaler, RobustScaler, int, int | None, List[str], dict] | None:
         """Extract model bundle components from *model_objects*.
 
         Backward compatible: old saved models without ``target_scaler`` or
@@ -273,12 +273,12 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         target_column: str,
         dataset_names: List[str],
         model,
-        scaler: MinMaxScaler,
+        scaler: RobustScaler,
         look_back: int,
         forecast_horizon: int,
         predict_start_date: str | None,
         predict_end_date: str | None,
-        target_scaler: MinMaxScaler | None = None,
+        target_scaler: RobustScaler | None = None,
         feature_columns: List[str] | None = None,
     ) -> dict:
         """Run **schedule** (multi-step recursive) prediction for each dataset.
@@ -298,7 +298,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             Datasets to iterate over.
         model : keras.Model
             Trained Keras model.
-        scaler : MinMaxScaler
+        scaler : RobustScaler
             Fitted on all input columns (target + features).
         look_back : int
             Window size expected by the model.
@@ -306,7 +306,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             Number of future steps to predict.
         predict_start_date, predict_end_date : str or None
             Optional date bounds to filter the seed data.
-        target_scaler : MinMaxScaler or None
+        target_scaler : RobustScaler or None
             Scaler fitted on the target column only.  Falls back to *scaler*
             when ``None``.
         feature_columns : list[str] or None
@@ -347,7 +347,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             feat_cols = feature_columns or []
             cols = [target_column] + feat_cols
             data = subset[cols].values[-look_back:]
-            scaled_data = scaler.transform(data)
+            scaled_data = np.clip(scaler.transform(data), -3.0, 3.0)
             current_seq = scaled_data.copy()
 
             # Determine last date for future date range (moved before loop)
@@ -380,7 +380,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                     unscaled_row = np.array(
                         [[pred_unscaled] + [cal_values[c] for c in feat_cols]]
                     )
-                    scaled_row = scaler.transform(unscaled_row)
+                    scaled_row = np.clip(scaler.transform(unscaled_row), -3.0, 3.0)
                     current_seq[-1, :] = scaled_row[0, :]
                 else:
                     current_seq[-1, 0] = pred[0, 0]
@@ -407,12 +407,12 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         target_column: str,
         dataset_names: List[str],
         model,
-        scaler: MinMaxScaler,
+        scaler: RobustScaler,
         look_back: int,
         forecast_horizon: int,
         predict_start_date: str | None,
         predict_end_date: str | None,
-        target_scaler: MinMaxScaler | None = None,
+        target_scaler: RobustScaler | None = None,
         feature_columns: List[str] | None = None,
     ) -> dict:
         """Run **direct multi-step** prediction for each dataset.
@@ -434,7 +434,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             Datasets to iterate over.
         model : keras.Model
             Trained Keras model whose output shape is ``(batch, forecast_horizon)``.
-        scaler : MinMaxScaler
+        scaler : RobustScaler
             Fitted on all input columns.
         look_back : int
             Window size expected by the model.
@@ -442,7 +442,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             Number of future steps the model outputs in a single pass.
         predict_start_date, predict_end_date : str or None
             Optional date bounds to filter the seed data.
-        target_scaler : MinMaxScaler or None
+        target_scaler : RobustScaler or None
             Scaler fitted on the target column only.
         feature_columns : list[str] or None
             Exogenous feature columns present in the input window.
@@ -480,7 +480,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             feat_cols = feature_columns or []
             cols = [target_column] + feat_cols
             data = subset[cols].values[-look_back:]
-            scaled_data = scaler.transform(data)
+            scaled_data = np.clip(scaler.transform(data), -3.0, 3.0)
 
             # Single forward pass → (1, forecast_horizon) output
             pred_scaled = model.predict(
@@ -522,9 +522,9 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         target_column: str,
         dataset_names: List[str],
         model,
-        scaler: MinMaxScaler,
+        scaler: RobustScaler,
         look_back: int,
-        target_scaler: MinMaxScaler | None = None,
+        target_scaler: RobustScaler | None = None,
         feature_columns: List[str] | None = None,
     ) -> dict:
         """Run **backtest** (rolling one-step) prediction for each dataset.
@@ -544,11 +544,11 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             Datasets to iterate over.
         model : keras.Model
             Trained Keras model.
-        scaler : MinMaxScaler
+        scaler : RobustScaler
             Fitted on all input columns.
         look_back : int
             Window size expected by the model.
-        target_scaler : MinMaxScaler or None
+        target_scaler : RobustScaler or None
             Scaler fitted on the target column only.
         feature_columns : list[str] or None
             Exogenous feature columns present in the input window.
@@ -570,7 +570,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             feat_cols = feature_columns or []
             cols = [target_column] + feat_cols
             all_data = subset[cols].values
-            scaled_all = scaler.transform(all_data)
+            scaled_all = np.clip(scaler.transform(all_data), -3.0, 3.0)
 
             if len(scaled_all) <= look_back:
                 self.logger.warning(
@@ -743,6 +743,65 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             callbacks=callbacks if callbacks else None,
         )
         return model
+
+    def _finetune_on_window(
+        self,
+        model,
+        data: np.ndarray,
+        look_back: int,
+        strategy_params: dict,
+    ) -> Tuple[Any, RobustScaler, RobustScaler]:
+        """Fine-tune *model* on a recent sliding window without rebuilding the architecture.
+
+        Used by the rolling-training backtest path
+        (``use_rolling_training=True, rolling_retrain_mode='finetune'``).
+
+        A **new** pair of :class:`~sklearn.preprocessing.RobustScaler` objects
+        is fitted on *data* so that the scaler always reflects the current
+        demand regime.  The existing model weights are updated in-place by
+        running a short ``model.fit()`` call — ``build_model()`` is **not**
+        called, preserving the learned representations while adapting to the
+        new distribution.
+
+        Parameters
+        ----------
+        model : keras.Model
+            Existing trained Keras model whose weights will be fine-tuned.
+        data : np.ndarray
+            2-D array of shape ``(n_window, n_features)`` in the **original
+            (un-scaled) space**.  Column 0 must be the target.
+        look_back : int
+            Sliding-window size used to build sequences.
+        strategy_params : dict
+            Strategy hyperparameters.  Read keys: ``rolling_finetune_epochs``
+            (default 10), ``batch_size`` (default 32).
+
+        Returns
+        -------
+        (model, new_scaler, new_target_scaler)
+            The fine-tuned Keras model and the two freshly fitted scalers to
+            replace the stale ones in the model bundle.
+        """
+        finetune_epochs = strategy_params.get('rolling_finetune_epochs', 10)
+        batch_size = strategy_params.get('batch_size', 32)
+
+        X, y, new_scaler, new_target_scaler = self._scale_and_create_sequences(
+            data, look_back, forecast_horizon=1,
+        )
+        if len(X) == 0:
+            self.logger.warning(
+                "_finetune_on_window: window too small to build sequences "
+                "(n_window=%d, look_back=%d) — skipping fine-tune step.",
+                len(data), look_back,
+            )
+            return model, new_scaler, new_target_scaler
+
+        self.logger.info(
+            "Fine-tuning %s for %d epochs on %d-day window (%d sequences).",
+            self._strategy_display_name, finetune_epochs, len(data), len(X),
+        )
+        model.fit(X, y, epochs=finetune_epochs, batch_size=batch_size, verbose=0)
+        return model, new_scaler, new_target_scaler
 
     # ------------------------------------------------------------------
     # Template-method: predict
