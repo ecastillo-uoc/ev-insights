@@ -51,8 +51,19 @@ class LightGBMModelStrategy(ModelStrategy):
 
                 if split_date is not None:
                     if isinstance(subset_df.index, pd.DatetimeIndex):
-                        train_mask = subset_df.index <= split_date
-                        test_mask = subset_df.index > split_date
+                        # Respect explicit train_range (start, end) when provided;
+                        # fall back to split_date only when train_range is absent.
+                        train_range = user_lgbm_params.get('train_range')
+                        if train_range:
+                            tr_start, tr_end = train_range
+                            train_mask = pd.Series(True, index=subset_df.index)
+                            if tr_start:
+                                train_mask &= subset_df.index >= pd.to_datetime(tr_start)
+                            if tr_end:
+                                train_mask &= subset_df.index <= pd.to_datetime(tr_end)
+                        else:
+                            train_mask = subset_df.index <= pd.to_datetime(split_date)
+                        test_mask = ~train_mask
                     else:
                         n_rows = len(subset_df)
                         train_size = int(n_rows * 0.9)

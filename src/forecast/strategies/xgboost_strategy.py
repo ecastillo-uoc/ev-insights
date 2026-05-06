@@ -78,8 +78,19 @@ class XGBoostModelStrategy(ModelStrategy):
 
                 if split_date is not None:
                     if isinstance(subset_df.index, pd.DatetimeIndex):
-                        train_mask = subset_df.index <= split_date
-                        test_mask = subset_df.index > split_date
+                        # Respect explicit train_range (start, end) when provided;
+                        # fall back to split_date only when train_range is absent.
+                        train_range = user_xgb_params.get('train_range')
+                        if train_range:
+                            tr_start, tr_end = train_range
+                            train_mask = pd.Series(True, index=subset_df.index)
+                            if tr_start:
+                                train_mask &= subset_df.index >= pd.to_datetime(tr_start)
+                            if tr_end:
+                                train_mask &= subset_df.index <= pd.to_datetime(tr_end)
+                        else:
+                            train_mask = subset_df.index <= pd.to_datetime(split_date)
+                        test_mask = ~train_mask
                         X_train, X_test = X[train_mask], X[test_mask]
                         y_train, y_test = y[train_mask], y[test_mask]
                     else:

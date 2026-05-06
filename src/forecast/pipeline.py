@@ -300,10 +300,32 @@ def run_forecast_pipeline(
                 df_model = df_model.dropna()
                 train_df = train_df.dropna()
 
-                # Guard: lag features may consume most rows on small datasets
+                # Guard: lag features may consume most rows on small datasets.
+                # Use explicit train_range/test_range boundaries when available
+                # so the check reflects the actual split rather than split_date.
                 model_rows = df_model[df_model['dataset_name'] == dataset]
-                train_rows = model_rows[model_rows.index <= split_date]
-                test_rows = model_rows[model_rows.index > split_date]
+                _train_range = strategy_params.get('train_range')
+                _test_range = strategy_params.get('test_range')
+                if _train_range:
+                    _tr_start, _tr_end = _train_range
+                    _train_mask = pd.Series(True, index=model_rows.index)
+                    if _tr_start:
+                        _train_mask &= model_rows.index >= pd.to_datetime(_tr_start)
+                    if _tr_end:
+                        _train_mask &= model_rows.index <= pd.to_datetime(_tr_end)
+                    train_rows = model_rows[_train_mask]
+                else:
+                    train_rows = model_rows[model_rows.index <= split_date]
+                if _test_range:
+                    _te_start, _te_end = _test_range
+                    _test_mask = pd.Series(True, index=model_rows.index)
+                    if _te_start:
+                        _test_mask &= model_rows.index >= pd.to_datetime(_te_start)
+                    if _te_end:
+                        _test_mask &= model_rows.index <= pd.to_datetime(_te_end)
+                    test_rows = model_rows[_test_mask]
+                else:
+                    test_rows = model_rows[model_rows.index > split_date]
                 if train_rows.empty or test_rows.empty:
                     logger.warning(
                         "Skipping %s / %dd: not enough data after lag features "
