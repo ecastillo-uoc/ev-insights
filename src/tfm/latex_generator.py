@@ -35,9 +35,11 @@ _MODEL_DISPLAY = {
 }
 
 _FE_TAG_DISPLAY = {
-    'log':      'Log-transform',
-    'log_cal':  'Log + Calendario',
-    'log_diff': 'Log + Diferenciación',
+    'log':                  'Log-transform',
+    'log_cal':              'Log + Calendario',
+    'log_diff':             'Log + Diferenciación',
+    'log_rolling':          'Log + Rolling',
+    'log_diff_cal_rolling': 'Log + Diferenciación + Calendario + Rolling',
 }
 
 _DATASET_DISPLAY = {
@@ -117,13 +119,46 @@ def generate_case_latex(
     # ── Feature engineering summary ────────────────────────────────────────
     fe_items = []
     if fe_config.get('use_log_transform'):
-        fe_items.append('log1p/expm1 en el objetivo')
+        fe_items.append(r'\texttt{log1p/expm1} en el objetivo')
     if fe_config.get('use_differencing'):
         fe_items.append('diferenciación de primer orden')
     if fe_config.get('use_calendar_features'):
-        fe_items.append('características calendario (día semana, mes, sin/cos, día hábil)')
+        fe_items.append(r'características calendario (día semana, mes, sin/cos, día hábil)')
+    if fe_config.get('use_rolling_training'):
+        rw = fe_config.get('rolling_window_days', 180)
+        ri = fe_config.get('rolling_retrain_interval', 7)
+        fe_items.append(
+            rf'reentrenamiento deslizante (ventana {rw}~días, cada {ri}~días)'
+        )
     fe_summary = '; '.join(fe_items) if fe_items else 'ninguna transformación adicional'
-    hussain_note = r' El \textit{look\_back} es igual al horizonte de predicción (variante Hussain et al.).' if hussain else ''
+
+    # ── look_back note (from metadata, reflects actual values used) ─────────
+    look_back_per_horizon = metadata.get('look_back_per_horizon', {})
+    if look_back_per_horizon:
+        unique_lb = set(look_back_per_horizon.values())
+        if all(v == 0 for v in unique_lb):
+            lb_note = ''  # tree models — no context window
+        elif len(unique_lb) == 1:
+            lb_val = next(iter(unique_lb))
+            lb_note = (
+                rf' Ventana de contexto: \texttt{{look\_back}}\,=\,{lb_val}~días '
+                r'(igual para todos los horizontes).'
+            )
+        else:
+            lb_pairs = ', '.join(
+                rf'{h}d\,$\to$\,{v}d'
+                for h, v in sorted(look_back_per_horizon.items())
+            )
+            lb_note = (
+                rf' Ventana de contexto (\texttt{{look\_back}}) por horizonte: {lb_pairs}.'
+            )
+    else:
+        lb_note = ''
+
+    hussain_note = (
+        r' \textbf{Variante arquitectónica:} Hussain et al.\ (2025).'
+        if hussain else ''
+    )
 
     # ── Health status ──────────────────────────────────────────────────────
     health_warnings = []
@@ -201,7 +236,7 @@ def generate_case_latex(
         '',
         rf'\subsection{{{_escape(model_display)} --- {_escape(fe_display)}}}\label{{subsec:{label}}}',
         '',
-        rf'\paragraph{{Configuración}} {fe_summary}.{hussain_note}',
+        rf'\paragraph{{Configuración}} {fe_summary}.{lb_note}{hussain_note}',
         rf'Fecha de corte train/test: \texttt{{{split_date}}}.',
         rf'Horizontes evaluados: {", ".join(str(h) + "d" for h in horizons)}.',
         '',
