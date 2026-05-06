@@ -183,6 +183,200 @@ def _upsert_metrics_csv(
     return csv_path
 
 
+# ── Rolling backtest ───────────────────────────────────────────────────────
+
+def _run_rolling_backtest(
+    df_full: pd.DataFrame,
+    dataset: str,
+    strategy,
+    strategy_params: dict,
+    params_key: str,
+    feature_cols: List[str],
+    look_back: int,
+    split_date_str: str,
+    model_name_prefix: str,
+) -> tuple:
+    """Rolling-retrain backtest for neural models.
+
+    Iterates over the test set in batches of ``rolling_retrain_interval`` days.
+    At the start of each batch the model is either fully retrained
+    (``rolling_retrain_mode='full'``) or fine-tuned
+    (``rolling_retrain_mode='finetune'``) on the most recent
+    ``rolling_window_days`` of **pre-batch** history.  A fresh
+    :class:`~sklearn.preprocessing.RobustScaler` is fitted on that window at
+    every retrain step so that the scaler always reflects the current demand
+    regime.
+
+    Parameters
+    ----------
+    df_full : pd.DataFrame
+        Full dataset with ``dataset_name`` column and ``DatetimeIndex``.
+        Should include both training and test rows (transformed, with calendar
+        features already added where applicable).
+    dataset : str
+        Dataset name used to filter ``df_full``.
+    strategy : ModelStrategy
+        Instantiated strategy object (e.g. ``HybridTransformerLSTMModelStrategy``).
+    strategy_params : dict
+        Full strategy-params dict.  Read keys: ``rolling_window_days``
+        (default 180), ``rolling_retrain_interval`` (default 7),
+        ``rolling_retrain_mode`` (default ``'full'``),
+        ``rolling_finetune_epochs`` (default 10).
+    params_key : str
+        The ``df.attrs`` key for this strategy (e.g. ``'hybrid_params'``).
+    feature_cols : list[str]
+        Exogenous feature columns (empty list for univariate models).
+    look_back : int
+        Context window size expected by the model.
+    split_date_str : str
+        Train/test split date string (``'YYYY-MM-DD'``).
+    model_name_prefix : str
+        Prefix used to locate the trained model in the output dict.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, pd.DatetimeIndex]
+        ``(predictions, actuals, dates)`` — all in **transformed** space
+        (inverse transforms are applied by the caller, i.e.
+        ``run_forecast_pipeline``).
+    """
+    rolling_window_days = strategy_params.get('rolling_window_days', 180)
+    retrain_interval = strategy_params.get('rolling_retrain_interval', 7)
+    retrain_mode = strategy_params.get('rolling_retrain_mode', 'full')
+
+    min_window = 5 * look_back
+    if rolling_window_days < min_window:
+        logger.warning(
+            "_run_rolling_backtest: rolling_window_days=%d is below 5×look_back=%d. "
+            "Clamping to %d to ensure enough sequences for training.",
+            rolling_window_days, min_window, min_window,
+        )
+        rolling_window_days = min_window
+
+    split_date = pd.to_datetime(split_date_str)
+    subset = df_full.loc[df_full['dataset_name'] == dataset].copy()
+    test_idx = subset.index[subset.index > split_date]
+
+    if len(test_idx) == 0:
+        logger.warning("_run_rolling_backtest: no test rows for %s after %s.", dataset, split_date_str)
+        return np.array([]), np.array([]), pd.DatetimeIndex([])
+
+    all_predictions: List[float] = []
+    all_actuals: List[float] = []
+    all_dates: List[Any] = []
+
+    model_objects: Any = None  # populated on first retrain
+
+    # Iterate over test days in batches of retrain_interval
+    batch_starts = range(0, len(test_idx), retrain_interval)
+    cols = ['y'] + feature_cols
+
+    for batch_idx, batch_start in enumerate(batch_starts):
+        batch_dates = test_idx[batch_start: batch_start + retrain_interval]
+        batch_anchor = batch_dates[0]  # first day of this batch
+
+        # Build the training window: all rows strictly before batch_anchor
+        history = subset.loc[subset.index < batch_anchor]
+        if len(history) < rolling_window_days:
+            logger.warning(
+                "_run_rolling_backtest [%s] batch %d: only %d history rows available "
+                "(need %d). Using all available.",
+                dataset, batch_idx, len(history), rolling_window_days,
+            )
+            window_df = history.copy()
+        else:
+            window_df = history.iloc[-rolling_window_days:].copy()
+
+        if len(window_df) <= look_back:
+            logger.warning(
+                "_run_rolling_backtest [%s] batch %d: window_df (%d rows) ≤ look_back (%d). "
+                "Skipping retrain.",
+                dataset, batch_idx, len(window_df), look_back,
+            )
+        else:
+            # ── Retrain ────────────────────────────────────────────────
+            if retrain_mode == 'finetune' and model_objects is not None:
+                # Fine-tune existing weights + refit scalers on current window
+                window_data = window_df[cols].values
+                model_objects['keras_model'], model_objects['scaler'], model_objects['target_scaler'] = (
+                    strategy._finetune_on_window(
+                        model_objects['keras_model'],
+                        window_data,
+                        look_back,
+                        strategy_params,
+                    )
+                )
+            else:
+                # Full retrain from scratch on the current window
+                train_params = {k: v for k, v in strategy_params.items()
+                                if k not in ('train_range', 'train_split_date')}
+                window_df.attrs[params_key] = train_params
+                trained_dict = strategy.train(
+                    df=window_df,
+                    feature_columns=feature_cols,
+                    target_column='y',
+                    dataset_names=[dataset],
+                    model_name_prefix=model_name_prefix,
+                    split_date=None,  # train on ALL window rows
+                )
+                key = f"{model_name_prefix}_{dataset}"
+                if key not in trained_dict.get('train', {}):
+                    logger.warning(
+                        "_run_rolling_backtest [%s] batch %d: training produced no model. Skipping.",
+                        dataset, batch_idx,
+                    )
+                    continue
+                model_objects = trained_dict['train'][key]['model']
+
+        if model_objects is None:
+            logger.warning(
+                "_run_rolling_backtest [%s] batch %d: no model available yet. Skipping.",
+                dataset, batch_idx,
+            )
+            continue
+
+        # ── Predict on batch: prepend look_back context rows ─────────
+        context_rows = subset.loc[subset.index < batch_anchor].iloc[-look_back:]
+        batch_rows = subset.loc[batch_dates]
+        predict_df = pd.concat([context_rows, batch_rows])
+        predict_df = predict_df.copy()
+        # Ensure dataset_name column is present for strategy.predict
+        if 'dataset_name' not in predict_df.columns:
+            predict_df['dataset_name'] = dataset
+
+        predict_dict = strategy.predict(
+            df=predict_df,
+            feature_columns=feature_cols,
+            target_column='y',
+            model_objects=model_objects,
+            context_date=None,
+            dataset_names=[dataset],
+            submode=None,  # backtest mode
+        )
+        inner = predict_dict.get('predict', {})
+        if 'values' not in inner:
+            logger.warning(
+                "_run_rolling_backtest [%s] batch %d: predict returned no values. Skipping.",
+                dataset, batch_idx,
+            )
+            continue
+
+        batch_preds = inner['values']        # length = len(batch_dates) (look_back warm-up excluded)
+        batch_acts = inner.get('actuals', [])
+        batch_date_strs = inner.get('dates', [])
+
+        n = min(len(batch_preds), len(batch_acts), len(batch_date_strs), len(batch_dates))
+        all_predictions.extend(batch_preds[:n])
+        all_actuals.extend(batch_acts[:n])
+        all_dates.extend(pd.to_datetime(batch_date_strs[:n]))
+
+    return (
+        np.array(all_predictions),
+        np.array(all_actuals),
+        pd.DatetimeIndex(all_dates),
+    )
+
+
 # ── Main pipeline ──────────────────────────────────────────────────────────
 
 def run_forecast_pipeline(
@@ -338,6 +532,98 @@ def run_forecast_pipeline(
                 feature_cols = list(calendar_cols)
 
             # 3. Train ──────────────────────────────────────────────────
+            #
+            # Rolling-backtest gate: when use_rolling_training=True the entire
+            # train→predict loop is delegated to _run_rolling_backtest, which
+            # retrains (or fine-tunes) the model on a sliding window at each
+            # retrain interval.  Tree-based models are excluded (they rely on
+            # pre-engineered lag features that are already aligned to the full
+            # training history and don't support incremental fine-tuning).
+            if (
+                strategy_params.get('use_rolling_training', False)
+                and model_type not in ('xgboost', 'lightgbm')
+            ):
+                look_back = strategy_params.get('look_back', 28)
+                logger.info(
+                    "Rolling backtest mode for %s / %dd (window=%d days, interval=%d days, mode=%s).",
+                    dataset, forecast_horizon,
+                    strategy_params.get('rolling_window_days', 180),
+                    strategy_params.get('rolling_retrain_interval', 7),
+                    strategy_params.get('rolling_retrain_mode', 'full'),
+                )
+                preds_array, actuals_array, predict_dates_idx = _run_rolling_backtest(
+                    df_full=df_model,
+                    dataset=dataset,
+                    strategy=strategy,
+                    strategy_params=strategy_params,
+                    params_key=params_key,
+                    feature_cols=feature_cols,
+                    look_back=look_back,
+                    split_date_str=split_date_str,
+                    model_name_prefix=model_name_prefix,
+                )
+                if len(preds_array) == 0:
+                    logger.warning(
+                        "Skipping %s / %dd: rolling backtest returned no predictions.",
+                        dataset, forecast_horizon,
+                    )
+                    continue
+
+                model_name = f"{model_name_prefix}_{dataset}{model_suffix}"
+                # Skip save_model — rolling models are ephemeral by design.
+
+                # Inverse target transforms — metrics are in original kWh scale
+                min_len = min(len(preds_array), len(actuals_array))
+                p = preds_array[:min_len]
+                a = actuals_array[:min_len]
+                predict_dates_idx = predict_dates_idx[:min_len]
+                p, a = apply_inverse_transforms(p, a, predict_dates_idx, transform_state)
+                plot_actuals_df = pd.DataFrame({'y': a}, index=predict_dates_idx)
+
+                # Drop NaN pairs
+                valid_mask = ~(np.isnan(a) | np.isnan(p))
+                if not valid_mask.all():
+                    n_nan = (~valid_mask).sum()
+                    logger.warning(
+                        "%s / %dd: dropping %d NaN rows after inverse transforms (%d remain).",
+                        dataset, forecast_horizon, n_nan, valid_mask.sum(),
+                    )
+                    a, p = a[valid_mask], p[valid_mask]
+                    predict_dates_idx = predict_dates_idx[valid_mask]
+                    plot_actuals_df = pd.DataFrame({'y': a}, index=predict_dates_idx)
+                if len(a) == 0:
+                    logger.warning("Skipping %s / %dd: no valid data after NaN removal.", dataset, forecast_horizon)
+                    continue
+
+                mse_val = mean_squared_error(a, p)
+                metrics = {
+                    'MSE': mse_val,
+                    'RMSE': math.sqrt(mse_val),
+                    'MAE': mean_absolute_error(a, p),
+                    'MAPE': mean_absolute_percentage_error(a, p),
+                    'SMAPE': smape(p, a),
+                }
+                logger.info("Metrics for %s (%d days): %s", dataset, forecast_horizon, metrics)
+                horizon_metrics[forecast_horizon] = metrics
+                results_summary.append(
+                    _build_metrics_record(
+                        experiment_name=model_name,
+                        model_type=model_type,
+                        dataset=dataset,
+                        forecast_horizon=forecast_horizon,
+                        split_date_str=split_date_str,
+                        strategy_params=strategy_params,
+                        metrics=metrics,
+                    )
+                )
+                zoom_range = strategy_params.get('zoom_range')
+                plot_path_predict = plot_test_vs_predict(
+                    plot_actuals_df, p, dataset, model_name, forecast_horizon,
+                    plots_dir=plots_dir,
+                )
+                continue  # skip the standard train→predict path below
+            # ── end rolling backtest gate ────────────────────────────
+
             logger.info("Training model with split_date=%s...", split_date_str)
             trained_models_dict = strategy.train(
                 df=df_model,

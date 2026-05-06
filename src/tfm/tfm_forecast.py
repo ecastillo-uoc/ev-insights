@@ -194,6 +194,13 @@ def execute_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
                 'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
+                # Rolling-training options (disabled by default; set
+                # use_rolling_training=True to activate backtest mode).
+                'use_rolling_training':     False,
+                'rolling_window_days':      180,
+                'rolling_retrain_interval': 7,
+                'rolling_retrain_mode':     'full',
+                'rolling_finetune_epochs':  10,
             }
             params = {**strategy_params_lstm, **ranges}
             run_forecast_pipeline([ds], params, split_date_str, mlflow_tracking_uri=mlflow_tracking_uri)
@@ -314,6 +321,13 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
                 'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
+                # Rolling-training options (disabled by default; set
+                # use_rolling_training=True to activate backtest mode).
+                'use_rolling_training':     False,
+                'rolling_window_days':      180,
+                'rolling_retrain_interval': 7,
+                'rolling_retrain_mode':     'full',
+                'rolling_finetune_epochs':  10,
             }
             params = {**strategy_params_hybrid, **ranges}
             run_forecast_pipeline([ds], params, split_date_str, model_type="hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
