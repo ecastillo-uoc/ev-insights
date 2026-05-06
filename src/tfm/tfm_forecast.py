@@ -341,7 +341,7 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
 #   hybrid transformer model." Sci Rep 15, 13555 (2025).
 #
 # Key differences from our default models:
-#   * look_back = forecast_horizon (30, 120, 240) — vs. max(MIN_LOOK_BACK, h) for our models
+#   * look_back = max(MIN_LOOK_BACK, forecast_horizon) — floor at 14 days; article uses h=h
 #   * dropout = 0.2   (vs. 0.1 for our Transformer/Hybrid)
 #   * ReduceLROnPlateau + EarlyStopping callbacks (article text, Section IV)
 #   * Transformer uses a single Dense(ReLU) → MHA → GAP → Dense(1) arch
@@ -361,14 +361,14 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
 # =============================================================================
 
 def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
-    """LSTM with Hussain et al. hyperparams: look_back = forecast_horizon, dropout=0.2."""
+    """LSTM with Hussain et al. hyperparams: look_back = max(MIN_LOOK_BACK, forecast_horizon), dropout=0.2."""
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds, hussain=True)
         for forecast_horizon in li_forecast_horizons:
             strategy_params = {
                 'epochs': 100,
                 'batch_size': 32,
-                'look_back': forecast_horizon,       # Article: look_back = prediction period
+                'look_back': max(MIN_LOOK_BACK, forecast_horizon),  # Article uses h=h, but floor at 14d
                 'li_forecast_horizons': [forecast_horizon],
                 'learning_rate': 0.001,
                 'dropout_rate': 0.2,              # Article Table 1
@@ -392,7 +392,7 @@ def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_
             strategy_params = {
                 'epochs': 100,
                 'batch_size': 32,
-                'look_back': forecast_horizon,       # Article: look_back = prediction period
+                'look_back': max(MIN_LOOK_BACK, forecast_horizon),  # Article uses h=h, but floor at 14d
                 'li_forecast_horizons': [forecast_horizon],
                 'learning_rate': 0.001,
                 'encoding_dim': 64,
@@ -411,14 +411,14 @@ def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_
 
 
 def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
-    """Hybrid LSTM-Transformer with Hussain et al. hyperparams: look_back = forecast_horizon, dropout=0.2."""
+    """Hybrid LSTM-Transformer with Hussain et al. hyperparams: look_back = max(MIN_LOOK_BACK, forecast_horizon), dropout=0.2."""
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds, hussain=True)
         for forecast_horizon in li_forecast_horizons:
             strategy_params = {
                 'epochs': 100,
                 'batch_size': 32,
-                'look_back': forecast_horizon,       # Article: look_back = prediction period
+                'look_back': max(MIN_LOOK_BACK, forecast_horizon),  # Article uses h=h, but floor at 14d
                 'li_forecast_horizons': [forecast_horizon],
                 'learning_rate': 0.001,
                 'd_model': 128,
@@ -587,15 +587,31 @@ ALL_MODELS: List[str] = [
     'lstm', 'transformer', 'hybrid',
     'hussain_lstm', 'hussain_transformer', 'hussain_hybrid',
 ]
-ALL_FE_TAGS: List[str] = ['log', 'log_cal', 'log_diff']
+ALL_FE_TAGS: List[str] = ['log', 'log_cal', 'log_diff', 'log_rolling', 'log_diff_cal_rolling']
 ALL_HORIZONS: List[int] = [1, 7, 30, 120]
 
-# Models that use hussain=True splits and look_back == forecast_horizon
+# Models that use hussain=True splits and the Hussain architecture variants
 _HUSSAIN_MODELS: frozenset = frozenset({'hussain_lstm', 'hussain_transformer', 'hussain_hybrid'})
 # Models that receive all horizons in a single pipeline call
 _TREE_MODELS: frozenset = frozenset({'lightgbm', 'xgboost'})
+# FE tags that activate rolling retraining — only meaningful for standard neural models.
+# Hussain variants (article reproductions) and tree models are excluded at run time.
+_ROLLING_FE_TAGS: frozenset = frozenset({'log_rolling', 'log_diff_cal_rolling'})
+# Datasets where rolling retraining is expected to help due to a known demand
+# regime shift between the training and test windows:
+#   ACN_Caltech / ACN_JPL — COVID gap (2020-08-05 → 2020-11-17) + demand
+#                            regime change during lockdown.
+#   Dundee                — ~40 % demand drop after 2023-09-01 split.
+# Other datasets (ACN_Office001, BeLib, AMB_Barcelona) show no evidence of
+# systematic covariate shift and are excluded to save compute.
+_ROLLING_DATASETS: frozenset = frozenset({'ACN_Caltech', 'ACN_JPL', 'Dundee'})
 
-# Three FE configurations — baseline plus two variants
+# FE configurations — three static baselines plus two rolling-retrain variants.
+#
+# Rolling variants activate the sliding-window backtest path in
+# run_forecast_pipeline (use_rolling_training=True).  They are only run for
+# standard neural models (lstm, transformer, hybrid); Hussain article-variant
+# models and tree-based models are excluded at the run_all_cases level.
 FE_VARIANTS: Dict[str, dict] = {
     'log': {
         'use_log_transform': True,
@@ -611,6 +627,34 @@ FE_VARIANTS: Dict[str, dict] = {
         'use_log_transform': True,
         'use_differencing': True,
         'use_calendar_features': False,
+    },
+    # ── Rolling variants ────────────────────────────────────────────────
+    # log_rolling: minimal ablation — isolates rolling-retrain contribution
+    # against the log baseline.  Direct comparison for covariate-shift
+    # mitigation without confounding FE changes.
+    'log_rolling': {
+        'use_log_transform': True,
+        'use_differencing': False,
+        'use_calendar_features': False,
+        'use_rolling_training':     True,
+        'rolling_window_days':      180,   # ~6 months: two quarterly cycles
+        'rolling_retrain_interval': 7,     # retrain every week
+        'rolling_retrain_mode':     'full',
+        'rolling_finetune_epochs':  10,
+    },
+    # log_diff_cal_rolling: maximal combination — differencing stabilises
+    # each rolling window (less level-drift sensitivity at boundary);
+    # calendar compensates for the level information lost by differencing;
+    # rolling re-anchors the reconstruction baseline each retrain interval.
+    'log_diff_cal_rolling': {
+        'use_log_transform': True,
+        'use_differencing': True,
+        'use_calendar_features': True,
+        'use_rolling_training':     True,
+        'rolling_window_days':      180,
+        'rolling_retrain_interval': 7,
+        'rolling_retrain_mode':     'full',
+        'rolling_finetune_epochs':  10,
     },
 }
 
@@ -838,7 +882,7 @@ def run_single_case(
     else:
         # Neural models: one call per horizon with appropriate look_back
         for h in case_config.li_forecast_horizons:
-            look_back = h if case_config.hussain else max(MIN_LOOK_BACK, h)
+            look_back = max(MIN_LOOK_BACK, h)  # floor at MIN_LOOK_BACK for all models incl. Hussain
             look_back_map[h] = look_back
             params = _build_strategy_params_for_case(
                 case_config.model_type,
@@ -970,6 +1014,21 @@ def run_all_cases(
                             all_results.append(json.load(fh))
                     except Exception:
                         pass
+                    continue
+
+                # Rolling FE tags are only run where a known demand-regime
+                # shift makes recalibration worthwhile, and only for standard
+                # neural models (Hussain reproductions have fixed hyperparams;
+                # tree models have no incremental retraining support).
+                if fe_tag in _ROLLING_FE_TAGS and (
+                    dataset not in _ROLLING_DATASETS
+                    or model_type in _HUSSAIN_MODELS
+                    or model_type in _TREE_MODELS
+                ):
+                    logger.debug(
+                        "[%d/%d] SKIP rolling FE '%s' for %s/%s (excluded).",
+                        n, total, fe_tag, dataset, model_type,
+                    )
                     continue
 
                 logger.info("[%d/%d] Running: %s", n, total, case_config.case_id)

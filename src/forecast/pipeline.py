@@ -541,7 +541,13 @@ def run_forecast_pipeline(
             # training history and don't support incremental fine-tuning).
             if (
                 strategy_params.get('use_rolling_training', False)
-                and model_type not in ('xgboost', 'lightgbm')
+                and model_type not in (
+                    'xgboost', 'lightgbm',
+                    # Hussain variants are article reproductions with
+                    # schedule-mode prediction; rolling retraining would
+                    # change their semantics and is excluded by design.
+                    'hussain_lstm', 'hussain_transformer', 'hussain_hybrid',
+                )
             ):
                 look_back = strategy_params.get('look_back', 28)
                 logger.info(
