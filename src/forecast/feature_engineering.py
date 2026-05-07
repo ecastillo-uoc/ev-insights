@@ -281,11 +281,14 @@ def apply_forward_transforms(
         # Store pre-diff values (in log / normalised space if those were applied)
         # for per-date reconstruction during inverse transform.
         state.df_before_diff = df['y'].copy()
+        # Row-based 7-day diff: y[i] - y[i-7] (7th previous *row*).
+        # This stays entirely within the provided data range — no calendar
+        # lookup that could reach outside the index (e.g. across a COVID gap).
+        # The inverse transform uses the same positional logic.
         df['y'] = df['y'].diff(7)
-        # Drop the first 7 rows — diff(7) produces NaN there; keeping them would
-        # propagate NaN into every downstream lag/rolling feature.
+        # Drop the first 7 rows — diff(7) produces NaN there.
         df = df.iloc[7:]
-        logger.info("Applied 7-day seasonal differencing to target.")
+        logger.info("Applied 7-day seasonal differencing (row-based) to target.")
 
     return df, state
 
@@ -319,22 +322,27 @@ def apply_inverse_transforms(
     if state.use_differencing and state.df_before_diff is not None:
         p_recon = np.empty_like(p)
         a_recon = np.empty_like(a)
+        bdd = state.df_before_diff
         for i, date in enumerate(dates_idx[:len(p)]):
-            prev_date = date - pd.Timedelta(days=7)
-            if prev_date in state.df_before_diff.index:
-                prev_val_p = state.df_before_diff.loc[prev_date]
-                prev_val_a = prev_val_p  # same ground-truth anchor for both
+            # Mirror row-based diff(7): look up 7 rows back by position.
+            # This is the exact inverse of y[pos] - y[pos-7], using only
+            # rows that were present in the input data — no calendar arithmetic
+            # that could reference dates outside the index (e.g. COVID gap).
+            if date in bdd.index:
+                pos = bdd.index.get_loc(date)
+                if pos >= 7:
+                    prev_val_p = bdd.iloc[pos - 7]
+                    prev_val_a = prev_val_p  # same ground-truth anchor for both
+                else:
+                    # Fewer than 7 rows before this date in the stored series
+                    # (should not occur in normal backtest; schedule-mode fallback).
+                    prev_val_p = bdd.iloc[0] if i == 0 else p_recon[i - 1]
+                    prev_val_a = bdd.iloc[0] if i == 0 else a_recon[i - 1]
             else:
-                # Fallback for schedule mode (future dates beyond training data):
-                # chain from the last reconstructed value for predictions and
-                # actuals separately to avoid contaminating actuals with
-                # prediction errors.
-                prev_val_p = (
-                    state.df_before_diff.iloc[-1] if i == 0 else p_recon[i - 1]
-                )
-                prev_val_a = (
-                    state.df_before_diff.iloc[-1] if i == 0 else a_recon[i - 1]
-                )
+                # Date not in training series (schedule / future mode): chain
+                # from last reconstructed value, keeping p and a independent.
+                prev_val_p = bdd.iloc[-1] if i == 0 else p_recon[i - 1]
+                prev_val_a = bdd.iloc[-1] if i == 0 else a_recon[i - 1]
             p_recon[i] = prev_val_p + p[i]
             a_recon[i] = prev_val_a + a[i]
         p, a = p_recon, a_recon
