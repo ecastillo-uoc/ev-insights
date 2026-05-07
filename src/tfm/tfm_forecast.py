@@ -596,11 +596,14 @@ ALL_MODELS: List[str] = [
     'hussain_hybrid',
 ]
 ALL_FE_TAGS: List[str] = [
-    '',
+    'revin',
+    'log_revin',
+    'log_revin_cal',
+    #'',
     'diff', 
     'diff_cal',
-    'log', 
-    'log_cal', 
+    #'log', 
+    #'log_cal', 
     'log_diff', 
     'log_diff_cal',
     #'log_rolling',
@@ -646,6 +649,9 @@ FE_VARIANTS: Dict[str, dict] = {
         'use_differencing': False,
         'use_calendar_features': True,
     },
+    # ── Weekly differencing variants ─────────────────────────────────────
+    # 7-day seasonal differencing removes weekly periodicity without
+    # predicting yesterday's level.  Paired with log for stationarity.
     'log_diff': {
         'use_log_transform': True,
         'use_differencing': True,
@@ -693,6 +699,31 @@ FE_VARIANTS: Dict[str, dict] = {
         'rolling_retrain_interval': 7,
         'rolling_retrain_mode':     'full',
         'rolling_finetune_epochs':  10,
+    },
+
+    # ── Per-window normalisation (RevIN-style) variants ──────────────────
+    # Standardises each look-back window by its local mean and std.
+    # No global scaler bias; compatible with log and calendar features.
+    'revin': {
+        'use_log_transform': False,
+        'use_differencing': False,
+        'use_calendar_features': False,
+        'use_window_norm': True,
+        'window_norm_days': 28,
+    },
+    'log_revin': {
+        'use_log_transform': True,
+        'use_differencing': False,
+        'use_calendar_features': False,
+        'use_window_norm': True,
+        'window_norm_days': 28,
+    },
+    'log_revin_cal': {
+        'use_log_transform': True,
+        'use_differencing': False,
+        'use_calendar_features': True,
+        'use_window_norm': True,
+        'window_norm_days': 28,
     },
 }
 

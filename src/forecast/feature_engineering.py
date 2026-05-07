@@ -14,7 +14,7 @@ configurations:
 +=====================+======================================================+
 | use_log_transform   | ``np.log1p`` / ``np.expm1`` round-trip on target     |
 +---------------------+------------------------------------------------------+
-| use_differencing    | First-order differencing / per-date reconstruction   |
+| use_differencing    | 7-day seasonal differencing / per-date reconstruction|
 +---------------------+------------------------------------------------------+
 | use_calendar_features | Day-of-week, month, sin/cos day-of-year, business  |
 |                     | day indicator — added to the DataFrame               |
@@ -27,13 +27,29 @@ configurations:
 * Inverse transforms:  undo diff **first** → undo log **second**
   (strict reverse of the forward order; swapping corrupts the result).
 
+**7-day seasonal differencing**
+
+``use_differencing`` applies a lag-7 difference (``y[d] - y[d-7]``), removing
+weekly seasonality instead of just yesterday's level.  The first 7 rows are
+dropped to avoid NaN propagation.  Reconstruction uses the actual value from
+7 days prior (stored in ``df_before_diff``).
+
 **Why per-date reconstruction instead of cumsum?**
 
 Cumulative sum propagates prediction error: if prediction 1 is off by +100
 every subsequent prediction inherits that bias.  Per-date lookup uses the
-*actual* previous-day value (from ``df_before_diff``), keeping each
+*actual* previous-7-day value (from ``df_before_diff``), keeping each
 prediction's error independent.  The cumsum fallback is only used in
 schedule mode where actual previous values are unavailable.
+
+**Per-window normalisation (RevIN-style)**
+
+``use_window_norm`` standardises the target using the rolling mean and std
+computed over the preceding ``window_norm_days`` days.  Each window's
+normalisation stats are stored in ``state.revin_stats`` and used during
+inverse-transform to recover the original scale.  This removes the local
+level and scale from each prediction window without requiring a global
+scaler, reducing distribution-shift sensitivity.
 
 **Calendar features — dtype choice**
 
@@ -201,7 +217,11 @@ class TargetTransformState:
     use_differencing: bool = False
     df_before_diff: pd.Series | None = None
     """Series in (possibly log-) space, indexed by date — used for per-date
-    reconstruction of differenced predictions."""
+    reconstruction of 7-day-differenced predictions."""
+    use_window_norm: bool = False
+    revin_stats: pd.DataFrame | None = None
+    """DataFrame with columns ['mean', 'std'] indexed by date — per-date
+    normalisation stats used to invert per-window normalisation."""
 
 
 def apply_forward_transforms(
@@ -210,16 +230,17 @@ def apply_forward_transforms(
 ) -> Tuple[pd.DataFrame, TargetTransformState]:
     """Apply forward target transforms to ``df['y']`` **in place**.
 
-    **Order**: log first, then diff (diff of log-values = log-returns).
+    **Order**: log → window normalisation → diff.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Must contain a ``'y'`` column.  Modified in place; rows may be dropped
-        when differencing removes the first NaN.
+        Must contain a ``'y'`` column.  Modified in place; the first 7 rows
+        are dropped when 7-day seasonal differencing is applied.
     strategy_params : dict
-        Checked for ``use_log_transform`` and ``use_differencing`` (both
-        default ``False``).
+        Checked for ``use_log_transform``, ``use_differencing``,
+        ``use_window_norm`` (all default ``False``), and
+        ``window_norm_days`` (default ``28``).
 
     Returns
     -------
@@ -229,22 +250,42 @@ def apply_forward_transforms(
     """
     use_log = strategy_params.get('use_log_transform', False)
     use_diff = strategy_params.get('use_differencing', False)
+    use_window_norm = strategy_params.get('use_window_norm', False)
+    window_norm_days = int(strategy_params.get('window_norm_days', 28))
 
-    state = TargetTransformState(use_log_transform=use_log, use_differencing=use_diff)
+    state = TargetTransformState(
+        use_log_transform=use_log,
+        use_differencing=use_diff,
+        use_window_norm=use_window_norm,
+    )
 
     if use_log:
         df['y'] = np.log1p(df['y'])
         logger.info("Applied log1p transform to target.")
 
+    if use_window_norm:
+        # Compute rolling mean/std over the *preceding* window_norm_days days
+        # (min_periods=1 avoids NaN at the start; shift(1) prevents leakage
+        # of the current day into its own normalisation stats).
+        roll = df['y'].shift(1).rolling(window=window_norm_days, min_periods=1)
+        mu = roll.mean()
+        sigma = roll.std().fillna(1.0).clip(lower=1e-8)
+        state.revin_stats = pd.DataFrame({'mean': mu, 'std': sigma}, index=df.index)
+        df['y'] = (df['y'] - mu) / sigma
+        logger.info(
+            "Applied per-window normalisation (RevIN-style, window=%d days) to target.",
+            window_norm_days,
+        )
+
     if use_diff:
-        # Store pre-diff values (in log space if log was applied) for
-        # per-date reconstruction during inverse transform.
+        # Store pre-diff values (in log / normalised space if those were applied)
+        # for per-date reconstruction during inverse transform.
         state.df_before_diff = df['y'].copy()
-        df['y'] = df['y'].diff()
-        # Drop the first row — diff() produces NaN there; keeping it would
+        df['y'] = df['y'].diff(7)
+        # Drop the first 7 rows — diff(7) produces NaN there; keeping them would
         # propagate NaN into every downstream lag/rolling feature.
-        df = df.iloc[1:]
-        logger.info("Applied first-order differencing to target.")
+        df = df.iloc[7:]
+        logger.info("Applied 7-day seasonal differencing to target.")
 
     return df, state
 
@@ -279,18 +320,36 @@ def apply_inverse_transforms(
         p_recon = np.empty_like(p)
         a_recon = np.empty_like(a)
         for i, date in enumerate(dates_idx[:len(p)]):
-            prev_date = date - pd.Timedelta(days=1)
+            prev_date = date - pd.Timedelta(days=7)
             if prev_date in state.df_before_diff.index:
-                prev_val = state.df_before_diff.loc[prev_date]
+                prev_val_p = state.df_before_diff.loc[prev_date]
+                prev_val_a = prev_val_p  # same ground-truth anchor for both
             else:
                 # Fallback for schedule mode (future dates beyond training data):
-                # use cumulative sum from last known value.
-                prev_val = (
+                # chain from the last reconstructed value for predictions and
+                # actuals separately to avoid contaminating actuals with
+                # prediction errors.
+                prev_val_p = (
                     state.df_before_diff.iloc[-1] if i == 0 else p_recon[i - 1]
                 )
-            p_recon[i] = prev_val + p[i]
-            a_recon[i] = prev_val + a[i]
+                prev_val_a = (
+                    state.df_before_diff.iloc[-1] if i == 0 else a_recon[i - 1]
+                )
+            p_recon[i] = prev_val_p + p[i]
+            a_recon[i] = prev_val_a + a[i]
         p, a = p_recon, a_recon
+
+    if state.use_window_norm and state.revin_stats is not None:
+        for i, date in enumerate(dates_idx[:len(p)]):
+            if date in state.revin_stats.index:
+                mu = state.revin_stats.at[date, 'mean']
+                sigma = state.revin_stats.at[date, 'std']
+            else:
+                # Fallback: use last known stats
+                mu = state.revin_stats['mean'].iloc[-1]
+                sigma = state.revin_stats['std'].iloc[-1]
+            p[i] = p[i] * sigma + mu
+            a[i] = a[i] * sigma + mu
 
     if state.use_log_transform:
         p = np.expm1(p)

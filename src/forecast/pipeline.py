@@ -623,6 +623,13 @@ def run_forecast_pipeline(
                     'SMAPE': smape(p, a),
                 }
                 logger.info("Metrics for %s (%d days): %s", dataset, forecast_horizon, metrics)
+                if metrics['SMAPE'] >= 50.0:
+                    logger.warning(
+                        "sMAPE=%.1f%% ≥ 50%% for %s / %dd: model is not outperforming the "
+                        "naive 'predict yesterday' baseline (trivial baseline). "
+                        "Predictions may be uninformative.",
+                        metrics['SMAPE'], dataset, forecast_horizon,
+                    )
                 horizon_metrics[forecast_horizon] = metrics
                 results_summary.append(
                     _build_metrics_record(
@@ -757,6 +764,13 @@ def run_forecast_pipeline(
                 'SMAPE': smape(p, a),
             }
             logger.info("Metrics for %s (%d days): %s", dataset, forecast_horizon, metrics)
+            if metrics['SMAPE'] >= 50.0:
+                logger.warning(
+                    "sMAPE=%.1f%% ≥ 50%% for %s / %dd: model is not outperforming the "
+                    "naive 'predict yesterday' baseline (trivial baseline). "
+                    "Predictions may be uninformative.",
+                    metrics['SMAPE'], dataset, forecast_horizon,
+                )
             logger.info(
                 "Evaluation window: %s to %s (%d points, look_back=%d warm-up excluded)",
                 predict_dates_idx[0].strftime('%Y-%m-%d'),
