@@ -85,13 +85,13 @@ def get_dataset_config(dataset_name, hussain=False):
         # Hussain et al. article splits (COVID data intentionally included)
         _configs = {
             'ACN_JPL': {
-                'split_date': '2021-01-01',
+                'split_date': '2020-08-05',
                 'train_range': ('2018-09-01', '2020-08-05'),
                 'test_range': ('2020-11-17', '2021-03-31'),
                 'zoom_range': ('2021-01-01', '2021-03-31'),
             },
             'ACN_Caltech': {
-                'split_date': '2021-01-01',
+                'split_date': '2020-08-05',
                 'train_range': ('2018-09-01', '2020-08-05'),
                 'test_range': ('2020-11-17', '2021-03-31'),
                 'zoom_range': ('2021-01-01', '2021-03-31'),
@@ -104,13 +104,13 @@ def get_dataset_config(dataset_name, hussain=False):
     else:
         _configs_pre_covid = {
             'ACN_JPL': {
-                'split_date': '2021-01-01',
+                'split_date': '2019-10-01',
                 'train_range': ('2019-01-01', '2019-09-30'),
                 'test_range': ('2019-10-01', '2020-03-01'),
                 'zoom_range': ('2019-10-01', '2020-03-01'),
             },
             'ACN_Caltech': {
-                'split_date': '2021-01-01',
+                'split_date': '2019-07-01',
                 'train_range': ('2019-01-01', '2019-06-30'),
                 'test_range': ('2019-07-01', '2019-12-15'),
                 'zoom_range': ('2019-07-01', '2019-12-15'),
@@ -123,13 +123,13 @@ def get_dataset_config(dataset_name, hussain=False):
 
         _configs = {
             'ACN_JPL': {
-                'split_date': '2021-01-01',
+                'split_date': '2020-08-05',
                 'train_range': ('2018-09-01', '2020-08-05'),
                 'test_range': ('2020-11-17', '2021-03-31'),
                 'zoom_range': ('2021-01-01', '2021-03-31'),
             },
             'ACN_Caltech': {
-                'split_date': '2021-01-01',
+                'split_date': '2020-08-05',
                 'train_range': ('2018-09-01', '2020-08-05'),
                 'test_range': ('2020-11-17', '2021-03-31'),
                 'zoom_range': ('2021-01-01', '2021-03-31'),
@@ -581,13 +581,31 @@ _TFM_CHAPTERS_DIR = (
     / 'tfm' / 'doc' / 'vf' / 'chapters'
 )
 
-ALL_DATASETS: List[str] = ['Dundee', 'ACN_Caltech', 'ACN_JPL']
+ALL_DATASETS: List[str] = [
+    'ACN_Caltech', 
+    'Dundee',
+    'ACN_JPL']
 ALL_MODELS: List[str] = [
-    'lightgbm', 'xgboost',
-    'lstm', 'transformer', 'hybrid',
-    'hussain_lstm', 'hussain_transformer', 'hussain_hybrid',
+    'lightgbm',
+    'xgboost',
+    'lstm', 
+    'transformer', 
+    'hybrid',
+    'hussain_lstm', 
+    'hussain_transformer', 
+    'hussain_hybrid',
 ]
-ALL_FE_TAGS: List[str] = ['log', 'log_cal', 'log_diff', 'log_rolling', 'log_diff_cal_rolling']
+ALL_FE_TAGS: List[str] = [
+    '',
+    'diff', 
+    'diff_cal',
+    'log', 
+    'log_cal', 
+    'log_diff', 
+    'log_diff_cal',
+    #'log_rolling',
+    #'log_diff_cal_rolling'
+    ]
 ALL_HORIZONS: List[int] = [1, 7, 30, 120]
 
 # Models that use hussain=True splits and the Hussain architecture variants
@@ -613,6 +631,11 @@ _ROLLING_DATASETS: frozenset = frozenset({'ACN_Caltech', 'ACN_JPL', 'Dundee'})
 # standard neural models (lstm, transformer, hybrid); Hussain article-variant
 # models and tree-based models are excluded at the run_all_cases level.
 FE_VARIANTS: Dict[str, dict] = {
+    '': {
+        'use_log_transform': False,
+        'use_differencing': False,
+        'use_calendar_features': False,
+    },
     'log': {
         'use_log_transform': True,
         'use_differencing': False,
@@ -627,6 +650,21 @@ FE_VARIANTS: Dict[str, dict] = {
         'use_log_transform': True,
         'use_differencing': True,
         'use_calendar_features': False,
+    },
+    'log_diff_cal': {
+        'use_log_transform': True,
+        'use_differencing': True,
+        'use_calendar_features': True,
+    },
+    'diff': {
+        'use_log_transform': False,
+        'use_differencing': True,
+        'use_calendar_features': False,
+    },
+    'diff_cal': {
+        'use_log_transform': False,
+        'use_differencing': True,
+        'use_calendar_features': True,
     },
     # ── Rolling variants ────────────────────────────────────────────────
     # log_rolling: minimal ablation — isolates rolling-retrain contribution
