@@ -32,12 +32,13 @@ scale**.
 
 from __future__ import annotations
 
+import gc
 import json
 import logging
 import math
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, cast, Dict, List
 
 import numpy as np
 import pandas as pd
@@ -307,7 +308,19 @@ def _run_rolling_backtest(
                     )
                 )
             else:
-                # Full retrain from scratch on the current window
+                # Full retrain from scratch on the current window.
+                # Free the previous model from TF's memory before building a
+                # new graph — otherwise each iteration's model accumulates in
+                # TF's session and eventually triggers an OOM kill.
+                if model_objects is not None:
+                    try:
+                        import keras.backend as _K
+                        del model_objects['keras_model']
+                        _K.clear_session()
+                        gc.collect()
+                    except Exception:
+                        pass
+                    model_objects = cast(Any, None)  # reset; next retrain will assign a fresh bundle
                 train_params = {k: v for k, v in strategy_params.items()
                                 if k not in ('train_range', 'train_split_date')}
                 window_df.attrs[params_key] = train_params
