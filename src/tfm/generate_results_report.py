@@ -131,6 +131,30 @@ def _mase_text_color(mase: float | None) -> str:
     return "#333"
 
 
+def _smape_bg(smape: float | None) -> str:
+    if smape is None or math.isnan(smape):
+        return "#e0e0e0"   # grey — missing
+    if smape < 15.0:
+        return "#b7e4b7"   # green — excellent
+    if smape < 25.0:
+        return "#f0f8f0"   # light green — good
+    if smape < 40.0:
+        return "#ffd580"   # orange — poor
+    return "#f4b3b3"       # red — bad
+
+
+def _smape_text_color(smape: float | None) -> str:
+    if smape is None or math.isnan(smape):
+        return "#777"
+    if smape >= 40.0:
+        return "#8b0000"
+    if smape >= 25.0:
+        return "#7a4000"
+    if smape < 15.0:
+        return "#1a5c1a"
+    return "#333"
+
+
 # ── HTML generation ───────────────────────────────────────────────────────────
 
 _CSS = """
@@ -232,12 +256,20 @@ def _cell(
     smape: float | None,
     ds: str = "", mdl: str = "", fe: str = "", h: int = 0,
 ) -> str:
-    bg = _mase_bg(mase)
-    tc = _mase_text_color(mase)
-    if mase is None or math.isnan(mase):
+    is_dundee = (ds == "Dundee")
+    if is_dundee:
+        bg = _smape_bg(smape)
+        tc = _smape_text_color(smape)
+        primary_missing = smape is None or math.isnan(smape)
+    else:
+        bg = _mase_bg(mase)
+        tc = _mase_text_color(mase)
+        primary_missing = mase is None or math.isnan(mase)
+    if primary_missing:
         return f'<td style="background:{bg}"><span class="no-data">—</span></td>'
     rmse_str  = f"{rmse:.1f}"   if rmse  is not None and not math.isnan(rmse)  else "—"
     smape_str = f"{smape:.1f}%" if smape is not None and not math.isnan(smape) else "—"
+    mase_str  = f"{mase:.3f}"   if mase  is not None and not math.isnan(mase)  else "—"
     avp, tts, zoom = _img_paths(ds, mdl, fe, h) if ds else ("", "", "")
     title = f"{ds} / {mdl} / {fe or '(baseline)'} — {h}d"
     data = (
@@ -249,12 +281,32 @@ def _cell(
         f' data-zoom="{zoom}"'
         f' data-title="{title}"'
     )
-    return (
-        f'<td{data} style="background:{bg};color:{tc}">'
-        f'<span class="metric-main">{mase:.3f}</span>'
-        f'<span class="metric-sub" style="color:#666">RMSE {rmse_str} &nbsp;|&nbsp; sMAPE {smape_str}</span>'
-        f'</td>'
-    )
+    if is_dundee:
+        mase_color = _mase_text_color(mase)
+        sub_line = (
+            f'RMSE {rmse_str}'
+            f' &nbsp;|&nbsp; '
+            f'<span style="color:{mase_color};font-weight:600">MASE {mase_str}</span>'
+        )
+        return (
+            f'<td{data} style="background:{bg};color:{tc}">'
+            f'<span class="metric-main">{smape_str}</span>'
+            f'<span class="metric-sub">{sub_line}</span>'
+            f'</td>'
+        )
+    else:
+        smape_color = _smape_text_color(smape)
+        sub_line = (
+            f'RMSE {rmse_str}'
+            f' &nbsp;|&nbsp; '
+            f'<span style="color:{smape_color};font-weight:600">sMAPE {smape_str}</span>'
+        )
+        return (
+            f'<td{data} style="background:{bg};color:{tc}">'
+            f'<span class="metric-main">{mase_str}</span>'
+            f'<span class="metric-sub">{sub_line}</span>'
+            f'</td>'
+        )
 
 
 def build_html(records: list[dict]) -> str:
@@ -315,7 +367,7 @@ def build_html(records: list[dict]) -> str:
   {len(models)} models &nbsp;·&nbsp;
   {len(fe_cols)} FE variants &nbsp;·&nbsp;
   {len(_HORIZONS)} horizons
-  &nbsp;·&nbsp; Primary metric: <strong>MASE</strong> &nbsp;·&nbsp; Secondary: <strong>RMSE &amp; sMAPE</strong>
+  &nbsp;·&nbsp; Primary metric: <strong>MASE</strong> (sMAPE for Dundee) &nbsp;·&nbsp; Secondary: <strong>RMSE + secondary metric</strong>
 </p>
 """)
 
