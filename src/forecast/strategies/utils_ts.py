@@ -56,10 +56,54 @@ def smape(preds, target):
         sMAPE value in the range [0, 200].  Pairs where both
         ``preds`` and ``target`` are zero are excluded.
     """
-    n = len(preds)
     masked_arr = ~((preds == 0) & (target == 0))
     preds, target = preds[masked_arr], target[masked_arr]
+    n = masked_arr.sum()  # exclude (0,0) pairs from denominator too
+    if n == 0:
+        return float('nan')
     num = np.abs(preds - target)
     denom = np.abs(preds) + np.abs(target)
     smape_val = (200 * np.sum(num / denom)) / n
     return smape_val
+
+
+def mase(preds, target, train_actuals, m: int = 1):
+    """Mean Absolute Scaled Error (Hyndman & Koehler, 2006).
+
+    Scales the MAE of the forecast by the MAE of the naïve lag-*m* predictor
+    computed on the *training* series.  A MASE < 1 means the model beats the
+    naïve baseline; MASE = 1 is equivalent to the naïve baseline.
+
+    Parameters
+    ----------
+    preds : array-like
+        Predicted values (original scale, already inverse-transformed).
+    target : array-like
+        Actual values (original scale).
+    train_actuals : array-like
+        Training-set actuals in original scale.  Used only for the naïve
+        denominator; must have at least ``m + 1`` elements.
+    m : int
+        Seasonal period for the naïve baseline.  Default 1 (random-walk /
+        yesterday's value).
+
+    Returns
+    -------
+    float
+        MASE value.  Returns NaN when the naïve denominator is zero (flat
+        training series) or when fewer than ``m + 1`` training points exist.
+    """
+    preds = np.asarray(preds, dtype=float)
+    target = np.asarray(target, dtype=float)
+    train_actuals = np.asarray(train_actuals, dtype=float)
+
+    if len(train_actuals) <= m:
+        return float('nan')
+
+    naive_errors = np.abs(train_actuals[m:] - train_actuals[:-m])
+    scale = np.mean(naive_errors)
+    if scale == 0:
+        return float('nan')
+
+    mae = np.mean(np.abs(preds - target))
+    return mae / scale

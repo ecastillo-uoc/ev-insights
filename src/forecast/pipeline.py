@@ -64,7 +64,7 @@ from src.forecast.strategies import (
     TransformerModelStrategy,
     XGBoostModelStrategy,
 )
-from src.forecast.strategies.utils_ts import smape
+from src.forecast.strategies.utils_ts import mase, smape
 from src.data.data_fetcher import fetch_daily_energy_for_forecast
 from src.analysis.forecast_plots import plot_train_test_split, plot_test_vs_predict
 
@@ -624,6 +624,7 @@ def run_forecast_pipeline(
                 a = actuals_array[:min_len]
                 predict_dates_idx = predict_dates_idx[:min_len]
                 p, a = apply_inverse_transforms(p, a, predict_dates_idx, transform_state)
+                p = np.clip(p, 0.0, None)  # energy demand is non-negative
                 plot_actuals_df = pd.DataFrame({'y': a}, index=predict_dates_idx)
 
                 # Drop NaN pairs
@@ -648,6 +649,7 @@ def run_forecast_pipeline(
                     'MAE': mean_absolute_error(a, p),
                     'MAPE': mean_absolute_percentage_error(a, p),
                     'SMAPE': smape(p, a),
+                    'MASE': mase(p, a, train_df_plot['y'].values),
                 }
                 logger.info("Metrics for %s (%d days): %s", dataset, forecast_horizon, metrics)
                 if metrics['SMAPE'] >= 50.0:
@@ -762,6 +764,7 @@ def run_forecast_pipeline(
 
             # Inverse target transforms — metrics are in original kWh scale
             p, a = apply_inverse_transforms(p, a, predict_dates_idx[:min_len], transform_state)
+            p = np.clip(p, 0.0, None)  # energy demand is non-negative
             plot_actuals_df = pd.DataFrame({'y': a}, index=predict_dates_idx[:min_len])
 
             # Drop NaN pairs (inverse transforms may produce NaN on boundary dates)
@@ -789,6 +792,7 @@ def run_forecast_pipeline(
                 'MAE': mean_absolute_error(a, p),
                 'MAPE': mean_absolute_percentage_error(a, p),
                 'SMAPE': smape(p, a),
+                'MASE': mase(p, a, train_df_plot['y'].values),
             }
             logger.info("Metrics for %s (%d days): %s", dataset, forecast_horizon, metrics)
             if metrics['SMAPE'] >= 50.0:

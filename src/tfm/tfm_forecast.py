@@ -615,9 +615,11 @@ _TFM_CHAPTERS_DIR = (
 )
 
 ALL_DATASETS: List[str] = [
-    'ACN_Caltech', 
+    'ACN_JPL',
     'Dundee',
-    'ACN_JPL']
+    'ACN_Caltech', 
+    
+    ]
 ALL_MODELS: List[str] = [
     'lightgbm',
     'xgboost',
@@ -1379,4 +1381,4 @@ if __name__ == "__main__":
     else:
         # ── Default: run everything in-process (original behaviour) ─────────
         print("Running all cases with MLflow tracking URI:", MLFLOW_TRACKING_URI)
-        run_all_cases(skip_existing=False, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+        run_all_cases(skip_existing=True, mlflow_tracking_uri=MLFLOW_TRACKING_URI)

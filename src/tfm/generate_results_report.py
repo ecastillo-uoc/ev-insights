@@ -6,13 +6,13 @@ an HTML report with one table per horizon.
 
 Rows    = dataset × model
 Columns = FE-tag combinations present in the data
-Cell    = sMAPE  (primary metric; also shows RMSE as sub-text)
+Cell    = MASE   (primary metric; sMAPE and RMSE shown as grey sub-text)
 
-Colour coding
-  sMAPE < 10   → green
-  sMAPE < 30   → white (acceptable)
-  sMAPE < 50   → orange
-  sMAPE >= 50  → red
+Colour coding (MASE)
+  MASE < 0.5   → green   (beats naïve by 2×)
+  MASE < 1.0   → white   (better than naïve)
+  MASE < 1.5   → orange  (worse than naïve)
+  MASE >= 1.5  → red     (much worse than naïve)
   missing      → light grey
 
 Usage
@@ -107,26 +107,26 @@ def _img_paths(ds: str, mdl: str, fe: str, h: int) -> tuple[str, str, str]:
 
 # ── Colour helpers ────────────────────────────────────────────────────────────
 
-def _smape_bg(smape: float | None) -> str:
-    if smape is None or math.isnan(smape):
+def _mase_bg(mase: float | None) -> str:
+    if mase is None or math.isnan(mase):
         return "#e0e0e0"   # grey — missing
-    if smape < 10:
-        return "#b7e4b7"   # green
-    if smape < 30:
-        return "#f0f8f0"   # very light green / neutral
-    if smape < 50:
-        return "#ffd580"   # orange
-    return "#f4b3b3"       # red
+    if mase < 0.5:
+        return "#b7e4b7"   # green — beats naïve by 2×
+    if mase < 1.0:
+        return "#f0f8f0"   # light green — better than naïve
+    if mase < 1.5:
+        return "#ffd580"   # orange — worse than naïve
+    return "#f4b3b3"       # red — much worse than naïve
 
 
-def _smape_text_color(smape: float | None) -> str:
-    if smape is None or math.isnan(smape):
+def _mase_text_color(mase: float | None) -> str:
+    if mase is None or math.isnan(mase):
         return "#777"
-    if smape >= 50:
+    if mase >= 1.5:
         return "#8b0000"
-    if smape >= 30:
+    if mase >= 1.0:
         return "#7a4000"
-    if smape < 10:
+    if mase < 0.5:
         return "#1a5c1a"
     return "#333"
 
@@ -226,13 +226,18 @@ def _fe_label(fe_tag: str) -> str:
     return fe_tag if fe_tag else "(baseline)"
 
 
-def _cell(smape: float | None, rmse: float | None,
-          ds: str = "", mdl: str = "", fe: str = "", h: int = 0) -> str:
-    bg = _smape_bg(smape)
-    tc = _smape_text_color(smape)
-    if smape is None or math.isnan(smape):
+def _cell(
+    mase: float | None,
+    rmse: float | None,
+    smape: float | None,
+    ds: str = "", mdl: str = "", fe: str = "", h: int = 0,
+) -> str:
+    bg = _mase_bg(mase)
+    tc = _mase_text_color(mase)
+    if mase is None or math.isnan(mase):
         return f'<td style="background:{bg}"><span class="no-data">—</span></td>'
-    rmse_str = f"{rmse:.1f}" if rmse is not None and not math.isnan(rmse) else "—"
+    rmse_str  = f"{rmse:.1f}"   if rmse  is not None and not math.isnan(rmse)  else "—"
+    smape_str = f"{smape:.1f}%" if smape is not None and not math.isnan(smape) else "—"
     avp, tts, zoom = _img_paths(ds, mdl, fe, h) if ds else ("", "", "")
     title = f"{ds} / {mdl} / {fe or '(baseline)'} — {h}d"
     data = (
@@ -246,15 +251,15 @@ def _cell(smape: float | None, rmse: float | None,
     )
     return (
         f'<td{data} style="background:{bg};color:{tc}">'
-        f'<span class="metric-main">{smape:.1f}%</span>'
-        f'<span class="metric-sub">RMSE {rmse_str}</span>'
+        f'<span class="metric-main">{mase:.3f}</span>'
+        f'<span class="metric-sub" style="color:#666">RMSE {rmse_str} &nbsp;|&nbsp; sMAPE {smape_str}</span>'
         f'</td>'
     )
 
 
 def build_html(records: list[dict]) -> str:
-    # ── Index data: (dataset, model, fe_tag, horizon) → (smape, rmse)
-    data: dict[tuple, tuple[float | None, float | None]] = {}
+    # ── Index data: (dataset, model, fe_tag, horizon) → (mase, rmse, smape)
+    data: dict[tuple, tuple[float | None, float | None, float | None]] = {}
     fe_tags_seen: set[str] = set()
     datasets_seen: set[str] = set()
     models_seen: set[str] = set()
@@ -268,10 +273,11 @@ def build_html(records: list[dict]) -> str:
         fe_tags_seen.add(fe)
         metrics = rec.get("metrics", {})
         for h_key, m in metrics.items():
-            h = int(h_key.rstrip("d"))
-            smape = m.get("SMAPE")
+            h     = int(h_key.rstrip("d"))
+            mase  = m.get("MASE")
             rmse  = m.get("RMSE")
-            data[(ds, mdl, fe, h)] = (smape, rmse)
+            smape = m.get("SMAPE")
+            data[(ds, mdl, fe, h)] = (mase, rmse, smape)
 
     # Ordered columns (only those with at least one result).
     # Sorted dynamically by component count then canonical component order.
@@ -282,13 +288,14 @@ def build_html(records: list[dict]) -> str:
     models   = [m for m in _MODEL_ORDER if m in models_seen] + \
                sorted(models_seen - set(_MODEL_ORDER))
 
-    # ── Summary stats
-    total_cases   = len(records)
-    green_cases   = sum(1 for (_, _, _, _), (s, _) in data.items() if s is not None and s < 10)
-    orange_cases  = sum(1 for (_, _, _, _), (s, _) in data.items() if s is not None and 30 <= s < 50)
-    red_cases     = sum(1 for (_, _, _, _), (s, _) in data.items() if s is not None and s >= 50)
-    valid_smapes  = [s for (s, _) in data.values() if s is not None and not math.isnan(s)]
-    avg_smape     = sum(valid_smapes) / len(valid_smapes) if valid_smapes else float("nan")
+    # ── Summary stats (MASE-based)
+    total_cases  = len(records)
+    valid_mases  = [v[0] for v in data.values() if v[0] is not None and not math.isnan(v[0])]
+    avg_mase     = sum(valid_mases) / len(valid_mases) if valid_mases else float("nan")
+    green_cases  = sum(1 for v in valid_mases if v < 0.5)
+    ok_cases     = sum(1 for v in valid_mases if 0.5 <= v < 1.0)
+    orange_cases = sum(1 for v in valid_mases if 1.0 <= v < 1.5)
+    red_cases    = sum(1 for v in valid_mases if v >= 1.5)
 
     # ── HTML assembly
     parts: list[str] = []
@@ -308,18 +315,20 @@ def build_html(records: list[dict]) -> str:
   {len(models)} models &nbsp;·&nbsp;
   {len(fe_cols)} FE variants &nbsp;·&nbsp;
   {len(_HORIZONS)} horizons
-  &nbsp;·&nbsp; Primary metric: <strong>sMAPE</strong> &nbsp;·&nbsp; Secondary: <strong>RMSE</strong>
+  &nbsp;·&nbsp; Primary metric: <strong>MASE</strong> &nbsp;·&nbsp; Secondary: <strong>RMSE &amp; sMAPE</strong>
 </p>
 """)
 
     # Summary cards
     parts.append('<div class="summary-bar">')
+    avg_mase_str = f"{avg_mase:.3f}" if not math.isnan(avg_mase) else "—"
     for num, lbl, col in [
-        (total_cases,  "total cases",   "#2c3e50"),
-        (f"{avg_smape:.1f}%", "avg sMAPE", "#555"),
-        (green_cases,  "sMAPE < 10%",   "#1a5c1a"),
-        (orange_cases, "sMAPE 30–50%",  "#7a4000"),
-        (red_cases,    "sMAPE ≥ 50%",   "#8b0000"),
+        (total_cases,   "total cases",     "#2c3e50"),
+        (avg_mase_str,  "avg MASE",        "#555"),
+        (green_cases,   "MASE < 0.5",      "#1a5c1a"),
+        (ok_cases,      "MASE 0.5–1.0",    "#2e7d32"),
+        (orange_cases,  "MASE 1.0–1.5",    "#7a4000"),
+        (red_cases,     "MASE ≥ 1.5",      "#8b0000"),
     ]:
         parts.append(
             f'<div class="summary-card">'
@@ -331,10 +340,10 @@ def build_html(records: list[dict]) -> str:
 
     # Legend
     parts.append("""<div class="legend">
-  <div class="legend-item"><div class="legend-swatch" style="background:#b7e4b7"></div>sMAPE &lt; 10%</div>
-  <div class="legend-item"><div class="legend-swatch" style="background:#f0f8f0"></div>10% ≤ sMAPE &lt; 30%</div>
-  <div class="legend-item"><div class="legend-swatch" style="background:#ffd580"></div>30% ≤ sMAPE &lt; 50%</div>
-  <div class="legend-item"><div class="legend-swatch" style="background:#f4b3b3"></div>sMAPE ≥ 50%</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#b7e4b7"></div>MASE &lt; 0.5 (beats naïve 2×)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#f0f8f0"></div>0.5 ≤ MASE &lt; 1.0 (better than naïve)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#ffd580"></div>1.0 ≤ MASE &lt; 1.5 (worse than naïve)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#f4b3b3"></div>MASE ≥ 1.5 (much worse than naïve)</div>
   <div class="legend-item"><div class="legend-swatch" style="background:#e0e0e0"></div>No result</div>
 </div>
 """)
@@ -372,8 +381,8 @@ def build_html(records: list[dict]) -> str:
                 for fe in fe_cols:
                     key = (ds, mdl, fe, h)
                     if key in data:
-                        smape, rmse = data[key]
-                        parts.append(_cell(smape, rmse, ds, mdl, fe, h))
+                        mase, rmse, smape = data[key]
+                        parts.append(_cell(mase, rmse, smape, ds, mdl, fe, h))
                     else:
                         parts.append('<td class="fe-col-missing"><span class="no-data">—</span></td>')
                 parts.append('</tr>')
