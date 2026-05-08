@@ -51,6 +51,13 @@ inverse-transform to recover the original scale.  This removes the local
 level and scale from each prediction window without requiring a global
 scaler, reducing distribution-shift sensitivity.
 
+Normalisation is only applied once a full ``window_norm_days`` window of
+prior data is available (``min_periods=window_norm_days``).  Rows with
+insufficient history receive the identity transform (mu=0, sigma=1) so
+they pass through unchanged and can be correctly inverted.  A tiny
+absolute floor (``1e-6``) prevents division by zero for truly constant
+windows without distorting real data.
+
 **Calendar features — dtype choice**
 
 All calendar columns use **int** or **float** dtype (never ``pd.Categorical``).
@@ -73,8 +80,8 @@ logger = logging.getLogger(__name__)
 # ── Calendar feature constants ─────────────────────────────────────────────
 
 CALENDAR_FEATURE_COLS: List[str] = [
-    'day_of_week',
-    'month',
+    'day_of_week_sin',
+    'day_of_week_cos',
     'day_of_year_sin',
     'day_of_year_cos',
     'is_business_day',
@@ -98,8 +105,8 @@ def compute_calendar_row(date) -> dict:
     """
     ts = pd.Timestamp(date)
     return {
-        'day_of_week': ts.dayofweek,
-        'month': ts.month,
+        'day_of_week_sin': np.sin(2 * np.pi * ts.dayofweek / 7),
+        'day_of_week_cos': np.cos(2 * np.pi * ts.dayofweek / 7),
         'day_of_year_sin': np.sin(2 * np.pi * ts.dayofyear / 365.25),
         'day_of_year_cos': np.cos(2 * np.pi * ts.dayofyear / 365.25),
         'is_business_day': int(pd.tseries.offsets.BDay().is_on_offset(ts)),
@@ -124,8 +131,8 @@ def add_calendar_features(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
         names (matches :data:`CALENDAR_FEATURE_COLS`).
     """
     df = df.copy()
-    df['day_of_week']     = df.index.dayofweek
-    df['month']           = df.index.month
+    df['day_of_week_sin'] = np.sin(2 * np.pi * df.index.dayofweek / 7)
+    df['day_of_week_cos'] = np.cos(2 * np.pi * df.index.dayofweek / 7)
     df['day_of_year_sin'] = np.sin(2 * np.pi * df.index.dayofyear / 365.25)
     df['day_of_year_cos'] = np.cos(2 * np.pi * df.index.dayofyear / 365.25)
     df['is_business_day'] = df.index.map(
@@ -264,12 +271,16 @@ def apply_forward_transforms(
         logger.info("Applied log1p transform to target.")
 
     if use_window_norm:
-        # Compute rolling mean/std over the *preceding* window_norm_days days
-        # (min_periods=1 avoids NaN at the start; shift(1) prevents leakage
-        # of the current day into its own normalisation stats).
-        roll = df['y'].shift(1).rolling(window=window_norm_days, min_periods=1)
-        mu = roll.mean()
-        sigma = roll.std().fillna(1.0).clip(lower=1e-8)
+        # Compute rolling mean/std over the *preceding* window_norm_days days.
+        # shift(1) prevents leakage of the current day into its own stats.
+        # min_periods=window_norm_days ensures stats are only computed once a
+        # full window of prior data is available — the first window_norm_days
+        # rows (the look_back warm-up period) receive the identity transform
+        # (mu=0, sigma=1) so they pass through unchanged and invert correctly.
+        # clip(lower=1e-6) guards only against a truly constant window (std=0).
+        roll = df['y'].shift(1).rolling(window=window_norm_days, min_periods=window_norm_days)
+        mu = roll.mean().fillna(0.0)
+        sigma = roll.std().fillna(1.0).clip(lower=1e-6)
         state.revin_stats = pd.DataFrame({'mean': mu, 'std': sigma}, index=df.index)
         df['y'] = (df['y'] - mu) / sigma
         logger.info(
