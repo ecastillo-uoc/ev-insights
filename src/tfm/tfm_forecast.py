@@ -82,7 +82,9 @@ LOOK_BACK_DAYS = 28
 def get_dataset_config(dataset_name, hussain=False):
     """Return (split_date_str, ranges_dict) for a given dataset.
 
-    ranges_dict may contain 'train_range', 'test_range', 'zoom_range'.
+    ranges_dict may contain 'train_range', 'test_range', 'zoom_range',
+    and 'exclude_range' (a date tuple to drop from the dataset before training,
+    e.g. a COVID lockdown gap).
     When a key is absent, run_forecast_pipeline uses the split_date fallback.
     """
     if hussain:
@@ -144,18 +146,24 @@ def get_dataset_config(dataset_name, hussain=False):
         #   Dundee:       2021-07-27 → 2025-08-30
         #   BeLib:        2017-04-01 → 2017-04-30  (already correct)
         #   AMB_Barcelona:2018-12-31 → 2019-12-31  (already correct)
+        # ACN splits include 2 months of post-COVID recovery in training.
+        # The COVID lockdown gap (2020-08-05 → 2020-11-17) is excluded via
+        # exclude_range so the model never trains or tests on those dates,
+        # but the gap is still visible on the correct time axis in plots.
         _configs = {
             'ACN_JPL': {
-                'split_date': '2020-08-05',
-                'train_range': ('2018-10-09', '2020-08-05'),
-                'test_range': ('2020-11-17', '2021-09-14'),
-                'zoom_range': ('2021-01-01', '2021-09-14'),
+                'split_date': '2021-01-17',
+                'train_range': ('2018-10-09', '2021-01-17'),
+                'test_range': ('2021-01-17', '2021-09-14'),
+                'exclude_range': ('2020-08-05', '2020-11-17'),  # COVID lockdown gap
+                'zoom_range': ('2020-01-01', '2021-09-14'),
             },
             'ACN_Caltech': {
-                'split_date': '2020-08-05',
-                'train_range': ('2018-04-25', '2020-08-05'),
-                'test_range': ('2020-11-17', '2021-09-14'),
-                'zoom_range': ('2021-01-01', '2021-09-14'),
+                'split_date': '2021-01-17',
+                'train_range': ('2018-04-25', '2021-01-17'),
+                'test_range': ('2021-01-17', '2021-09-14'),
+                'exclude_range': ('2020-08-05', '2020-11-17'),  # COVID lockdown gap
+                'zoom_range': ('2020-01-01', '2021-09-14'),
             },
             'ACN_Office001': {
                 'split_date': '2020-07-31',

@@ -432,6 +432,24 @@ def run_forecast_pipeline(
             logger.warning("No data found for %s. Skipping.", dataset)
             continue
 
+        # ── Drop excluded date range (e.g. COVID lockdown gap) ─────────
+        exclude_range = strategy_params.get('exclude_range')
+        if exclude_range:
+            excl_start_dt = pd.to_datetime(exclude_range[0]) if exclude_range[0] else None
+            excl_end_dt   = pd.to_datetime(exclude_range[1]) if exclude_range[1] else None
+            drop_mask = pd.Series(True, index=df.index)
+            if excl_start_dt is not None:
+                drop_mask &= df.index >= excl_start_dt
+            if excl_end_dt is not None:
+                drop_mask &= df.index <= excl_end_dt
+            n_dropped = int(drop_mask.sum())
+            if n_dropped > 0:
+                df = df[~drop_mask].copy()
+                logger.info(
+                    "exclude_range (%s → %s): removed %d rows from '%s'.",
+                    exclude_range[0], exclude_range[1], n_dropped, dataset,
+                )
+
         # ── Forward target transforms ──────────────────────────────────
         df, transform_state = apply_forward_transforms(df, strategy_params)
 
