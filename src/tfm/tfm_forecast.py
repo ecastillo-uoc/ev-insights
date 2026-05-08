@@ -291,7 +291,7 @@ def execute_lightgbm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
         'learning_rate': 0.02,
         'max_depth': 8,
         'early_stopping_rounds': 200,
-        'use_log_transform': True,
+        'use_log_transform': False,
         'use_differencing': False,
         'use_calendar_features': False,
     }
@@ -316,7 +316,7 @@ def execute_xgboost(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
         'li_forecast_horizons': li_forecast_horizons,
         'random_state': 16,
         'test_size': 0.20,
-        'use_log_transform': True,
+        'use_log_transform': False,
         'use_differencing': False,
         'use_calendar_features': False,
     }
@@ -1189,6 +1189,18 @@ def run_all_cases(
                             all_results.append(json.load(fh))
                     except Exception:
                         pass
+                    continue
+
+                # Log-transform FE tags are skipped for tree models: gradient-
+                # boosted trees are scale-invariant and learn monotonic
+                # relationships directly; log1p pre-processing of the target
+                # shifts the error landscape without providing any benefit
+                # (and complicates interpretation of the loss).
+                if fe_params.get('use_log_transform') and model_type in _TREE_MODELS:
+                    logger.debug(
+                        "[%d/%d] SKIP log FE '%s' for tree model %s/%s (neural-only).",
+                        n, total, fe_tag, dataset, model_type,
+                    )
                     continue
 
                 # Diff FE tags are restricted to tree models: neural models
