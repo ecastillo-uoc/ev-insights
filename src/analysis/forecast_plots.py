@@ -109,7 +109,7 @@ def plot_test_vs_predict(
     # Mark Monday (dayofweek == 0) with a small black dot on the actual line
     mondays = test.index[test.index.dayofweek == 0]
     if len(mondays):
-        plt.scatter(mondays, test.loc[mondays, 'y'], color='black', s=12, zorder=5,
+        plt.scatter(mondays, test.loc[mondays, 'y'], color='black', s=4, zorder=5,
                     label='Monday (week start)')
 
     plt.title(f'Actual vs Predictions for {dataset_name} ({forecast_horizon} days)\nModel: {model_name}')
