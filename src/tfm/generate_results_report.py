@@ -42,14 +42,39 @@ _MODEL_ORDER = [
     "lstm", "transformer", "hybrid",
     "hussain_lstm", "hussain_transformer", "hussain_hybrid",
 ]
-_FE_ORDER = [
-    "",
-    "log", "log_cal",
-    "revin", "log_revin", "log_revin_cal",
-    "diff", "diff_cal",
-    "log_diff", "log_diff_cal",
-    "log_rolling", "log_diff_cal_rolling",
-]
+# Canonical component ordering — position in this list is the sort key within
+# a tier.  Any component not listed sorts after all known ones.
+_FE_COMPONENTS = ["log", "revin", "diff", "cal", "rolling"]
+
+
+def _fe_sort_key(fe_tag: str) -> tuple:
+    """Sort key for FE tags: (number of components, canonical index tuple).
+
+    Splits *fe_tag* on ``'_'`` to discover its components.  Tags are ordered
+    first by component count (baseline → single → pairs → triples …), then
+    within each tier by the canonical position of their components in
+    :data:`_FE_COMPONENTS`.  Unknown components sort after all known ones.
+    """
+    if not fe_tag:
+        return (0, ())
+    parts = fe_tag.split("_")
+    indices = tuple(sorted(
+        _FE_COMPONENTS.index(p) if p in _FE_COMPONENTS else len(_FE_COMPONENTS)
+        for p in parts
+    ))
+    return (len(parts), indices)
+
+
+def _fe_flags(fe_tag: str) -> tuple[bool, bool, bool, bool, bool]:
+    """Return (log, diff, cal, revin, rolling) presence flags for *fe_tag*."""
+    parts = set(fe_tag.split("_")) if fe_tag else set()
+    return (
+        "log"     in parts,
+        "diff"    in parts,
+        "cal"     in parts,
+        "revin"   in parts,
+        "rolling" in parts,
+    )
 _HORIZONS = [1, 7, 30, 120]
 
 
@@ -248,10 +273,9 @@ def build_html(records: list[dict]) -> str:
             rmse  = m.get("RMSE")
             data[(ds, mdl, fe, h)] = (smape, rmse)
 
-    # Ordered columns (only those with at least one result)
-    fe_cols = [f for f in _FE_ORDER if f in fe_tags_seen]
-    # Append any unseen tags not in the canonical order
-    fe_cols += sorted(fe_tags_seen - set(_FE_ORDER))
+    # Ordered columns (only those with at least one result).
+    # Sorted dynamically by component count then canonical component order.
+    fe_cols = sorted(fe_tags_seen, key=_fe_sort_key)
 
     datasets = [d for d in _DATASET_ORDER if d in datasets_seen] + \
                sorted(datasets_seen - set(_DATASET_ORDER))
@@ -360,30 +384,17 @@ def build_html(records: list[dict]) -> str:
     parts.append('<h2>FE Variant Descriptions</h2>')
     parts.append('<table style="margin-top:6px">')
     parts.append('<thead><tr><th>Tag</th><th>log</th><th>diff</th><th>calendar</th><th>RevIN</th><th>rolling</th></tr></thead><tbody>')
-    fe_meta = {
-        "":                    (False, False, False, False, False),
-        "log":                 (True,  False, False, False, False),
-        "log_cal":             (True,  False, True,  False, False),
-        "diff":                (False, True,  False, False, False),
-        "diff_cal":            (False, True,  True,  False, False),
-        "log_diff":            (True,  True,  False, False, False),
-        "log_diff_cal":        (True,  True,  True,  False, False),
-        "revin":               (False, False, False, True,  False),
-        "log_revin":           (True,  False, False, True,  False),
-        "log_revin_cal":       (True,  False, True,  True,  False),
-        "log_rolling":         (True,  False, False, False, True),
-        "log_diff_cal_rolling":(True,  True,  True,  False, True),
-    }
+    def _yn(v: bool) -> str:
+        return "✓" if v else "·"
+
     for fe in fe_cols:
-        meta = fe_meta.get(fe, (None, None, None, None, None))
-        def _yn(v):
-            if v is None: return "?"
-            return "✓" if v else "·"
+        log, diff, cal, revin, rolling = _fe_flags(fe)
         label = _fe_label(fe)
         parts.append(
             f'<tr><td style="text-align:left;font-weight:600">{label}</td>'
-            + "".join(f'<td>{_yn(v)}</td>' for v in meta)
-            + '</tr>'
+            f'<td>{_yn(log)}</td><td>{_yn(diff)}</td><td>{_yn(cal)}</td>'
+            f'<td>{_yn(revin)}</td><td>{_yn(rolling)}</td>'
+            f'</tr>'
         )
     parts.append('</tbody></table>')
 
