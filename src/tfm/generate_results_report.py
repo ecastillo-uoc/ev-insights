@@ -66,6 +66,20 @@ def load_all_metadata(results_dir: Path) -> list[dict]:
     return records
 
 
+# ── Image path helper ─────────────────────────────────────────────────────────
+
+def _img_paths(ds: str, mdl: str, fe: str, h: int) -> tuple[str, str, str]:
+    """Return (avp, tts, zoom) paths relative to the HTML output file."""
+    case_id = f"{ds}_{mdl}_{fe}"
+    base    = f"chapters/results/{case_id}/{ds}"
+    suffix  = f"{mdl}_{h}d_{ds}_{h}days"
+    return (
+        f"{base}_actual_vs_predict_{suffix}.png",
+        f"{base}_train_test_split_{suffix}.png",
+        f"{base}_train_test_split_{suffix}_zoom.png",
+    )
+
+
 # ── Colour helpers ────────────────────────────────────────────────────────────
 
 def _smape_bg(smape: float | None) -> str:
@@ -119,6 +133,9 @@ td.dataset-label { background: #d5dbdb; font-weight: 700; text-align: left;
 .metric-main { font-size: 12px; font-weight: 700; display: block; }
 .metric-sub  { font-size: 10px; color: #555; display: block; margin-top: 1px; }
 
+td.clickable { cursor: zoom-in; transition: outline 0.1s; }
+td.clickable:hover { outline: 2px solid #2c3e50; outline-offset: -2px; }
+
 tr:hover td { filter: brightness(0.94); }
 
 .fe-col-missing { background: #f5f5f5 !important; }
@@ -129,6 +146,54 @@ tr:hover td { filter: brightness(0.94); }
                 padding: 10px 16px; text-align: center; min-width: 100px; }
 .summary-card .num { font-size: 1.6em; font-weight: 700; }
 .summary-card .lbl { font-size: 0.8em; color: #666; }
+
+/* ── Lightbox ── */
+#lb-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.72); z-index: 9999;
+  align-items: center; justify-content: center;
+}
+#lb-overlay.open { display: flex; }
+#lb-box {
+  background: #fff; border-radius: 10px; display: flex; flex-direction: column;
+  max-width: 92vw; max-height: 92vh; overflow: hidden;
+  box-shadow: 0 12px 48px rgba(0,0,0,.5);
+}
+#lb-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; background: #2c3e50; color: #fff;
+  font-weight: 700; font-size: 13px; flex-shrink: 0;
+}
+#lb-close {
+  margin-left: auto; background: none; border: none;
+  color: #fff; font-size: 20px; cursor: pointer; line-height: 1; padding: 0 4px;
+}
+#lb-tabs {
+  display: flex; gap: 4px; padding: 8px 12px;
+  background: #ecf0f1; border-bottom: 1px solid #ccc; flex-shrink: 0;
+}
+.lb-tab {
+  padding: 4px 14px; border: 1px solid #bbb; border-radius: 4px;
+  cursor: pointer; background: #fff; font-size: 11.5px; font-weight: 600; color: #444;
+}
+.lb-tab.active { background: #2c3e50; color: #fff; border-color: #2c3e50; }
+#lb-img-wrap {
+  flex: 1; overflow: auto; padding: 12px; text-align: center;
+  display: flex; align-items: center; justify-content: center;
+}
+#lb-img { max-width: 100%; max-height: calc(92vh - 130px); object-fit: contain; }
+#lb-missing { display: none; color: #999; font-style: italic; font-size: 12px; }
+#lb-nav {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  padding: 8px; background: #f5f5f5; border-top: 1px solid #ddd;
+  flex-shrink: 0; font-size: 12px;
+}
+.lb-nav-btn {
+  padding: 3px 14px; border: 1px solid #bbb; border-radius: 4px;
+  cursor: pointer; background: #fff; font-size: 12px; font-weight: 600;
+}
+.lb-nav-btn:disabled { opacity: 0.35; cursor: default; }
+#lb-nav-label { min-width: 60px; text-align: center; font-weight: 700; }
 """
 
 
@@ -136,14 +201,26 @@ def _fe_label(fe_tag: str) -> str:
     return fe_tag if fe_tag else "(baseline)"
 
 
-def _cell(smape: float | None, rmse: float | None) -> str:
+def _cell(smape: float | None, rmse: float | None,
+          ds: str = "", mdl: str = "", fe: str = "", h: int = 0) -> str:
     bg = _smape_bg(smape)
     tc = _smape_text_color(smape)
     if smape is None or math.isnan(smape):
         return f'<td style="background:{bg}"><span class="no-data">—</span></td>'
     rmse_str = f"{rmse:.1f}" if rmse is not None and not math.isnan(rmse) else "—"
+    avp, tts, zoom = _img_paths(ds, mdl, fe, h) if ds else ("", "", "")
+    title = f"{ds} / {mdl} / {fe or '(baseline)'} — {h}d"
+    data = (
+        f' class="clickable"'
+        f' data-case="{ds}_{mdl}_{fe}"'
+        f' data-horizon="{h}"'
+        f' data-avp="{avp}"'
+        f' data-tts="{tts}"'
+        f' data-zoom="{zoom}"'
+        f' data-title="{title}"'
+    )
     return (
-        f'<td style="background:{bg};color:{tc}">'
+        f'<td{data} style="background:{bg};color:{tc}">'
         f'<span class="metric-main">{smape:.1f}%</span>'
         f'<span class="metric-sub">RMSE {rmse_str}</span>'
         f'</td>'
@@ -272,7 +349,7 @@ def build_html(records: list[dict]) -> str:
                     key = (ds, mdl, fe, h)
                     if key in data:
                         smape, rmse = data[key]
-                        parts.append(_cell(smape, rmse))
+                        parts.append(_cell(smape, rmse, ds, mdl, fe, h))
                     else:
                         parts.append('<td class="fe-col-missing"><span class="no-data">—</span></td>')
                 parts.append('</tr>')
@@ -309,6 +386,124 @@ def build_html(records: list[dict]) -> str:
             + '</tr>'
         )
     parts.append('</tbody></table>')
+
+    # ── Lightbox modal ────────────────────────────────────────────────────
+    parts.append("""
+<div id="lb-overlay">
+  <div id="lb-box">
+    <div id="lb-header">
+      <span id="lb-title">—</span>
+      <button id="lb-close" title="Close (Esc)">✕</button>
+    </div>
+    <div id="lb-tabs">
+      <button class="lb-tab active" data-type="avp">Actual vs Predicted</button>
+      <button class="lb-tab" data-type="tts">Train / Test Split</button>
+      <button class="lb-tab" data-type="zoom">Split Zoom</button>
+    </div>
+    <div id="lb-img-wrap">
+      <img id="lb-img" src="" alt=""/>
+      <p id="lb-missing">Image not found for this case.</p>
+    </div>
+    <div id="lb-nav">
+      <button class="lb-nav-btn" id="lb-prev">◀ &nbsp;prev horizon</button>
+      <span id="lb-nav-label"></span>
+      <button class="lb-nav-btn" id="lb-next">next horizon&nbsp; ▶</button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+  const HORIZONS = [1, 7, 30, 120];
+
+  // Build data index from all clickable cells
+  // imgData[caseId][horizon] = { avp, tts, zoom, title }
+  const imgData = {};
+  document.querySelectorAll('td[data-case]').forEach(td => {
+    const cid = td.dataset.case;
+    const h   = parseInt(td.dataset.horizon, 10);
+    if (!imgData[cid]) imgData[cid] = {};
+    imgData[cid][h] = {
+      avp:   td.dataset.avp,
+      tts:   td.dataset.tts,
+      zoom:  td.dataset.zoom,
+      title: td.dataset.title,
+    };
+  });
+
+  let curCase = null, curH = null, curType = 'avp';
+
+  const overlay  = document.getElementById('lb-overlay');
+  const imgEl    = document.getElementById('lb-img');
+  const titleEl  = document.getElementById('lb-title');
+  const missingEl= document.getElementById('lb-missing');
+  const navLabel = document.getElementById('lb-nav-label');
+  const prevBtn  = document.getElementById('lb-prev');
+  const nextBtn  = document.getElementById('lb-next');
+
+  function render() {
+    const info = (imgData[curCase] || {})[curH];
+    if (!info) return;
+    titleEl.textContent = info.title;
+    navLabel.textContent = curH + 'd';
+
+    const src = info[curType] || '';
+    imgEl.style.display = 'none';
+    missingEl.style.display = 'none';
+
+    if (!src) {
+      missingEl.style.display = 'block';
+    } else {
+      imgEl.src = src;
+      imgEl.onload  = () => { imgEl.style.display = 'block'; missingEl.style.display = 'none'; };
+      imgEl.onerror = () => { imgEl.style.display = 'none';  missingEl.style.display = 'block'; };
+    }
+
+    const idx = HORIZONS.indexOf(curH);
+    prevBtn.disabled = idx <= 0 || !(imgData[curCase] || {})[HORIZONS[idx - 1]];
+    nextBtn.disabled = idx >= HORIZONS.length - 1 || !(imgData[curCase] || {})[HORIZONS[idx + 1]];
+  }
+
+  function open(caseId, h) {
+    curCase = caseId; curH = h;
+    render();
+    overlay.classList.add('open');
+  }
+
+  document.querySelectorAll('td[data-case]').forEach(td => {
+    td.addEventListener('click', () => open(td.dataset.case, parseInt(td.dataset.horizon, 10)));
+  });
+
+  document.getElementById('lb-close').addEventListener('click', () => overlay.classList.remove('open'));
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
+
+  document.addEventListener('keydown', e => {
+    if (!overlay.classList.contains('open')) return;
+    if (e.key === 'Escape')      overlay.classList.remove('open');
+    if (e.key === 'ArrowLeft'  && !prevBtn.disabled) prevBtn.click();
+    if (e.key === 'ArrowRight' && !nextBtn.disabled) nextBtn.click();
+  });
+
+  document.querySelectorAll('.lb-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.lb-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      curType = btn.dataset.type;
+      render();
+    });
+  });
+
+  prevBtn.addEventListener('click', () => {
+    const idx = HORIZONS.indexOf(curH);
+    if (idx > 0) { curH = HORIZONS[idx - 1]; render(); }
+  });
+  nextBtn.addEventListener('click', () => {
+    const idx = HORIZONS.indexOf(curH);
+    if (idx < HORIZONS.length - 1) { curH = HORIZONS[idx + 1]; render(); }
+  });
+})();
+</script>
+""")
 
     parts.append('</body></html>')
     return "\n".join(parts)
