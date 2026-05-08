@@ -1282,6 +1282,82 @@ def old_main():
 
 
 if __name__ == "__main__":
+    import argparse
+    import subprocess
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset",  default=None)
+    parser.add_argument("--model",    default=None)
+    parser.add_argument("--fe_tag",   default=None)
+    parser.add_argument("--loop",     action="store_true",
+                        help="Outer loop mode: re-launch one case at a time as a "
+                             "subprocess so a native crash (segfault/XLA) only "
+                             "loses one case and the loop continues.")
+    args = parser.parse_args()
+
     MLFLOW_TRACKING_URI = None
-    print("Running all cases with MLflow tracking URI:", MLFLOW_TRACKING_URI)
-    run_all_cases()
+
+    if args.loop:
+        # ── Outer loop: dispatch one subprocess per (dataset, model, fe_tag) ──
+        # Each child process runs with --dataset / --model / --fe_tag flags and
+        # exits after exactly one case.  A native crash in XLA therefore only
+        # kills that child; the parent loop continues with the next case.
+        import sys, os
+        _datasets = ALL_DATASETS
+        _models   = ALL_MODELS
+        _fe_tags  = ALL_FE_TAGS
+
+        env = os.environ.copy()
+        env.setdefault("TF_XLA_FLAGS", "--tf_xla_enable_xla_devices=false")
+
+        total = len(_datasets) * len(_models) * len(_fe_tags)
+        n = 0
+        failed = []
+        for ds in _datasets:
+            for mdl in _models:
+                for fe in _fe_tags:
+                    n += 1
+                    # Quick skip: check metadata.json before launching a subprocess
+                    from pathlib import Path
+                    case_id  = f"{ds}_{mdl}_{fe}"
+                    case_dir = _TFM_CHAPTERS_DIR / "results" / case_id
+                    if (case_dir / "metadata.json").exists():
+                        print(f"[{n}/{total}] SKIP (existing): {case_id}")
+                        continue
+                    print(f"[{n}/{total}] Launching subprocess: {case_id}")
+                    cmd = [
+                        sys.executable, __file__,
+                        "--dataset", ds,
+                        "--model",   mdl,
+                        "--fe_tag",  fe,
+                    ]
+                    result = subprocess.run(cmd, env=env)
+                    if result.returncode != 0:
+                        print(f"  *** FAILED (exit {result.returncode}): {case_id}")
+                        failed.append(case_id)
+
+        print(f"\nLoop complete: {n - len(failed)}/{total} succeeded, {len(failed)} failed")
+        if failed:
+            print("Failed cases:", failed)
+
+    elif args.dataset and args.model and args.fe_tag is not None:
+        # ── Single-case mode (called by the outer loop subprocess) ───────────
+        fe_params = FE_VARIANTS.get(args.fe_tag)
+        if fe_params is None:
+            logging.error("Unknown fe_tag '%s'", args.fe_tag)
+            sys.exit(1)
+        from pathlib import Path
+        case_config = CaseConfig(
+            dataset=args.dataset,
+            model_type=args.model,
+            fe_tag=args.fe_tag,
+            fe_params=fe_params,
+            li_forecast_horizons=ALL_HORIZONS,
+            output_base_dir=_TFM_CHAPTERS_DIR / "results",
+        )
+        run_single_case(case_config, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+
+    else:
+        # ── Default: run everything in-process (original behaviour) ─────────
+        print("Running all cases with MLflow tracking URI:", MLFLOW_TRACKING_URI)
+        run_all_cases(skip_existing=True, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
