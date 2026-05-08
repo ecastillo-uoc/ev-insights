@@ -105,6 +105,13 @@ def plot_test_vs_predict(
     plt.figure(figsize=(12, 6))
     plt.plot(test.index, test['y'], label='Test (Actual)', linewidth=1.5, color='green')
     plt.plot(test.index, predictions, label='Predictions', linestyle='--', linewidth=1.5, color='red')
+
+    # Mark Monday (dayofweek == 0) with a small black dot on the actual line
+    mondays = test.index[test.index.dayofweek == 0]
+    if len(mondays):
+        plt.scatter(mondays, test.loc[mondays, 'y'], color='black', s=12, zorder=5,
+                    label='Monday (week start)')
+
     plt.title(f'Actual vs Predictions for {dataset_name} ({forecast_horizon} days)\nModel: {model_name}')
     plt.xlabel('Date')
     plt.ylabel('Energy Demand (kWh)')
