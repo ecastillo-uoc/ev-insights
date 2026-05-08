@@ -622,6 +622,11 @@ _TREE_MODELS: frozenset = frozenset({'lightgbm', 'xgboost'})
 # FE tags that activate rolling retraining — only meaningful for standard neural models.
 # Hussain variants (article reproductions) and tree models are excluded at run time.
 _ROLLING_FE_TAGS: frozenset = frozenset({'log_rolling', 'log_diff_cal_rolling'})
+# FE tags that apply seasonal differencing (use_differencing=True).
+# Neural models collapse to SNaive (predict ≈0 on the differenced series, which
+# inverse-transforms to y[t-7]). Differencing is only beneficial for tree models
+# where splits handle near-zero-mean targets without gradient-descent bias.
+_DIFF_FE_TAGS: frozenset = frozenset({'diff', 'diff_cal', 'log_diff', 'log_diff_cal', 'log_diff_cal_rolling'})
 # Datasets where rolling retraining is expected to help due to a known demand
 # regime shift between the training and test windows:
 #   ACN_Caltech / ACN_JPL — COVID gap (2020-08-05 → 2020-11-17) + demand
@@ -1148,6 +1153,17 @@ def run_all_cases(
                             all_results.append(json.load(fh))
                     except Exception:
                         pass
+                    continue
+
+                # Diff FE tags are restricted to tree models: neural models
+                # collapse to SNaive on the differenced series (predict ≈0
+                # → inverse-transform gives y[t-7]).  Tree models handle
+                # near-zero-mean targets correctly via splits.
+                if fe_tag in _DIFF_FE_TAGS and model_type not in _TREE_MODELS:
+                    logger.debug(
+                        "[%d/%d] SKIP diff FE '%s' for neural model %s/%s (tree-only).",
+                        n, total, fe_tag, dataset, model_type,
+                    )
                     continue
 
                 # Rolling FE tags are only run where a known demand-regime
