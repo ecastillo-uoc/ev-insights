@@ -61,8 +61,12 @@
             "program": "${workspaceFolder}/src/tfm/tfm_forecast.py",
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
+            "args" : [
+                "--loop"
+            ],
             "env": {
-                "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"
+                "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}",
+                "TF_XLA_FLAGS": "--tf_xla_enable_xla_devices=false"
             }
         },
                 {
