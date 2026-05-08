@@ -35,6 +35,9 @@ applied uniformly to **all** strategies:
 All default to ``False`` so existing behaviour is unchanged.  They can be
 combined freely, yielding up to 8 experiment configurations.
 """
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend — must be set before any pyplot import
+
 import gc
 import json
 import os
