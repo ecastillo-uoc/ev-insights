@@ -65,6 +65,19 @@
                 "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"
             }
         },
+                {
+            "group": "TFM",
+            "name": "TFM results table",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "/home/ecastillo/dev/M2_882_TFM/venv311tfm/bin/python",
+            "program": "${workspaceFolder}/src/tfm/generate_results_report.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"
+            }
+        },
         {
             "group": "EV Insight",
             "name": "EV Insights: API ACN",
