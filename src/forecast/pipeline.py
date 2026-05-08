@@ -451,6 +451,9 @@ def run_forecast_pipeline(
                 )
 
         # ── Forward target transforms ──────────────────────────────────
+        # Save original (un-transformed) 'y' column for the train/test split
+        # plots — forward transforms (e.g. RevIN) must not affect the visual.
+        df_plot_original = df[['y']].copy()
         df, transform_state = apply_forward_transforms(df, strategy_params)
 
         # ── Calendar features (optional, all model types) ──────────────
@@ -510,9 +513,15 @@ def run_forecast_pipeline(
             train_df['dataset_name'] = dataset
             train_df.attrs[params_key] = strategy_params
 
-            # Unmodified copies for plotting (lag dropna can shrink the df)
-            train_df_plot = train_df.copy()
-            test_df_plot = test_df.copy()
+            # Unmodified copies for plotting in original (un-transformed) scale.
+            # Use df_plot_original so that forward transforms (e.g. RevIN) do
+            # not distort the train/test split visualisation.
+            train_df_plot = df_plot_original.loc[
+                df_plot_original.index.isin(train_df.index)
+            ].copy()
+            test_df_plot = df_plot_original.loc[
+                df_plot_original.index.isin(test_df.index)
+            ].copy()
 
             feature_cols: List[str] = []
             if model_type in ('xgboost', 'lightgbm'):
