@@ -629,16 +629,18 @@ ALL_MODELS: List[str] = [
     'hussain_hybrid',
 ]
 ALL_FE_TAGS: List[str] = [
-    'revin',
-    'log_revin',
-    'log_revin_cal',
     '',
-    'diff', 
-    'diff_cal',
+    'revin',
     'log', 
+    'cal', 
+    'log_revin',
     'log_cal', 
-    'log_diff', 
-    'log_diff_cal',
+    'log_revin_cal',
+
+    #'diff', 
+    #'diff_cal',
+    #'log_diff', 
+    #'log_diff_cal',
     #'log_rolling',
     #'log_diff_cal_rolling'
     ]
@@ -681,6 +683,11 @@ FE_VARIANTS: Dict[str, dict] = {
         'use_log_transform': True,
         'use_differencing': False,
         'use_calendar_features': False,
+    },
+    'cal': {
+        'use_log_transform': False,
+        'use_differencing': False,
+        'use_calendar_features': True,
     },
     'log_cal': {
         'use_log_transform': True,
@@ -1360,4 +1367,4 @@ if __name__ == "__main__":
     else:
         # ── Default: run everything in-process (original behaviour) ─────────
         print("Running all cases with MLflow tracking URI:", MLFLOW_TRACKING_URI)
-        run_all_cases(skip_existing=True, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+        run_all_cases(skip_existing=False, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
