@@ -35,6 +35,7 @@ applied uniformly to **all** strategies:
 All default to ``False`` so existing behaviour is unchanged.  They can be
 combined freely, yielding up to 8 experiment configurations.
 """
+import gc
 import json
 import os
 import sys
@@ -599,11 +600,11 @@ ALL_FE_TAGS: List[str] = [
     'revin',
     'log_revin',
     'log_revin_cal',
-    #'',
+    '',
     'diff', 
     'diff_cal',
-    #'log', 
-    #'log_cal', 
+    'log', 
+    'log_cal', 
     'log_diff', 
     'log_diff_cal',
     #'log_rolling',
@@ -880,6 +881,63 @@ def _compute_health_flags(
     }
 
 
+# ── Resource cleanup ──────────────────────────────────────────────────────
+
+def _release_resources(model_type: str) -> None:
+    """Free GPU/CPU memory between pipeline calls and log usage before releasing.
+
+    For neural-model cases each ``run_forecast_pipeline`` call builds a new
+    Keras graph.  Without an explicit ``clear_session`` the old graph stays
+    resident in TF's global default graph, exhausting GPU VRAM after a few
+    cases and eventually crashing the process.
+
+    Safe to call for tree models too — the Keras path is a no-op when no
+    session exists.
+    """
+    _logger = logging.getLogger(__name__)
+    is_neural = model_type not in _TREE_MODELS
+
+    # ── Report GPU memory before release ──────────────────────────────────
+    try:
+        import tensorflow as _tf
+        gpus = _tf.config.list_physical_devices('GPU')
+        if gpus:
+            for gpu in gpus:
+                info = _tf.config.experimental.get_memory_info(gpu.name.replace('physical_device:', ''))
+                current_mb = info['current'] / 1024 ** 2
+                peak_mb = info['peak'] / 1024 ** 2
+                _logger.info(
+                    "Memory [%s] before release — current: %.1f MB, peak: %.1f MB",
+                    gpu.name, current_mb, peak_mb,
+                )
+    except Exception:
+        pass
+
+    # ── Report process RSS (CPU RAM) ──────────────────────────────────────
+    try:
+        import psutil
+        rss_mb = psutil.Process().memory_info().rss / 1024 ** 2
+        _logger.info("Memory [CPU/RAM] before release — RSS: %.1f MB", rss_mb)
+    except Exception:
+        pass
+
+    # ── Release ───────────────────────────────────────────────────────────
+    if is_neural:
+        try:
+            import keras.backend as _K
+            _K.clear_session()
+        except Exception:
+            pass
+        # TF 2.x graph reset (no-op in eager mode but harmless)
+        try:
+            import tensorflow as _tf
+            _tf.compat.v1.reset_default_graph()
+        except Exception:
+            pass
+    # Always collect Python cycles / free numpy buffers retained by gc
+    gc.collect()
+
+
 # ── Single-case runner ─────────────────────────────────────────────────────
 
 def run_single_case(
@@ -947,6 +1005,7 @@ def run_single_case(
             all_metrics.update(returned)
         for h in case_config.li_forecast_horizons:
             look_back_map[h] = 0  # tree models have no look_back warm-up
+        _release_resources(case_config.model_type)
 
     else:
         # Neural models: one call per horizon with appropriate look_back
@@ -970,6 +1029,9 @@ def run_single_case(
             )
             if returned:
                 all_metrics.update(returned)
+            # Free Keras graph + CUDA memory after each horizon to prevent
+            # VRAM accumulation across the 4-horizon neural loop
+            _release_resources(case_config.model_type)
 
     # Health flags
     health = _compute_health_flags(all_metrics, case_config.li_forecast_horizons)
@@ -1107,6 +1169,10 @@ def run_all_cases(
                 except Exception as exc:
                     logger.error("FAILED case %s: %s", case_config.case_id, exc, exc_info=True)
                     failed.append(case_config.case_id)
+                finally:
+                    # Release any leftover resources between cases regardless of
+                    # outcome — guards against partial cleanup on error paths
+                    _release_resources(model_type)
 
     # ── Summary ──────────────────────────────────────────────────────────
     logger.info("=" * 70)
