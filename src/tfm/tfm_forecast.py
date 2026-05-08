@@ -86,26 +86,36 @@ def get_dataset_config(dataset_name, hussain=False):
     When a key is absent, run_forecast_pipeline uses the split_date fallback.
     """
     if hussain:
-        # Hussain et al. article splits (COVID data intentionally included)
+        # Hussain et al. article splits (COVID data intentionally included).
+        # Date boundaries aligned to actual data coverage (date-range.csv):
+        #   ACN_Caltech: 2018-04-25 → 2021-09-14
+        #   ACN_JPL:     2018-10-09 → 2021-09-14
+        #   Dundee:      2021-07-27 → 2025-08-30
         _configs = {
             'ACN_JPL': {
                 'split_date': '2020-08-05',
-                'train_range': ('2018-09-01', '2020-08-05'),
-                'test_range': ('2020-11-17', '2021-03-31'),
-                'zoom_range': ('2021-01-01', '2021-03-31'),
+                'train_range': ('2018-10-09', '2020-08-05'),
+                'test_range': ('2020-11-17', '2021-09-14'),
+                'zoom_range': ('2021-01-01', '2021-09-14'),
             },
             'ACN_Caltech': {
                 'split_date': '2020-08-05',
-                'train_range': ('2018-09-01', '2020-08-05'),
-                'test_range': ('2020-11-17', '2021-03-31'),
-                'zoom_range': ('2021-01-01', '2021-03-31'),
+                'train_range': ('2018-04-25', '2020-08-05'),
+                'test_range': ('2020-11-17', '2021-09-14'),
+                'zoom_range': ('2021-01-01', '2021-09-14'),
             },
             'Dundee': {
                 'split_date': '2023-09-01',
-                'zoom_range': ('2023-09-01', '2024-06-01'),
+                'train_range': ('2021-07-27', '2023-09-01'),
+                'test_range': ('2023-09-01', '2025-08-30'),
+                'zoom_range': ('2023-09-01', '2025-08-30'),
             },
         }
     else:
+        # Pre-COVID splits: train on a clean 2019 window; test ends at
+        # first COVID disruption (2020-03-01).  ACN data starts mid-2018
+        # but we begin training from 2019-01-01 to avoid early ramp-up noise.
+        # Dundee boundaries aligned to actual data coverage: 2021-07-27 → 2025-08-30.
         _configs_pre_covid = {
             'ACN_JPL': {
                 'split_date': '2019-10-01',
@@ -121,32 +131,43 @@ def get_dataset_config(dataset_name, hussain=False):
             },
             'Dundee': {
                 'split_date': '2023-09-01',
-                'zoom_range': ('2023-09-01', '2024-06-01'),
+                'train_range': ('2021-07-27', '2023-09-01'),
+                'test_range': ('2023-09-01', '2025-08-30'),
+                'zoom_range': ('2023-09-01', '2025-08-30'),
             },
         }
 
+        # All boundaries aligned to actual data coverage (date-range.csv):
+        #   ACN_Caltech:  2018-04-25 → 2021-09-14
+        #   ACN_JPL:      2018-10-09 → 2021-09-14
+        #   ACN_Office001:2019-03-25 → 2021-09-14
+        #   Dundee:       2021-07-27 → 2025-08-30
+        #   BeLib:        2017-04-01 → 2017-04-30  (already correct)
+        #   AMB_Barcelona:2018-12-31 → 2019-12-31  (already correct)
         _configs = {
             'ACN_JPL': {
                 'split_date': '2020-08-05',
-                'train_range': ('2018-09-01', '2020-08-05'),
-                'test_range': ('2020-11-17', '2021-03-31'),
-                'zoom_range': ('2021-01-01', '2021-03-31'),
+                'train_range': ('2018-10-09', '2020-08-05'),
+                'test_range': ('2020-11-17', '2021-09-14'),
+                'zoom_range': ('2021-01-01', '2021-09-14'),
             },
             'ACN_Caltech': {
                 'split_date': '2020-08-05',
-                'train_range': ('2018-09-01', '2020-08-05'),
-                'test_range': ('2020-11-17', '2021-03-31'),
-                'zoom_range': ('2021-01-01', '2021-03-31'),
+                'train_range': ('2018-04-25', '2020-08-05'),
+                'test_range': ('2020-11-17', '2021-09-14'),
+                'zoom_range': ('2021-01-01', '2021-09-14'),
             },
             'ACN_Office001': {
                 'split_date': '2020-07-31',
-                'train_range': ('2019-03-26', '2020-07-31'),
+                'train_range': ('2019-03-25', '2020-07-31'),
                 'test_range': ('2020-08-21', '2021-09-14'),
-                'zoom_range': ('2020-08-21', '2021-03-31'),
+                'zoom_range': ('2020-08-21', '2021-09-14'),
             },
             'Dundee': {
                 'split_date': '2023-09-01',
-                'zoom_range': ('2023-09-01', '2024-06-01'),
+                'train_range': ('2021-07-27', '2023-09-01'),
+                'test_range': ('2023-09-01', '2025-08-30'),
+                'zoom_range': ('2023-09-01', '2025-08-30'),
             },
             'BeLib': {
                 'split_date': '2017-04-24',
