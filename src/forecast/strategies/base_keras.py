@@ -301,6 +301,74 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             predict_end_date = test_range[1] or predict_end_date
         return forecast_horizon, predict_start_date, predict_end_date
 
+    def _run_one_recursive_origin(
+        self,
+        seed_seq: np.ndarray,
+        model,
+        scaler,
+        effective_ts,
+        forecast_horizon: int,
+        feat_cols: List[str],
+        step_dates: List,
+    ) -> List[float]:
+        """Run one recursive origin: h 1-step predictions with autoregressive feedback.
+
+        This is the **shared inner loop** used by both evaluation
+        (:meth:`_predict_recursive`) and deployment (:meth:`_predict_schedule`).
+        The only difference between those two callers is which seed window and
+        which step dates they pass in — the algorithm itself is identical.
+
+        Parameters
+        ----------
+        seed_seq : np.ndarray
+            Shape ``(look_back, n_cols)``, already scaled and clipped.
+            The initial context window for this origin.
+        model : keras.Model
+            Trained model that outputs a single scalar per forward pass.
+        scaler :
+            Full-column scaler (used to re-scale the reconstructed calendar row).
+        effective_ts :
+            Target-only scaler used to inverse-transform the scalar prediction
+            when reconstructing the calendar-feature row.
+        forecast_horizon : int
+            Number of steps to predict.
+        feat_cols : list[str]
+            Exogenous feature column names.  When non-empty,
+            :func:`~src.forecast.feature_engineering.compute_calendar_row`
+            is called at each step to fill the feature part of the new row.
+        step_dates : list
+            Sequence of ``pd.Timestamp`` objects, one per step (length =
+            *forecast_horizon*).  Used as the date argument to
+            ``compute_calendar_row`` when *feat_cols* is non-empty.
+
+        Returns
+        -------
+        list[float]
+            Scaled predictions of length *forecast_horizon*.
+            Inverse-transform with *effective_ts* to recover original units.
+        """
+        current_seq = seed_seq.copy()
+        predictions_scaled: List[float] = []
+        for step in range(forecast_horizon):
+            pred = model.predict(current_seq[np.newaxis, :, :], verbose=0)
+            pred_val = float(pred[0, 0])
+            predictions_scaled.append(pred_val)
+            current_seq = np.roll(current_seq, -1, axis=0)
+            if feat_cols:
+                from src.forecast.feature_engineering import compute_calendar_row
+                pred_unscaled = effective_ts.inverse_transform(
+                    np.array([[pred_val]])
+                )[0, 0]
+                cal_values = compute_calendar_row(step_dates[step])
+                unscaled_row = np.array(
+                    [[pred_unscaled] + [cal_values[c] for c in feat_cols]]
+                )
+                scaled_row = np.clip(scaler.transform(unscaled_row), -3.0, 3.0)
+                current_seq[-1, :] = scaled_row[0, :]
+            else:
+                current_seq[-1, 0] = pred_val
+        return predictions_scaled
+
     def _predict_schedule(
         self,
         df: pd.DataFrame,
@@ -315,12 +383,19 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         target_scaler: RobustScaler | None = None,
         feature_columns: List[str] | None = None,
     ) -> dict:
-        """Run **schedule** (multi-step recursive) prediction for each dataset.
+        """Run **schedule** (deployment) prediction: one origin, future dates.
 
-        Starting from the last *look_back* observations, the model predicts
-        one step ahead, the prediction is appended to the input window (with
-        calendar features recomputed for the new date when present), and the
-        process repeats *forecast_horizon* times.
+        Seeds from the last *look_back* observations in *df* and applies the
+        shared recursive inner loop (:meth:`_run_one_recursive_origin`) once,
+        producing *forecast_horizon* values for dates that lie **beyond** the
+        dataset.  Because these future actuals are unknown at inference time,
+        no ``actuals`` or ``windows`` are returned — this mode is for live
+        operational use (e.g. the API or CLI schedule endpoint), not for
+        offline metric evaluation.
+
+        Use :meth:`_predict_recursive` when you need to evaluate accuracy over
+        a held-out test set (it applies the same algorithm at every origin in
+        the test period and returns ``actuals`` and ``windows``).
 
         Parameters
         ----------
@@ -331,7 +406,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         dataset_names : list[str]
             Datasets to iterate over.
         model : keras.Model
-            Trained Keras model.
+            Trained Keras model with scalar (1-step) output.
         scaler : RobustScaler
             Fitted on all input columns (target + features).
         look_back : int
@@ -344,15 +419,14 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             Scaler fitted on the target column only.  Falls back to *scaler*
             when ``None``.
         feature_columns : list[str] or None
-            Exogenous feature columns.  When non-empty, each recursive step
-            uses :func:`~src.forecast.feature_engineering.compute_calendar_row`
-            to reconstruct feature values for the predicted date.
+            Exogenous feature columns reconstructed at each step via
+            :func:`~src.forecast.feature_engineering.compute_calendar_row`.
 
         Returns
         -------
         dict
             Keys: ``prediction``, ``values``, ``dates``, ``value``, ``date``,
-            ``created_at``.
+            ``created_at``.  No ``actuals`` or ``windows`` keys.
         """
         output_dict: Dict[str, Any] = {}
 
@@ -397,32 +471,13 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                 freq='D',
             )
 
-            predictions = []
-            for step in range(forecast_horizon):
-                pred = model.predict(current_seq[np.newaxis, :, :], verbose=0)
-                predictions.append(pred[0, 0])
-                current_seq = np.roll(current_seq, -1, axis=0)
-
-                if feat_cols:
-                    # Reconstruct the unscaled row for the new date
-                    from src.forecast.feature_engineering import compute_calendar_row
-                    pred_unscaled = effective_ts.inverse_transform(
-                        np.array([[pred[0, 0]]])
-                    )[0, 0]
-                    new_date = future_dates[step]
-                    cal_values = compute_calendar_row(new_date)
-                    unscaled_row = np.array(
-                        [[pred_unscaled] + [cal_values[c] for c in feat_cols]]
-                    )
-                    scaled_row = np.clip(scaler.transform(unscaled_row), -3.0, 3.0)
-                    current_seq[-1, :] = scaled_row[0, :]
-                else:
-                    current_seq[-1, 0] = pred[0, 0]
-
-            predictions_unscaled = effective_ts.inverse_transform(
-                np.array(predictions).reshape(-1, 1)
+            predictions_scaled = self._run_one_recursive_origin(
+                current_seq, model, scaler, effective_ts,
+                forecast_horizon, feat_cols, list(future_dates),
             )
-            predictions_series = predictions_unscaled.flatten().tolist()
+            predictions_series = effective_ts.inverse_transform(
+                np.array(predictions_scaled).reshape(-1, 1)
+            ).flatten().tolist()
 
             output_dict.update({
                 self.output_key: predictions_series,
@@ -531,31 +586,14 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             for t in range(look_back, n - forecast_horizon + 1):
                 current_seq = scaled_all[t - look_back:t].copy()  # (look_back, n_cols)
 
-                predictions_scaled: List[float] = []
-                for step in range(forecast_horizon):
-                    pred = model.predict(current_seq[np.newaxis, :, :], verbose=0)
-                    pred_val = float(pred[0, 0])
-                    predictions_scaled.append(pred_val)
-
-                    # Roll window and update the last row with the new prediction
-                    current_seq = np.roll(current_seq, -1, axis=0)
-                    if feat_cols:
-                        from src.forecast.feature_engineering import compute_calendar_row
-                        pred_unscaled = effective_ts.inverse_transform(
-                            np.array([[pred_val]])
-                        )[0, 0]
-                        if has_dates:
-                            new_date = subset.index[t] + pd.Timedelta(days=step)
-                        else:
-                            new_date = pd.Timestamp.now()
-                        cal_values = compute_calendar_row(new_date)
-                        unscaled_row = np.array(
-                            [[pred_unscaled] + [cal_values[c] for c in feat_cols]]
-                        )
-                        scaled_row = np.clip(scaler.transform(unscaled_row), -3.0, 3.0)
-                        current_seq[-1, :] = scaled_row[0, :]
-                    else:
-                        current_seq[-1, 0] = pred_val
+                if has_dates:
+                    step_dates = [subset.index[t] + pd.Timedelta(days=s) for s in range(forecast_horizon)]
+                else:
+                    step_dates = [pd.Timestamp.now()] * forecast_horizon
+                predictions_scaled = self._run_one_recursive_origin(
+                    current_seq, model, scaler, effective_ts,
+                    forecast_horizon, feat_cols, step_dates,
+                )
 
                 # Inverse-scale predictions (RobustScaler only — log/diff undone by pipeline)
                 preds_unscaled = effective_ts.inverse_transform(
