@@ -393,7 +393,7 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
 #   mislabelled as MSE.  Our RMSE column is the correct comparison target.
 # =============================================================================
 
-def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
+def execute_dl_baseline_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     """LSTM with Hussain et al. hyperparams: look_back = max(MIN_LOOK_BACK, forecast_horizon), dropout=0.2."""
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds, hussain=True)
@@ -414,10 +414,10 @@ def execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=Non
             }
             params = {**strategy_params, **ranges}
             run_forecast_pipeline([ds], params, split_date_str,
-                                  model_type="hussain_lstm", mlflow_tracking_uri=mlflow_tracking_uri)
+                                  model_type="dl_baseline_lstm", mlflow_tracking_uri=mlflow_tracking_uri)
 
 
-def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
+def execute_dl_baseline_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     """Simplified Transformer from Hussain et al.: Dense→MHA→GAP→Dense(1)."""
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds, hussain=True)
@@ -440,10 +440,10 @@ def execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_
             }
             params = {**strategy_params, **ranges}
             run_forecast_pipeline([ds], params, split_date_str,
-                                  model_type="hussain_transformer", mlflow_tracking_uri=mlflow_tracking_uri)
+                                  model_type="dl_baseline_transformer", mlflow_tracking_uri=mlflow_tracking_uri)
 
 
-def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
+def execute_dl_baseline_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
     """Hybrid LSTM-Transformer with Hussain et al. hyperparams: look_back = max(MIN_LOOK_BACK, forecast_horizon), dropout=0.2."""
     for ds in datasets:
         split_date_str, ranges = get_dataset_config(ds, hussain=True)
@@ -465,7 +465,7 @@ def execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=N
             }
             params = {**strategy_params, **ranges}
             run_forecast_pipeline([ds], params, split_date_str,
-                                  model_type="hussain_hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
+                                  model_type="dl_baseline_hybrid", mlflow_tracking_uri=mlflow_tracking_uri)
 
 
 def optimize_lstm(datasets, n_trials, mlflow_tracking_uri=None):
@@ -626,9 +626,9 @@ ALL_MODELS: List[str] = [
     'lstm', 
     'transformer', 
     'hybrid',
-    'hussain_lstm', 
-    'hussain_transformer', 
-    'hussain_hybrid',
+    'dl_baseline_lstm', 
+    'dl_baseline_transformer', 
+    'dl_baseline_hybrid',
 ]
 ALL_FE_TAGS: List[str] = [
     '',
@@ -650,7 +650,7 @@ ALL_FE_TAGS: List[str] = [
 ALL_HORIZONS: List[int] = [1, 7, 30, 120]
 
 # Models that use hussain=True splits and the Hussain architecture variants
-_HUSSAIN_MODELS: frozenset = frozenset({'hussain_lstm', 'hussain_transformer', 'hussain_hybrid'})
+_HUSSAIN_MODELS: frozenset = frozenset({'dl_baseline_lstm', 'dl_baseline_transformer', 'dl_baseline_hybrid'})
 # Models that receive all horizons in a single pipeline call
 _TREE_MODELS: frozenset = frozenset({'lightgbm', 'xgboost'})
 # FE tags that activate rolling retraining — only meaningful for standard neural models.
@@ -827,7 +827,7 @@ def _build_strategy_params_for_case(
         **fe_params,
     }
 
-    if model_type in ('lstm', 'hussain_lstm'):
+    if model_type in ('lstm', 'dl_baseline_lstm'):
         base.update({
             'epochs': 100,
             'batch_size': 32,
@@ -851,7 +851,7 @@ def _build_strategy_params_for_case(
             'mlp_dropout': 0.1,
         })
 
-    elif model_type == 'hussain_transformer':
+    elif model_type == 'dl_baseline_transformer':
         base.update({
             'epochs': 100,
             'batch_size': 32,
@@ -874,7 +874,7 @@ def _build_strategy_params_for_case(
             'dropout': 0.1,
         })
 
-    elif model_type == 'hussain_hybrid':
+    elif model_type == 'dl_baseline_hybrid':
         base.update({
             'epochs': 100,
             'batch_size': 32,
@@ -1096,7 +1096,7 @@ def run_single_case(
         'dataset': case_config.dataset,
         'model': case_config.model_type,
         'fe_tag': case_config.fe_tag,
-        'hussain_variant': case_config.hussain,
+        'dl_baseline_variant': case_config.hussain,
         'fe_config': case_config.fe_params,
         'split_date': split_date_str,
         'horizons': case_config.li_forecast_horizons,
@@ -1305,9 +1305,9 @@ def old_main():
     execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
     # Hussain et al. (2025) article-variant models
-    #execute_hussain_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
-    #execute_hussain_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
-    #execute_hussain_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    #execute_dl_baseline_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    #execute_dl_baseline_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+    #execute_dl_baseline_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
 
 if __name__ == "__main__":

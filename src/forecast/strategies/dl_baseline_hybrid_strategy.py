@@ -82,7 +82,7 @@ class HussainHybridModelStrategy(KerasTimeSeriesBaseStrategy):
 
     @property
     def _params_key(self) -> str:
-        return 'hussain_hybrid_params'
+        return 'dl_baseline_hybrid_params'
 
     @property
     def _strategy_display_name(self) -> str:

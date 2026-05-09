@@ -29,9 +29,9 @@ _MODEL_DISPLAY = {
     'hybrid':                'Hybrid (LSTM+Transformer)',
     'lightgbm':              'LightGBM',
     'xgboost':               'XGBoost',
-    'hussain_lstm':          'LSTM (Hussain et al.)',
-    'hussain_transformer':   'Transformer (Hussain et al.)',
-    'hussain_hybrid':        'Hybrid (Hussain et al.)',
+    'dl_baseline_lstm':          'LSTM (Hussain et al.)',
+    'dl_baseline_transformer':   'Transformer (Hussain et al.)',
+    'dl_baseline_hybrid':        'Hybrid (Hussain et al.)',
 }
 
 _FE_TAG_DISPLAY = {
@@ -97,7 +97,7 @@ def generate_case_latex(
     horizons = metadata.get('horizons', [])
     metrics_by_horizon: Dict[str, dict] = metadata.get('metrics', {})
     health = metadata.get('health', {})
-    hussain = metadata.get('hussain_variant', False)
+    hussain = metadata.get('dl_baseline_variant', False)
 
     model_display = _MODEL_DISPLAY.get(model, model)
     fe_display = _FE_TAG_DISPLAY.get(fe_tag, fe_tag)
@@ -155,7 +155,7 @@ def generate_case_latex(
     else:
         lb_note = ''
 
-    hussain_note = (
+    dl_baseline_note = (
         r' \textbf{Variante arquitectónica:} Hussain et al.\ (2025).'
         if hussain else ''
     )
@@ -236,7 +236,7 @@ def generate_case_latex(
         '',
         rf'\subsection{{{_escape(model_display)} --- {_escape(fe_display)}}}\label{{subsec:{label}}}',
         '',
-        rf'\paragraph{{Configuración}} {fe_summary}.{lb_note}{hussain_note}',
+        rf'\paragraph{{Configuración}} {fe_summary}.{lb_note}{dl_baseline_note}',
         rf'Fecha de corte train/test: \texttt{{{split_date}}}.',
         rf'Horizontes evaluados: {", ".join(str(h) + "d" for h in horizons)}.',
         '',

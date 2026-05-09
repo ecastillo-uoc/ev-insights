@@ -23,9 +23,9 @@ from .lightgbm_strategy import LightGBMModelStrategy
 from .xgboost_strategy import XGBoostModelStrategy
 from .lstm_strategy import LSTMModelStrategy
 from .transformer_strategy import TransformerModelStrategy
-from .hussain_lstm_strategy import HussainLSTMModelStrategy
-from .hussain_transformer_strategy import HussainTransformerModelStrategy
-from .hussain_hybrid_strategy import HussainHybridModelStrategy
+from .dl_baseline_lstm_strategy import HussainLSTMModelStrategy
+from .dl_baseline_transformer_strategy import HussainTransformerModelStrategy
+from .dl_baseline_hybrid_strategy import HussainHybridModelStrategy
 from .hybrid_strategy import HybridTransformerLSTMModelStrategy
 
 __all__ = [

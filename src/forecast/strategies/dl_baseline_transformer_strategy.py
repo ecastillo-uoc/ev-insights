@@ -44,7 +44,7 @@ class HussainTransformerModelStrategy(KerasTimeSeriesBaseStrategy):
 
     @property
     def _params_key(self) -> str:
-        return 'hussain_transformer_params'
+        return 'dl_baseline_transformer_params'
 
     @property
     def _strategy_display_name(self) -> str:

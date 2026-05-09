@@ -32,7 +32,7 @@ class ModelStrategyType(Enum):
     XGBOOST = "xgboost"
     LSTM = "lstm"
     TRANSFORMER = "transformer"
-    HUSSAIN_TRANSFORMER = "hussain_transformer"
+    HUSSAIN_TRANSFORMER = "dl_baseline_transformer"
     HYBRID_TRANSFORMER_LSTM = "hybrid_transformer_lstm"
 
 # Registry dictionary

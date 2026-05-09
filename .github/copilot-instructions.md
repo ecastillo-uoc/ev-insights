@@ -20,7 +20,7 @@ description, or parameter value matches the actual code.
 | **Model architecture detail** | `src/forecast/strategies/.instructions.md` | exact layers + defaults |
 | **Training pipeline** | `src/forecast/pipeline.py` | `run_forecast_pipeline()` |
 | **Experiment configurations** | `src/tfm/tfm_forecast.py` | `execute_*`, `get_dataset_config()` |
-| **Hussain et al. reproduction** | `src/forecast/strategies/hussain_*.py` | article-faithful variants |
+| **Hussain et al. reproduction** | `src/forecast/strategies/dl_baseline_*.py` | article-faithful variants |
 | **Results / metrics** | `output_metrics/forecast_metrics.csv` | per-model metric table |
 | **Algorithm correctness** | `tfm/doc/algorithm_correctness_review.md` | formal audit |
 | **Dundee tariff analysis** | `tfm/doc/dundee-analysis.md` | dataset-specific context |
@@ -69,12 +69,12 @@ description, or parameter value matches the actual code.
 ### Hussain Transformer (article-faithful)
 - `Dense(64,relu) → MHA(dropout=0.2) → GAP → Dense(1)`
 - **No residuals, no LN, no FF block** — matches Fig. 3 of paper
-- Verified in `hussain_transformer_strategy.py:build_model()`
+- Verified in `dl_baseline_transformer_strategy.py:build_model()`
 
 ### Hussain Hybrid (article-faithful)
 - Encoder+Decoder: `LSTM → SinPE → MHA → LN → Drop` (no residuals)
 - Sinusoidal PE: Vaswani 2017 Eq. 3, added via `Lambda` layer
-- Verified in `hussain_hybrid_strategy.py:build_model()`
+- Verified in `dl_baseline_hybrid_strategy.py:build_model()`
 
 ### Feature Engineering (forward/inverse order)
 - Forward: `log1p → RevIN → diff(7)`  ← **order matters**
@@ -90,10 +90,10 @@ description, or parameter value matches the actual code.
 |-----------|--------------|----------|
 | `look_back = 28` (fixed) for our models vs. Hussain's `look_back = h` | Decouples context from horizon; avoids anchoring predictions to stale regime | `tfm_forecast.py:LOOK_BACK_DAYS` |
 | `look_back = max(14, h)` for Hussain variants (not exactly `h`) | Floor prevents very short context on small horizons | `tfm_forecast.py:MIN_LOOK_BACK` |
-| Our Hybrid has residual connections; Hussain Hybrid does not | Hussain et al. variant exists for faithful reproduction; our variant follows Vaswani 2017 | `hybrid_strategy.py` vs. `hussain_hybrid_strategy.py` |
+| Our Hybrid has residual connections; Hussain Hybrid does not | Hussain et al. variant exists for faithful reproduction; our variant follows Vaswani 2017 | `hybrid_strategy.py` vs. `dl_baseline_hybrid_strategy.py` |
 | COVID excluded from our training; included in Hussain splits | Article methodology uses COVID data; ours avoids artificial zero contamination | `get_dataset_config(hussain=True/False)` |
-| Paper "MSE" column ≈ numerically close to MAE → interpreted as RMSE | Mislabelling; RMSE is the correct comparison target | Note in `hussain_transformer_strategy.py` docstring |
-| `GlobalAveragePooling1D` in Hussain Transformer uses `channels_last` | Pools over temporal dimension (correct); `channels_first` would pool over features (wrong) | `hussain_transformer_strategy.py` comment |
+| Paper "MSE" column ≈ numerically close to MAE → interpreted as RMSE | Mislabelling; RMSE is the correct comparison target | Note in `dl_baseline_transformer_strategy.py` docstring |
+| `GlobalAveragePooling1D` in Hussain Transformer uses `channels_last` | Pools over temporal dimension (correct); `channels_first` would pool over features (wrong) | `dl_baseline_transformer_strategy.py` comment |
 
 ---
 

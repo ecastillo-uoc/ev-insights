@@ -69,6 +69,20 @@
                 "TF_XLA_FLAGS": "--tf_xla_enable_xla_devices=false"
             }
         },
+        {
+            "group": "TFM",
+            "name": "TFM forecast - no loop",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "/home/ecastillo/dev/M2_882_TFM/venv311tfm/bin/python",
+            "program": "${workspaceFolder}/src/tfm/tfm_forecast.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}",
+                "TF_XLA_FLAGS": "--tf_xla_enable_xla_devices=false"
+            }
+        },
                 {
             "group": "TFM",
             "name": "TFM results table",

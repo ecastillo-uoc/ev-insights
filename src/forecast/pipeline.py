@@ -92,9 +92,9 @@ _STRATEGY_REGISTRY: Dict[str, tuple] = {
     'lightgbm':             (LightGBMModelStrategy,                 'lgbm_params'),
     'xgboost':              (XGBoostModelStrategy,                  'xgb_params'),
     'hybrid':               (HybridTransformerLSTMModelStrategy,    'hybrid_params'),
-    'hussain_lstm':         (HussainLSTMModelStrategy,              'lstm_params'),
-    'hussain_transformer':  (HussainTransformerModelStrategy,       'hussain_transformer_params'),
-    'hussain_hybrid':       (HussainHybridModelStrategy,            'hussain_hybrid_params'),
+    'dl_baseline_lstm':         (HussainLSTMModelStrategy,              'lstm_params'),
+    'dl_baseline_transformer':  (HussainTransformerModelStrategy,       'dl_baseline_transformer_params'),
+    'dl_baseline_hybrid':       (HussainHybridModelStrategy,            'dl_baseline_hybrid_params'),
     'lstm':                 (LSTMModelStrategy,                     'lstm_params'),
 }
 
@@ -587,7 +587,7 @@ def run_forecast_pipeline(
                     # Hussain variants are article reproductions with
                     # schedule-mode prediction; rolling retraining would
                     # change their semantics and is excluded by design.
-                    'hussain_lstm', 'hussain_transformer', 'hussain_hybrid',
+                    'dl_baseline_lstm', 'dl_baseline_transformer', 'dl_baseline_hybrid',
                 )
             ):
                 look_back = strategy_params.get('look_back', 28)

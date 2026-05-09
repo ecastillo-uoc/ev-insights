@@ -36,11 +36,11 @@ _RESULTS_DIR = (
 _DEFAULT_OUT = Path(__file__).resolve().parents[3] / "tfm" / "doc" / "vf" / "ev_insights_results.html"
 
 # Canonical ordering so tables are reproducible
-_DATASET_ORDER = ["ACN_Caltech", "Dundee", "ACN_JPL"]
+_DATASET_ORDER = ["Dundee", "ACN_Caltech", "ACN_JPL"]
 _MODEL_ORDER = [
     "lightgbm", "xgboost",
     "lstm", "transformer", "hybrid",
-    "hussain_lstm", "hussain_transformer", "hussain_hybrid",
+    "dl_baseline_lstm", "dl_baseline_transformer", "dl_baseline_hybrid",
 ]
 # Canonical component ordering — position in this list is the sort key within
 # a tier.  Any component not listed sorts after all known ones.

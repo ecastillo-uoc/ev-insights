@@ -36,6 +36,27 @@ _configure_gpu()
 from .interfaces import ModelStrategy
 
 
+def _sinusoidal_pe(seq_len: int, d_model: int) -> np.ndarray:
+    """Sinusoidal positional encoding matrix of shape ``(seq_len, d_model)``.
+
+    Follows Vaswani et al. (2017) Eq. 3::
+
+      PE(pos, 2i)   = sin(pos / 10000^(2i/d_model))
+      PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))
+
+    Parameterised by *seq_len* (= look_back) so the matrix always matches
+    the context window used at training and prediction time.
+    """
+    positions = np.arange(seq_len)[:, np.newaxis]
+    dims = np.arange(d_model)[np.newaxis, :]
+    angle_rates = 1 / np.power(10_000.0, (2 * (dims // 2)) / d_model)
+    angle_rads = positions * angle_rates
+    pe = np.zeros_like(angle_rads)
+    pe[:, 0::2] = np.sin(angle_rads[:, 0::2])
+    pe[:, 1::2] = np.cos(angle_rads[:, 1::2])
+    return pe.astype(np.float32)
+
+
 class KerasTimeSeriesBaseStrategy(ModelStrategy):
     """Template-method base for univariate Keras time-series strategies.
 
@@ -736,16 +757,19 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         """
         model = self.build_model(input_shape, **strategy_params)
 
-        # Optional Keras callbacks — enabled by strategy_params flags.
-        # Hussain et al. (2025) use ReduceLROnPlateau and EarlyStopping.
+        # Optional Keras callbacks.  When validation_split > 0 the monitor
+        # switches to 'val_loss' so EarlyStopping/ReduceLROnPlateau see
+        # held-out data and cannot over-fit to training loss.
+        validation_split = strategy_params.get('validation_split', 0.0)
+        monitor = 'val_loss' if validation_split > 0 else 'loss'
         callbacks = []
         if strategy_params.get('use_lr_scheduler', False):
             callbacks.append(ReduceLROnPlateau(
-                monitor='loss', patience=10, factor=0.5, min_lr=1e-6, verbose=0,
+                monitor=monitor, patience=10, factor=0.5, min_lr=1e-6, verbose=0,
             ))
         if strategy_params.get('use_early_stopping', False):
             callbacks.append(EarlyStopping(
-                monitor='loss', patience=20, restore_best_weights=True, verbose=0,
+                monitor=monitor, patience=20, restore_best_weights=True, verbose=0,
             ))
 
         self.logger.info(
@@ -754,6 +778,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         )
         model.fit(
             X, y, epochs=epochs, batch_size=batch_size, verbose=0,
+            validation_split=validation_split,
             callbacks=callbacks if callbacks else None,
         )
         return model
