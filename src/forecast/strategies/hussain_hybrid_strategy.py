@@ -52,6 +52,7 @@ from keras.layers import (
     LSTM as KerasLSTM,
     MultiHeadAttention, LayerNormalization,
 )
+from sklearn.preprocessing import MinMaxScaler
 
 from .base_keras import KerasTimeSeriesBaseStrategy
 
@@ -86,6 +87,11 @@ class HussainHybridModelStrategy(KerasTimeSeriesBaseStrategy):
     @property
     def _strategy_display_name(self) -> str:
         return 'Hussain Hybrid'
+
+    @property
+    def _scaler_class(self):
+        """Article Table 1: scaler=MinMaxScaler."""
+        return MinMaxScaler
 
     def build_model(
         self,

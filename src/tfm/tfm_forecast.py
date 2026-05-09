@@ -30,7 +30,7 @@ applied uniformly to **all** strategies:
 
 * ``use_log_transform``  — ``log1p`` / ``expm1`` round-trip on target
 * ``use_differencing``   — first-order diff / per-date reconstruction
-* ``use_calendar_features`` — day-of-week, month, sin/cos, business day
+* ``use_calendar_features`` — day-of-week sin/cos encoding and business day indicator
 
 All default to ``False`` so existing behaviour is unchanged.  They can be
 combined freely, yielding up to 8 experiment configurations.
@@ -632,10 +632,11 @@ ALL_MODELS: List[str] = [
 ]
 ALL_FE_TAGS: List[str] = [
     '',
-    'revin',
-    'log', 
+    #'revin',
+    #'log', 
     'cal', 
-    'log_revin',
+    'revin_cal',
+    #'log_revin',
     'log_cal', 
     'log_revin_cal',
 
@@ -755,6 +756,13 @@ FE_VARIANTS: Dict[str, dict] = {
         'use_log_transform': False,
         'use_differencing': False,
         'use_calendar_features': False,
+        'use_window_norm': True,
+        'window_norm_days': 28,
+    },
+    'revin_cal': {
+        'use_log_transform': False,
+        'use_differencing': False,
+        'use_calendar_features': True,
         'use_window_norm': True,
         'window_norm_days': 28,
     },
@@ -1381,4 +1389,4 @@ if __name__ == "__main__":
     else:
         # ── Default: run everything in-process (original behaviour) ─────────
         print("Running all cases with MLflow tracking URI:", MLFLOW_TRACKING_URI)
-        run_all_cases(skip_existing=True, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+        run_all_cases(skip_existing=False, mlflow_tracking_uri=MLFLOW_TRACKING_URI)

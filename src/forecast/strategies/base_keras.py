@@ -66,6 +66,16 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
     def build_model(self, input_shape: Tuple[int, ...], **kwargs):
         """Construct and compile a Keras ``Model`` for the given *input_shape*."""
 
+    @property
+    def _scaler_class(self):
+        """Sklearn scaler class used to normalise sequences.
+
+        Override in subclasses to use a different scaler.
+        Default: ``RobustScaler`` (our models).
+        Hussain et al. variants override this to ``MinMaxScaler``.
+        """
+        return RobustScaler
+
     # ------------------------------------------------------------------
     # Shared train helpers
     # ------------------------------------------------------------------
@@ -132,8 +142,9 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
         data: np.ndarray,
         look_back: int,
         forecast_horizon: int = 1,
-    ) -> Tuple[np.ndarray, np.ndarray, RobustScaler, RobustScaler]:
-        """MinMax-scale *data* and build sliding-window sequences.
+        scaler_class=None,
+    ) -> Tuple[np.ndarray, np.ndarray, Any, Any]:
+        """Scale *data* and build sliding-window sequences.
 
         Supports multivariate input: *data* may have shape ``(n, k)`` where
         ``k >= 1``.  X windows include **all** columns while y targets use
@@ -167,11 +178,13 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             predictions back to the original target scale.  When
             ``n_features == 1`` this is functionally identical to *scaler*.
         """
-        scaler = RobustScaler()
+        if scaler_class is None:
+            scaler_class = RobustScaler
+        scaler = scaler_class()
         scaled_data = scaler.fit_transform(data)
 
         # Separate scaler for inverse-transforming single-column predictions
-        target_scaler = RobustScaler()
+        target_scaler = scaler_class()
         target_scaler.fit(data[:, 0:1])
 
         n_cols = data.shape[1]
@@ -666,6 +679,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                 )
                 X, y, scaler, target_scaler = self._scale_and_create_sequences(
                     data, look_back, forecast_horizon=output_steps,
+                    scaler_class=self._scaler_class,
                 )
 
                 if len(X) == 0:
@@ -787,6 +801,7 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
 
         X, y, new_scaler, new_target_scaler = self._scale_and_create_sequences(
             data, look_back, forecast_horizon=1,
+            scaler_class=self._scaler_class,
         )
         if len(X) == 0:
             self.logger.warning(

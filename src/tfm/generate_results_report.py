@@ -190,6 +190,14 @@ tr:hover td { filter: brightness(0.94); }
 .fe-col-missing { background: #f5f5f5 !important; }
 .no-data { color: #aaa; font-size: 10px; }
 
+/* ── Best-in-class highlight ── */
+td.best-cell { outline: 2px solid #c0932a; outline-offset: -2px; position: relative; }
+td.best-cell::after {
+  content: "★";
+  position: absolute; top: 1px; right: 3px;
+  font-size: 9px; color: #c0932a; line-height: 1;
+}
+
 .summary-bar { display: flex; gap: 24px; margin-bottom: 20px; flex-wrap: wrap; }
 .summary-card { background: #fff; border: 1px solid #ddd; border-radius: 6px;
                 padding: 10px 16px; text-align: center; min-width: 100px; }
@@ -255,6 +263,7 @@ def _cell(
     rmse: float | None,
     smape: float | None,
     ds: str = "", mdl: str = "", fe: str = "", h: int = 0,
+    is_best: bool = False,
 ) -> str:
     is_dundee = (ds == "Dundee")
     if is_dundee:
@@ -272,8 +281,9 @@ def _cell(
     mase_str  = f"{mase:.3f}"   if mase  is not None and not math.isnan(mase)  else "—"
     avp, tts, zoom = _img_paths(ds, mdl, fe, h) if ds else ("", "", "")
     title = f"{ds} / {mdl} / {fe or '(baseline)'} — {h}d"
+    extra_class = " best-cell" if is_best else ""
     data = (
-        f' class="clickable"'
+        f' class="clickable{extra_class}"'
         f' data-case="{ds}_{mdl}_{fe}"'
         f' data-horizon="{h}"'
         f' data-avp="{avp}"'
@@ -340,6 +350,29 @@ def build_html(records: list[dict]) -> str:
     models   = [m for m in _MODEL_ORDER if m in models_seen] + \
                sorted(models_seen - set(_MODEL_ORDER))
 
+    # ── Best (model, fe) per (dataset, horizon) by primary metric
+    # key: (ds, h) → (best_mdl, best_fe)
+    best_combo: dict[tuple, tuple[str, str]] = {}
+    for ds in datasets:
+        for h in _HORIZONS:
+            is_dundee = (ds == "Dundee")
+            best_val: float | None = None
+            best_pair: tuple[str, str] | None = None
+            for mdl in models:
+                for fe in fe_cols:
+                    entry = data.get((ds, mdl, fe, h))
+                    if entry is None:
+                        continue
+                    mase, _rmse, smape = entry
+                    primary = smape if is_dundee else mase
+                    if primary is None or math.isnan(primary):
+                        continue
+                    if best_val is None or primary < best_val:
+                        best_val = primary
+                        best_pair = (mdl, fe)
+            if best_pair is not None:
+                best_combo[(ds, h)] = best_pair
+
     # ── Summary stats (MASE-based)
     total_cases  = len(records)
     valid_mases  = [v[0] for v in data.values() if v[0] is not None and not math.isnan(v[0])]
@@ -397,6 +430,7 @@ def build_html(records: list[dict]) -> str:
   <div class="legend-item"><div class="legend-swatch" style="background:#ffd580"></div>1.0 ≤ MASE &lt; 1.5 (worse than naïve)</div>
   <div class="legend-item"><div class="legend-swatch" style="background:#f4b3b3"></div>MASE ≥ 1.5 (much worse than naïve)</div>
   <div class="legend-item"><div class="legend-swatch" style="background:#e0e0e0"></div>No result</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#fff;outline:2px solid #c0932a;outline-offset:-2px"></div>★ Best per dataset &amp; horizon</div>
 </div>
 """)
 
@@ -434,7 +468,8 @@ def build_html(records: list[dict]) -> str:
                     key = (ds, mdl, fe, h)
                     if key in data:
                         mase, rmse, smape = data[key]
-                        parts.append(_cell(mase, rmse, smape, ds, mdl, fe, h))
+                        is_best = best_combo.get((ds, h)) == (mdl, fe)
+                        parts.append(_cell(mase, rmse, smape, ds, mdl, fe, h, is_best=is_best))
                     else:
                         parts.append('<td class="fe-col-missing"><span class="no-data">—</span></td>')
                 parts.append('</tr>')

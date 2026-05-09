@@ -34,6 +34,7 @@ from keras.optimizers import Adam
 from keras.layers import (
     Input, Dense, MultiHeadAttention, GlobalAveragePooling1D,
 )
+from sklearn.preprocessing import MinMaxScaler
 
 from .base_keras import KerasTimeSeriesBaseStrategy
 
@@ -48,6 +49,11 @@ class HussainTransformerModelStrategy(KerasTimeSeriesBaseStrategy):
     @property
     def _strategy_display_name(self) -> str:
         return 'Hussain Transformer'
+
+    @property
+    def _scaler_class(self):
+        """Article Table 1: scaler=MinMaxScaler."""
+        return MinMaxScaler
 
     def build_model(
         self,

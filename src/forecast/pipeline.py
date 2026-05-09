@@ -58,6 +58,7 @@ from src.forecast.model_persistence import save_model
 from src.forecast.strategies import (
     HussainHybridModelStrategy,
     HussainTransformerModelStrategy,
+    HussainLSTMModelStrategy,
     HybridTransformerLSTMModelStrategy,
     LightGBMModelStrategy,
     LSTMModelStrategy,
@@ -91,7 +92,7 @@ _STRATEGY_REGISTRY: Dict[str, tuple] = {
     'lightgbm':             (LightGBMModelStrategy,                 'lgbm_params'),
     'xgboost':              (XGBoostModelStrategy,                  'xgb_params'),
     'hybrid':               (HybridTransformerLSTMModelStrategy,    'hybrid_params'),
-    'hussain_lstm':         (LSTMModelStrategy,                     'lstm_params'),
+    'hussain_lstm':         (HussainLSTMModelStrategy,              'lstm_params'),
     'hussain_transformer':  (HussainTransformerModelStrategy,       'hussain_transformer_params'),
     'hussain_hybrid':       (HussainHybridModelStrategy,            'hussain_hybrid_params'),
     'lstm':                 (LSTMModelStrategy,                     'lstm_params'),
