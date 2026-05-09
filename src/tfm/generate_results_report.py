@@ -97,25 +97,34 @@ _EVAL_STRATEGY_ORDER = ["direct", "recursive", "mimo"]
 
 # ── Image path helper ─────────────────────────────────────────────────────────
 
-def _img_paths(ds: str, mdl: str, fe: str, h: int, eval_strategy: str) -> tuple[str, str, str]:
-    """Return (avp, tts, zoom) paths relative to the HTML output file.
+def _img_paths(ds: str, mdl: str, fe: str, h: int, eval_strategy: str) -> tuple[str, str, str, str]:
+    """Return (avp, tts, zoom, win) paths relative to the HTML output file.
 
     case_id always includes eval_strategy (matches CaseConfig.case_id).
     model_name mirrors pipeline.py: ``{mdl}_{h}d_{ds}_{eval_strategy}``.
-    Tree models (direct) call plot_test_vs_predict → no trailing eval suffix.
-    Neural models (recursive/mimo) call plot_test_vs_predict_multistep → adds
-    ``_{eval_strategy}`` suffix to the avp filename.
+
+    direct   → avp = plot_test_vs_predict (no trailing eval suffix); win = ""
+    recursive/mimo → avp = plot_test_vs_predict_multistep (_{eval_strategy} suffix);
+                     win = plot_test_vs_predict of a single representative window
+                           (``{model_name}_window_sample``, no extra suffix).
     """
     case_id    = f"{ds}_{mdl}_{fe}_{eval_strategy}"
     base       = f"chapters/results/{case_id}/{ds}"
     model_name = f"{mdl}_{h}d_{ds}_{eval_strategy}"
-    # direct → plot_test_vs_predict (no extra suffix)
+    # direct → plot_test_vs_predict (no extra suffix); no window sample
     # recursive / mimo → plot_test_vs_predict_multistep (adds _{eval_strategy})
-    avp_suffix = "" if eval_strategy == "direct" else f"_{eval_strategy}"
+    #                    + a window-sample plot saved by plot_test_vs_predict
+    if eval_strategy == "direct":
+        avp = f"{base}_actual_vs_predict_{model_name}_{h}days.png"
+        win = ""
+    else:
+        avp = f"{base}_actual_vs_predict_{model_name}_{h}days_{eval_strategy}.png"
+        win = f"{base}_actual_vs_predict_{model_name}_window_sample_{h}days.png"
     return (
-        f"{base}_actual_vs_predict_{model_name}_{h}days{avp_suffix}.png",
+        avp,
         f"{base}_train_test_split_{model_name}_{h}days.png",
         f"{base}_train_test_split_{model_name}_{h}days_zoom.png",
+        win,
     )
 
 
@@ -300,7 +309,7 @@ def _cell(
     rmse_str  = f"{rmse:.1f}"   if rmse  is not None and not math.isnan(rmse)  else "—"
     smape_str = f"{smape:.1f}%" if smape is not None and not math.isnan(smape) else "—"
     mase_str  = f"{mase:.3f}"   if mase  is not None and not math.isnan(mase)  else "—"
-    avp, tts, zoom = _img_paths(ds, mdl, fe, h, eval_strategy) if ds else ("", "", "")
+    avp, tts, zoom, win = _img_paths(ds, mdl, fe, h, eval_strategy) if ds else ("", "", "", "")
     title = f"{ds} / {mdl} / {fe or '(baseline)'} / {eval_strategy} — {h}d"
     extra_class = " best-cell" if is_best else ""
     data = (
@@ -310,6 +319,7 @@ def _cell(
         f' data-avp="{avp}"'
         f' data-tts="{tts}"'
         f' data-zoom="{zoom}"'
+        f' data-win="{win}"'
         f' data-title="{title}"'
     )
     if is_dundee:
@@ -538,6 +548,7 @@ def build_html(records: list[dict]) -> str:
     </div>
     <div id="lb-tabs">
       <button class="lb-tab active" data-type="avp">Actual vs Predicted</button>
+      <button class="lb-tab" id="lb-tab-win" data-type="win">Window Sample</button>
       <button class="lb-tab" data-type="tts">Train / Test Split</button>
       <button class="lb-tab" data-type="zoom">Split Zoom</button>
     </div>
@@ -568,10 +579,12 @@ def build_html(records: list[dict]) -> str:
       avp:   td.dataset.avp,
       tts:   td.dataset.tts,
       zoom:  td.dataset.zoom,
+      win:   td.dataset.win || '',
       title: td.dataset.title,
     };
   });
 
+  const tabWin = document.getElementById('lb-tab-win');
   let curCase = null, curH = null, curType = 'avp';
 
   const overlay  = document.getElementById('lb-overlay');
@@ -607,6 +620,16 @@ def build_html(records: list[dict]) -> str:
 
   function open(caseId, h) {
     curCase = caseId; curH = h;
+    // Show/hide the Window Sample tab depending on whether this case has a win path
+    const info = (imgData[caseId] || {})[h];
+    const hasWin = info && info.win;
+    tabWin.style.display = hasWin ? '' : 'none';
+    // If current tab is 'win' but this case has no window sample, reset to 'avp'
+    if (curType === 'win' && !hasWin) {
+      curType = 'avp';
+      document.querySelectorAll('.lb-tab').forEach(b => b.classList.remove('active'));
+      document.querySelector('.lb-tab[data-type="avp"]').classList.add('active');
+    }
     render();
     overlay.classList.add('open');
   }
