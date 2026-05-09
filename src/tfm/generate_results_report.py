@@ -91,21 +91,29 @@ def load_all_metadata(results_dir: Path) -> list[dict]:
     return records
 
 
+# ── Eval-strategy ordering ───────────────────────────────────────────────────
+_EVAL_STRATEGY_ORDER = ["direct", "recursive", "mimo"]
+
+
 # ── Image path helper ─────────────────────────────────────────────────────────
 
-def _img_paths(ds: str, mdl: str, fe: str, h: int, eval_strategy: str | None = None) -> tuple[str, str, str]:
-    """Return (avp, tts, zoom) paths relative to the HTML output file."""
-    case_id = f"{ds}_{mdl}_{fe}_{eval_strategy}" if eval_strategy else f"{ds}_{mdl}_{fe}"
-    base    = f"chapters/results/{case_id}/{ds}"
-    # Plot filenames join model name parts after the first component without
-    # underscores: e.g. "dl_baseline_transformer" → "dl_baselinetransformer"
-    _mdl_parts = mdl.split("_")
-    mdl_filename = (_mdl_parts[0] + "_" + "".join(_mdl_parts[1:])) if len(_mdl_parts) > 1 else mdl
-    eval_sfx = f"_{eval_strategy}" if eval_strategy and h > 1 else ""
-    model_name = f"{mdl_filename}_{h}d_{ds}_{eval_strategy}" if eval_strategy else f"{mdl_filename}_{h}d_{ds}"
-    suffix  = f"{model_name}_{h}days"
+def _img_paths(ds: str, mdl: str, fe: str, h: int, eval_strategy: str) -> tuple[str, str, str]:
+    """Return (avp, tts, zoom) paths relative to the HTML output file.
+
+    case_id always includes eval_strategy (matches CaseConfig.case_id).
+    model_name mirrors pipeline.py: ``{mdl}_{h}d_{ds}_{eval_strategy}``.
+    Tree models (direct) call plot_test_vs_predict → no trailing eval suffix.
+    Neural models (recursive/mimo) call plot_test_vs_predict_multistep → adds
+    ``_{eval_strategy}`` suffix to the avp filename.
+    """
+    case_id    = f"{ds}_{mdl}_{fe}_{eval_strategy}"
+    base       = f"chapters/results/{case_id}/{ds}"
+    model_name = f"{mdl}_{h}d_{ds}_{eval_strategy}"
+    # direct → plot_test_vs_predict (no extra suffix)
+    # recursive / mimo → plot_test_vs_predict_multistep (adds _{eval_strategy})
+    avp_suffix = "" if eval_strategy == "direct" else f"_{eval_strategy}"
     return (
-        f"{base}_actual_vs_predict_{model_name}_{h}days{eval_sfx}.png",
+        f"{base}_actual_vs_predict_{model_name}_{h}days{avp_suffix}.png",
         f"{base}_train_test_split_{model_name}_{h}days.png",
         f"{base}_train_test_split_{model_name}_{h}days_zoom.png",
     )
@@ -275,6 +283,7 @@ def _cell(
     rmse: float | None,
     smape: float | None,
     ds: str = "", mdl: str = "", fe: str = "", h: int = 0,
+    eval_strategy: str = "",
     is_best: bool = False,
 ) -> str:
     is_dundee = (ds == "Dundee")
@@ -291,12 +300,12 @@ def _cell(
     rmse_str  = f"{rmse:.1f}"   if rmse  is not None and not math.isnan(rmse)  else "—"
     smape_str = f"{smape:.1f}%" if smape is not None and not math.isnan(smape) else "—"
     mase_str  = f"{mase:.3f}"   if mase  is not None and not math.isnan(mase)  else "—"
-    avp, tts, zoom = _img_paths(ds, mdl, fe, h) if ds else ("", "", "")
-    title = f"{ds} / {mdl} / {fe or '(baseline)'} — {h}d"
+    avp, tts, zoom = _img_paths(ds, mdl, fe, h, eval_strategy) if ds else ("", "", "")
+    title = f"{ds} / {mdl} / {fe or '(baseline)'} / {eval_strategy} — {h}d"
     extra_class = " best-cell" if is_best else ""
     data = (
         f' class="clickable{extra_class}"'
-        f' data-case="{ds}_{mdl}_{fe}"'
+        f' data-case="{ds}_{mdl}_{fe}_{eval_strategy}"'
         f' data-horizon="{h}"'
         f' data-avp="{avp}"'
         f' data-tts="{tts}"'
@@ -332,26 +341,29 @@ def _cell(
 
 
 def build_html(records: list[dict]) -> str:
-    # ── Index data: (dataset, model, fe_tag, horizon) → (mase, rmse, smape)
+    # ── Index data: (dataset, model, fe_tag, eval_strategy, horizon) → (mase, rmse, smape)
     data: dict[tuple, tuple[float | None, float | None, float | None]] = {}
     fe_tags_seen: set[str] = set()
     datasets_seen: set[str] = set()
     models_seen: set[str] = set()
+    eval_strategies_seen: set[str] = set()
 
     for rec in records:
         ds  = rec.get("dataset", "")
         mdl = rec.get("model", "")
         fe  = rec.get("fe_tag", "")
+        ev  = rec.get("eval_strategy", "direct")  # default for backward compat
         datasets_seen.add(ds)
         models_seen.add(mdl)
         fe_tags_seen.add(fe)
+        eval_strategies_seen.add(ev)
         metrics = rec.get("metrics", {})
         for h_key, m in metrics.items():
             h     = int(h_key.rstrip("d"))
             mase  = m.get("MASE")
             rmse  = m.get("RMSE")
             smape = m.get("SMAPE")
-            data[(ds, mdl, fe, h)] = (mase, rmse, smape)
+            data[(ds, mdl, fe, ev, h)] = (mase, rmse, smape)
 
     # Ordered columns (only those with at least one result).
     # Sorted dynamically by component count then canonical component order.
@@ -361,29 +373,32 @@ def build_html(records: list[dict]) -> str:
                sorted(datasets_seen - set(_DATASET_ORDER))
     models   = [m for m in _MODEL_ORDER if m in models_seen] + \
                sorted(models_seen - set(_MODEL_ORDER))
+    eval_strategies = [e for e in _EVAL_STRATEGY_ORDER if e in eval_strategies_seen] + \
+                      sorted(eval_strategies_seen - set(_EVAL_STRATEGY_ORDER))
 
-    # ── Best (model, fe) per (dataset, horizon) by primary metric
-    # key: (ds, h) → (best_mdl, best_fe)
+    # ── Best (model, fe) per (dataset, horizon, eval_strategy) by primary metric
+    # key: (ds, h, ev) → (best_mdl, best_fe)
     best_combo: dict[tuple, tuple[str, str]] = {}
     for ds in datasets:
         for h in _HORIZONS:
-            is_dundee = (ds == "Dundee")
-            best_val: float | None = None
-            best_pair: tuple[str, str] | None = None
-            for mdl in models:
-                for fe in fe_cols:
-                    entry = data.get((ds, mdl, fe, h))
-                    if entry is None:
-                        continue
-                    mase, _rmse, smape = entry
-                    primary = smape if is_dundee else mase
-                    if primary is None or math.isnan(primary):
-                        continue
-                    if best_val is None or primary < best_val:
-                        best_val = primary
-                        best_pair = (mdl, fe)
-            if best_pair is not None:
-                best_combo[(ds, h)] = best_pair
+            for ev in eval_strategies:
+                is_dundee = (ds == "Dundee")
+                best_val: float | None = None
+                best_pair: tuple[str, str] | None = None
+                for mdl in models:
+                    for fe in fe_cols:
+                        entry = data.get((ds, mdl, fe, ev, h))
+                        if entry is None:
+                            continue
+                        mase, _rmse, smape = entry
+                        primary = smape if is_dundee else mase
+                        if primary is None or math.isnan(primary):
+                            continue
+                        if best_val is None or primary < best_val:
+                            best_val = primary
+                            best_pair = (mdl, fe)
+                if best_pair is not None:
+                    best_combo[(ds, h, ev)] = best_pair
 
     # ── Summary stats (MASE-based)
     total_cases  = len(records)
@@ -393,6 +408,7 @@ def build_html(records: list[dict]) -> str:
     ok_cases     = sum(1 for v in valid_mases if 0.5 <= v < 1.0)
     orange_cases = sum(1 for v in valid_mases if 1.0 <= v < 1.5)
     red_cases    = sum(1 for v in valid_mases if v >= 1.5)
+    n_eval_strats = len(eval_strategies)
 
     # ── HTML assembly
     parts: list[str] = []
@@ -413,7 +429,8 @@ def build_html(records: list[dict]) -> str:
   {len(datasets)} datasets &nbsp;·&nbsp;
   {len(models)} models &nbsp;·&nbsp;
   {len(fe_cols)} FE variants &nbsp;·&nbsp;
-  {len(_HORIZONS)} horizons
+  {len(_HORIZONS)} horizons &nbsp;·&nbsp;
+  {n_eval_strats} eval strategies ({', '.join(eval_strategies)})
   &nbsp;·&nbsp; Primary metric: <strong>MASE</strong> (sMAPE for Dundee) &nbsp;·&nbsp; Secondary: <strong>RMSE + secondary metric</strong>
 </p>
 """)
@@ -447,47 +464,51 @@ def build_html(records: list[dict]) -> str:
 """)
     parts.append('</div>')  # close sticky-header
 
-    # One section per horizon
+    # One section per (horizon × eval_strategy)
     for h in _HORIZONS:
-        parts.append(f'<div class="horizon-section">')
-        parts.append(f'<h2>Horizon: {h} day{"s" if h > 1 else ""}</h2>')
-        parts.append('<table>')
-
-        # Header row
-        parts.append('<thead><tr>')
-        parts.append('<th class="row-header" style="min-width:220px">Dataset / Model</th>')
-        for fe in fe_cols:
-            parts.append(f'<th>{_fe_label(fe)}</th>')
-        parts.append('</tr></thead>')
-
-        parts.append('<tbody>')
-        for ds in datasets:
-            # Dataset separator row
-            n_cols = 1 + len(fe_cols)
+        for ev in eval_strategies:
+            parts.append(f'<div class="horizon-section">')
             parts.append(
-                f'<tr><td class="dataset-label" colspan="{n_cols}">{ds}</td></tr>'
+                f'<h2>Horizon: {h} day{"s" if h > 1 else ""} '
+                f'&mdash; <span style="font-weight:400;color:#555">{ev.upper()}</span></h2>'
             )
-            for mdl in models:
-                # Only show model row if it has at least one result for this dataset
-                has_any = any(
-                    (ds, mdl, fe, h) in data for fe in fe_cols
+            parts.append('<table>')
+
+            # Header row
+            parts.append('<thead><tr>')
+            parts.append('<th class="row-header" style="min-width:220px">Dataset / Model</th>')
+            for fe in fe_cols:
+                parts.append(f'<th>{_fe_label(fe)}</th>')
+            parts.append('</tr></thead>')
+
+            parts.append('<tbody>')
+            for ds in datasets:
+                # Dataset separator row
+                n_cols = 1 + len(fe_cols)
+                parts.append(
+                    f'<tr><td class="dataset-label" colspan="{n_cols}">{ds}</td></tr>'
                 )
-                if not has_any:
-                    continue
+                for mdl in models:
+                    # Only show model row if it has at least one result for this dataset+eval_strategy
+                    has_any = any(
+                        (ds, mdl, fe, ev, h) in data for fe in fe_cols
+                    )
+                    if not has_any:
+                        continue
 
-                parts.append('<tr>')
-                parts.append(f'<td class="row-header">&nbsp;&nbsp;{mdl}</td>')
-                for fe in fe_cols:
-                    key = (ds, mdl, fe, h)
-                    if key in data:
-                        mase, rmse, smape = data[key]
-                        is_best = best_combo.get((ds, h)) == (mdl, fe)
-                        parts.append(_cell(mase, rmse, smape, ds, mdl, fe, h, is_best=is_best))
-                    else:
-                        parts.append('<td class="fe-col-missing"><span class="no-data">—</span></td>')
-                parts.append('</tr>')
+                    parts.append('<tr>')
+                    parts.append(f'<td class="row-header">&nbsp;&nbsp;{mdl}</td>')
+                    for fe in fe_cols:
+                        key = (ds, mdl, fe, ev, h)
+                        if key in data:
+                            mase, rmse, smape = data[key]
+                            is_best = best_combo.get((ds, h, ev)) == (mdl, fe)
+                            parts.append(_cell(mase, rmse, smape, ds, mdl, fe, h, ev, is_best=is_best))
+                        else:
+                            parts.append('<td class="fe-col-missing"><span class="no-data">—</span></td>')
+                    parts.append('</tr>')
 
-        parts.append('</tbody></table></div>')
+            parts.append('</tbody></table></div>')
 
     # FE legend table
     parts.append('<h2>FE Variant Descriptions</h2>')

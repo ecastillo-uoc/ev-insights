@@ -648,9 +648,10 @@ _TFM_CHAPTERS_DIR = (
 )
 
 ALL_DATASETS: List[str] = [
+    'Dundee',
     'ACN_Caltech', 
     'ACN_JPL',
-    'Dundee',
+
 
     ]
 ALL_MODELS: List[str] = [
@@ -667,7 +668,7 @@ ALL_FE_TAGS: List[str] = [
     '',
     #'revin',
     #'log', 
-    #'cal', 
+    'cal',
     'revin_cal',
     #'log_revin',
     #'log_cal', 
