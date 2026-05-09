@@ -97,7 +97,11 @@ def _img_paths(ds: str, mdl: str, fe: str, h: int) -> tuple[str, str, str]:
     """Return (avp, tts, zoom) paths relative to the HTML output file."""
     case_id = f"{ds}_{mdl}_{fe}"
     base    = f"chapters/results/{case_id}/{ds}"
-    suffix  = f"{mdl}_{h}d_{ds}_{h}days"
+    # Plot filenames join model name parts after the first component without
+    # underscores: e.g. "dl_baseline_transformer" → "dl_baselinetransformer"
+    _mdl_parts = mdl.split("_")
+    mdl_filename = (_mdl_parts[0] + "_" + "".join(_mdl_parts[1:])) if len(_mdl_parts) > 1 else mdl
+    suffix  = f"{mdl_filename}_{h}d_{ds}_{h}days"
     return (
         f"{base}_actual_vs_predict_{suffix}.png",
         f"{base}_train_test_split_{suffix}.png",
