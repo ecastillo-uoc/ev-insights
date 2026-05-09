@@ -165,7 +165,7 @@ h1 { font-size: 1.4em; margin-bottom: 8px; }
 h2 { font-size: 1.1em; margin: 20px 0 6px; color: #444; }
 p.subtitle { color: #666; font-size: 0.9em; margin-bottom: 14px; }
 
-.legend { display: flex; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+.legend { display: flex; gap: 16px; margin-top: 8px; margin-bottom: 0; flex-wrap: wrap; }
 .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.9em; }
 .legend-swatch { width: 18px; height: 18px; border: 1px solid #bbb; border-radius: 3px; }
 
@@ -198,11 +198,17 @@ td.best-cell::after {
   font-size: 9px; color: #c0932a; line-height: 1;
 }
 
-.summary-bar { display: flex; gap: 24px; margin-bottom: 20px; flex-wrap: wrap; }
+.summary-bar { display: flex; gap: 24px; margin-bottom: 0; flex-wrap: wrap; }
 .summary-card { background: #fff; border: 1px solid #ddd; border-radius: 6px;
                 padding: 10px 16px; text-align: center; min-width: 100px; }
 .summary-card .num { font-size: 1.6em; font-weight: 700; }
 .summary-card .lbl { font-size: 0.8em; color: #666; }
+
+.sticky-header {
+  position: sticky; top: 0; z-index: 200;
+  background: #f5f5f5; padding: 12px 0 10px;
+  border-bottom: 2px solid #ddd; margin-bottom: 16px;
+}
 
 /* ── Lightbox ── */
 #lb-overlay {
@@ -393,7 +399,9 @@ def build_html(records: list[dict]) -> str:
   <style>{_CSS}</style>
 </head>
 <body>
+<div class="sticky-header">
 <h1>EV-Insights — Forecast Results Summary</h1>
+<p class="subtitle" style="margin-bottom:4px">Author: Eva Castillo</p>
 <p class="subtitle">
   {total_cases} experiment cases &nbsp;·&nbsp;
   {len(datasets)} datasets &nbsp;·&nbsp;
@@ -422,8 +430,6 @@ def build_html(records: list[dict]) -> str:
             f'</div>'
         )
     parts.append('</div>')
-
-    # Legend
     parts.append("""<div class="legend">
   <div class="legend-item"><div class="legend-swatch" style="background:#b7e4b7"></div>MASE &lt; 0.5 (beats naïve 2×)</div>
   <div class="legend-item"><div class="legend-swatch" style="background:#f0f8f0"></div>0.5 ≤ MASE &lt; 1.0 (better than naïve)</div>
@@ -433,6 +439,7 @@ def build_html(records: list[dict]) -> str:
   <div class="legend-item"><div class="legend-swatch" style="background:#fff;outline:2px solid #c0932a;outline-offset:-2px"></div>★ Best per dataset &amp; horizon</div>
 </div>
 """)
+    parts.append('</div>')  # close sticky-header
 
     # One section per horizon
     for h in _HORIZONS:
