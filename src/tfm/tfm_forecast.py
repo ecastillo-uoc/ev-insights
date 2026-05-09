@@ -356,9 +356,10 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
                 'look_back': look_back,
                 'li_forecast_horizons': [forecast_horizon],
                 'learning_rate': 0.001,
-                'd_model': 128,
+                'd_model': 64,
                 'num_heads': 4,
-                'ff_dim': 256,                 # FFN hidden dim; default = 2 × d_model
+                'ff_dim': 128,                 # FFN hidden dim = 2 × d_model
+                'num_transformer_blocks': 4,   # Universal Transformer depth (Dehghani 2019): free in params with weight tying
                 'dropout': 0.1,
                 'use_early_stopping': True,
                 'use_lr_scheduler': True,
@@ -627,10 +628,10 @@ _TFM_CHAPTERS_DIR = (
 )
 
 ALL_DATASETS: List[str] = [
+    'ACN_Caltech', 
     'ACN_JPL',
     'Dundee',
-    'ACN_Caltech', 
-    
+
     ]
 ALL_MODELS: List[str] = [
     'lightgbm',
@@ -897,9 +898,10 @@ def _build_strategy_params_for_case(
             'epochs': 100,
             'batch_size': 32,
             'learning_rate': 0.001,
-            'd_model': 128,
+            'd_model': 64,
             'num_heads': 4,
-            'ff_dim': 256,                 # FFN hidden dim = 2 × d_model
+            'ff_dim': 128,                 # FFN hidden dim = 2 × d_model
+            'num_transformer_blocks': 4,   # Universal Transformer depth (Dehghani 2019): free in params with weight tying
             'dropout': 0.1,
             'use_early_stopping': True,
             'use_lr_scheduler': True,
@@ -1426,4 +1428,4 @@ if __name__ == "__main__":
     else:
         # ── Default: run everything in-process (original behaviour) ─────────
         print("Running all cases with MLflow tracking URI:", MLFLOW_TRACKING_URI)
-        run_all_cases(skip_existing=False, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+        run_all_cases(skip_existing=True, mlflow_tracking_uri=MLFLOW_TRACKING_URI)

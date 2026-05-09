@@ -62,8 +62,10 @@ description, or parameter value matches the actual code.
 - Verified in `transformer_strategy.py:build_model()`
 
 ### Hybrid LSTM-Transformer (ours)
-- Encoder + Decoder each: `LSTM(d_model) → MHA → Add (residual) → LN`
-- **Has residual connections** — differs from Hussain variant
+- `Dense(d_model) + SinPE → LSTM(d_model) → [N=4 shared blocks: MHA → Add+LN → FFN → Add+LN] → GAP → Dense`
+- **Universal Transformer weight tying** (Dehghani ICLR 2019) — MHA/FFN/LN weights shared across N=4 depth passes (zero extra params vs N=2)
+- **No decoder** — encoder-only; decoder removed as it was circular (fed enc_out, attended back to enc_out)
+- d_model=64, ff_dim=128, ~70 800 params (7× lighter than old ~520 k)
 - Verified in `hybrid_strategy.py:build_model()`
 
 ### Hussain Transformer (article-faithful)
