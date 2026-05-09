@@ -114,7 +114,7 @@ def compute_calendar_row(date) -> dict:
         'day_of_week_cos': np.cos(2 * np.pi * ts.dayofweek / 7),
         #'day_of_year_sin': np.sin(2 * np.pi * ts.dayofyear / 365.25),
         #'day_of_year_cos': np.cos(2 * np.pi * ts.dayofyear / 365.25),
-        'is_business_day': int(pd.tseries.offsets.BDay().is_on_offset(ts)),
+        'is_business_day': int(ts.dayofweek < 5),
     }
 
 
@@ -140,9 +140,7 @@ def add_calendar_features(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
     df['day_of_week_cos'] = np.cos(2 * np.pi * df.index.dayofweek / 7)
     #df['day_of_year_sin'] = np.sin(2 * np.pi * df.index.dayofyear / 365.25)
     #df['day_of_year_cos'] = np.cos(2 * np.pi * df.index.dayofyear / 365.25)
-    df['is_business_day'] = df.index.map(
-        lambda x: int(pd.tseries.offsets.BDay().is_on_offset(x))
-    )
+    df['is_business_day'] = (df.index.dayofweek < 5).astype(int)
     return df, list(CALENDAR_FEATURE_COLS)
 
 

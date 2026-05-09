@@ -109,11 +109,11 @@ def plot_test_vs_predict(
     plt.plot(test.index, test['y'], label='Test (Actual)', linewidth=1.5, color='green')
     plt.plot(test.index, predictions, label='Predictions', linestyle='--', linewidth=1.5, color='red')
 
-    # Mark Monday (dayofweek == 0) with a small black dot on the actual line
-    mondays = test.index[test.index.dayofweek == 0]
-    if len(mondays):
-        plt.scatter(mondays, test.loc[mondays, 'y'], color='black', s=4, zorder=5,
-                    label='Monday (week start)')
+    # Mark weekends (Saturday=5, Sunday=6) with a small dot on the actual line
+    weekends = test.index[test.index.dayofweek >= 5]
+    if len(weekends):
+        plt.scatter(weekends, test.loc[weekends, 'y'], color='black', s=4, zorder=5,
+                    label='Weekend')
 
     plt.title(f'Actual vs Predictions for {dataset_name} ({forecast_horizon} days)\nModel: {model_name}')
     plt.xlabel('Date')
