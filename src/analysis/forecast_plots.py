@@ -38,9 +38,6 @@ def plot_train_test_split(
         Directory where the plot file is saved.  Defaults to ``'output_plots'``.
     """
 
-    if model_name:
-        model_name = model_name.replace('dl_baseline_', 'dl_baseline')
-
     plt.figure(figsize=(12, 6))
     plt.plot(train.index, train['y'], label='Train', linewidth=1.5, color='#1f77b4')
     plt.plot(test.index, test['y'], label='Test', linewidth=1.5, color='#ff7f0e')
