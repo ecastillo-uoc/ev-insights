@@ -690,14 +690,6 @@ ALL_EVAL_STRATEGIES: List[str] = ['mimo', 'recursive']
 # These are excluded from ALL_EVAL_STRATEGIES iteration.
 _DIRECT_MODELS: frozenset = frozenset({'lightgbm', 'xgboost'})
 
-# Evaluation strategies for neural models.
-# Trees always use 'direct' (target shifted h steps forward) and are excluded here.
-ALL_EVAL_STRATEGIES: List[str] = ['mimo', 'recursive']
-
-# Models that always use 'direct' evaluation (target shift, no multi-output model).
-# These are excluded from ALL_EVAL_STRATEGIES iteration.
-_DIRECT_MODELS: frozenset = frozenset({'lightgbm', 'xgboost'})
-
 # Models that use hussain=True splits and the Hussain architecture variants
 _HUSSAIN_MODELS: frozenset = frozenset({'dl_baseline_lstm', 'dl_baseline_transformer', 'dl_baseline_hybrid'})
 # Models that receive all horizons in a single pipeline call
