@@ -711,7 +711,10 @@ def run_forecast_pipeline(
             else:
                 predict_df = test_df.copy()
                 predict_df['dataset_name'] = dataset
-                predict_mode = None  # backtest / validate
+                # Allow per-run override via strategy_params['predict_mode'].
+                # Neural baseline models may set 'schedule' for article-faithful
+                # recursive evaluation; default None → backtest mode.
+                predict_mode = strategy_params.get('predict_mode', None) or None
 
             predict_dict = strategy.predict(
                 df=predict_df,

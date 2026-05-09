@@ -39,6 +39,31 @@ Article hyperparameters (Table 1):
   dropout=0.2, activation=ReLU, scaler=MinMaxScaler.
   look_back = forecast_horizon (30, 120, or 240 days).
 
+Implementation notes — deviations and justified interpretations
+---------------------------------------------------------------
+1. **Decoder attention is self-attention, not cross-attention.**
+   The paper text states the decoder attention "attends to the relevant
+   encoded input", implying cross-attention (Q=dec, KV=enc_out).
+   However, the decoder LSTM input IS enc_out, so cross-attention would be
+   Q=LSTM(enc_out), KV=enc_out — querying back to the same signal just
+   processed (circular, zero new information).  Self-attention on the
+   decoded sequence is more principled and is our justified interpretation
+   of the ambiguous Fig. 4.
+
+2. **key_dim = d_model // num_heads** — the paper (Table 1) does not specify
+   ``key_dim``.  We use the Vaswani (2017) standard: ``key_dim = d_model //
+   num_heads = 32``.  This gives ~65k params per MHA layer, keeping total
+   model size at ~200k (vs ~730k with the naive ``key_dim=d_model=128``).
+
+3. **look_back** — ``max(MIN_LOOK_BACK=14, forecast_horizon)`` equals
+   ``forecast_horizon`` for all tested horizons (30, 120d), matching the
+   article's specification exactly.
+
+4. **Prediction mode** — the article evaluates 30/120/240-day recursive
+   (schedule) forecasts from the train/test split boundary.  Our code uses
+   backtest (rolling one-step-ahead) mode for a fair comparison across all
+   models under the same evaluation framework.
+
 All shared train/predict pipeline logic lives in ``KerasTimeSeriesBaseStrategy``.
 """
 
@@ -131,9 +156,14 @@ class HussainHybridModelStrategy(KerasTimeSeriesBaseStrategy):
             lambda x, _pe=pe_matrix: x + _pe,
             name='pe_encoder',
         )(lstm_enc)
-        # Self-attention over encoder sequence
+        # Self-attention over encoder sequence.
+        # key_dim = d_model // num_heads (Vaswani 2017 standard: 128//4=32).
+        # The paper (Table 1) does not specify key_dim; using the standard
+        # value prevents the 730k-param over-parameterisation of the naive
+        # key_dim=d_model=128 choice.
+        key_dim = max(1, d_model // num_heads)
         attn_enc = MultiHeadAttention(
-            key_dim=d_model, num_heads=num_heads, dropout=dropout,
+            key_dim=key_dim, num_heads=num_heads, dropout=dropout,
         )(lstm_enc_pe, lstm_enc_pe)
         # NOTE: No residual Add — article Fig. 4 does not include skip connections
         enc_norm = LayerNormalization(epsilon=1e-6)(attn_enc)
@@ -146,7 +176,7 @@ class HussainHybridModelStrategy(KerasTimeSeriesBaseStrategy):
             name='pe_decoder',
         )(lstm_dec)
         attn_dec = MultiHeadAttention(
-            key_dim=d_model, num_heads=num_heads, dropout=dropout,
+            key_dim=key_dim, num_heads=num_heads, dropout=dropout,
         )(lstm_dec_pe, lstm_dec_pe)
         dec_norm = LayerNormalization(epsilon=1e-6)(attn_dec)
         dec_out = Dropout(dropout)(dec_norm)
