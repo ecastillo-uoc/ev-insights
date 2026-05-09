@@ -772,13 +772,19 @@ def run_forecast_pipeline(
                     predict_dates_idx = common_dates
                 # Direct-H tree strategy: features are observed at date t but the
                 # target is y[t + h] (target_shift = forecast_horizon).  The strategy
-                # returns the feature-observation dates (t), so we must advance them
-                # by forecast_horizon days to get the correct prediction target dates.
+                # returns feature-observation dates (t) and actuals y[t] — both wrong.
+                # Fix: shift dates to t+h, then re-fetch actuals from df at t+h so
+                # both the plot x-axis and the metrics compare against the correct day.
+                # Some target dates (t+h) may fall beyond the dataset end; filter out.
                 if (
                     model_type in ('xgboost', 'lightgbm')
                     and strategy_params.get('eval_strategy', 'direct') == 'direct'
                 ):
                     predict_dates_idx = predict_dates_idx + pd.Timedelta(days=forecast_horizon)
+                    available_mask = predict_dates_idx.isin(df.index)
+                    predict_dates_idx = predict_dates_idx[available_mask]
+                    preds_array = preds_array[available_mask]
+                    actuals_array = df.loc[predict_dates_idx, 'y'].values
                 min_len = min(len(preds_array), len(actuals_array))
                 a, p = actuals_array[:min_len], preds_array[:min_len]
                 plot_actuals_df = pd.DataFrame({'y': a}, index=predict_dates_idx[:min_len])
