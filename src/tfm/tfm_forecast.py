@@ -223,7 +223,11 @@ def execute_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
                 'li_forecast_horizons': [forecast_horizon],
                 'learning_rate': 0.001,
                 'dropout_rate': 0.2,
-                'activation': 'relu',
+                'activation': 'tanh',          # Hochreiter & Schmidhuber (1997)
+                'recurrent_dropout': 0.0,      # >0 disables cuDNN; keep 0 on GPU
+                'use_early_stopping': True,    # monitors val_loss
+                'use_lr_scheduler': True,      # ReduceLROnPlateau on val_loss
+                'validation_split': 0.1,       # 10 % held-out for callback monitoring
                 'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
@@ -260,12 +264,16 @@ def execute_transformer(datasets, li_forecast_horizons, mlflow_tracking_uri=None
                 'look_back': look_back,
                 'li_forecast_horizons': [forecast_horizon],
                 'learning_rate': 0.001,
-                'head_size': 128,
+                'd_model': 64,                 # internal embedding dimension
+                'head_size': 16,               # key_dim per head = d_model // num_heads
                 'num_heads': 4,
-                'ff_dim': 4,
+                'ff_dim': 256,                 # 4 × d_model (Vaswani et al. 2017)
                 'num_transformer_blocks': 2,
                 'dropout': 0.1,
                 'mlp_dropout': 0.1,
+                'use_early_stopping': True,
+                'use_lr_scheduler': True,
+                'validation_split': 0.1,
                 'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
@@ -350,7 +358,11 @@ def execute_hybrid(datasets, li_forecast_horizons, mlflow_tracking_uri=None):
                 'learning_rate': 0.001,
                 'd_model': 128,
                 'num_heads': 4,
+                'ff_dim': 256,                 # FFN hidden dim; default = 2 × d_model
                 'dropout': 0.1,
+                'use_early_stopping': True,
+                'use_lr_scheduler': True,
+                'validation_split': 0.1,
                 'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
@@ -827,28 +839,44 @@ def _build_strategy_params_for_case(
         **fe_params,
     }
 
-    if model_type in ('lstm', 'dl_baseline_lstm'):
+    if model_type == 'lstm':
         base.update({
             'epochs': 100,
             'batch_size': 32,
             'learning_rate': 0.001,
             'dropout_rate': 0.2,
-            'activation': 'relu',
+            'activation': 'tanh',          # Hochreiter & Schmidhuber (1997)
+            'recurrent_dropout': 0.0,      # >0 disables cuDNN; keep 0 on GPU
+            'use_early_stopping': True,
+            'use_lr_scheduler': True,
+            'validation_split': 0.1,
         })
-        if is_hussain:
-            base.update({'use_lr_scheduler': True, 'use_early_stopping': True})
+    elif model_type in ('hussain_lstm', 'dl_baseline_lstm'):
+        base.update({
+            'epochs': 100,
+            'batch_size': 32,
+            'learning_rate': 0.001,
+            'dropout_rate': 0.2,
+            'activation': 'relu',          # Article Table 1
+            'use_lr_scheduler': True,
+            'use_early_stopping': True,
+        })
 
     elif model_type == 'transformer':
         base.update({
             'epochs': 100,
             'batch_size': 32,
             'learning_rate': 0.001,
-            'head_size': 128,
+            'd_model': 64,
+            'head_size': 16,               # key_dim per head = d_model // num_heads
             'num_heads': 4,
-            'ff_dim': 4,
+            'ff_dim': 256,                 # 4 × d_model (Vaswani et al. 2017)
             'num_transformer_blocks': 2,
             'dropout': 0.1,
             'mlp_dropout': 0.1,
+            'use_early_stopping': True,
+            'use_lr_scheduler': True,
+            'validation_split': 0.1,
         })
 
     elif model_type == 'dl_baseline_transformer':
@@ -871,7 +899,11 @@ def _build_strategy_params_for_case(
             'learning_rate': 0.001,
             'd_model': 128,
             'num_heads': 4,
+            'ff_dim': 256,                 # FFN hidden dim = 2 × d_model
             'dropout': 0.1,
+            'use_early_stopping': True,
+            'use_lr_scheduler': True,
+            'validation_split': 0.1,
         })
 
     elif model_type == 'dl_baseline_hybrid':
@@ -1064,7 +1096,12 @@ def run_single_case(
     else:
         # Neural models: one call per horizon with appropriate look_back
         for h in case_config.li_forecast_horizons:
-            look_back = max(MIN_LOOK_BACK, h)  # floor at MIN_LOOK_BACK for all models incl. Hussain
+            # Our models: fixed LOOK_BACK_DAYS=28 (decoupled from horizon).
+            # Hussain variants: look_back = max(MIN_LOOK_BACK, h) — article uses h=h.
+            if case_config.hussain:
+                look_back = max(MIN_LOOK_BACK, h)
+            else:
+                look_back = LOOK_BACK_DAYS
             look_back_map[h] = look_back
             params = _build_strategy_params_for_case(
                 case_config.model_type,
