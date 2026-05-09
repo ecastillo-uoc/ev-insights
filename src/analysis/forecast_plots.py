@@ -96,8 +96,6 @@ def plot_test_vs_predict(
         Path of the saved plot file.
     """
 
-    if model_name:
-        model_name = model_name.replace('dl_baseline_', 'dl_baseline')
 
     min_len = min(len(test), len(predictions))
     if min_len < len(test) or min_len < len(predictions):
