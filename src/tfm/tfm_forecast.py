@@ -78,6 +78,19 @@ MIN_LOOK_BACK = 14
 # to a stale demand regime when long horizons are used.
 LOOK_BACK_DAYS = 28
 
+# Prediction mode for Hussain article-variant models (dl_baseline_*).
+# 'schedule' — article-faithful intent: N-day recursive forecast from the
+#              split boundary.  BROKEN AS-IS: _predict_schedule seeds from
+#              the END of test_df and generates predictions for dates beyond
+#              the test set, producing no valid (actual, prediction) pairs.
+#              Use only after fixing _predict_schedule to seed from training
+#              data and predict in rolling H-step windows across the test set.
+# None / 'backtest' — rolling one-step-ahead with actual context; aligns
+#              correctly with the full test period (same as all other models).
+#              The Hussain paper figures cover the full test period, consistent
+#              with rolling evaluation.
+DL_BASELINE_PREDICT_MODE = None
+
 
 def get_dataset_config(dataset_name, hussain=False):
     """Return (split_date_str, ranges_dict) for a given dataset.
@@ -424,6 +437,7 @@ def execute_dl_baseline_lstm(datasets, li_forecast_horizons, mlflow_tracking_uri
                 'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
+                'predict_mode': DL_BASELINE_PREDICT_MODE,
             }
             params = {**strategy_params, **ranges}
             run_forecast_pipeline([ds], params, split_date_str,
@@ -450,6 +464,7 @@ def execute_dl_baseline_transformer(datasets, li_forecast_horizons, mlflow_track
                 'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
+                'predict_mode': DL_BASELINE_PREDICT_MODE,
             }
             params = {**strategy_params, **ranges}
             run_forecast_pipeline([ds], params, split_date_str,
@@ -475,6 +490,11 @@ def execute_dl_baseline_hybrid(datasets, li_forecast_horizons, mlflow_tracking_u
                 'use_log_transform': True,
                 'use_differencing': False,
                 'use_calendar_features': False,
+                # Article evaluates N-day recursive forecasts from the split
+                # boundary (Figs 9–26).  Use 'backtest' to compare under our
+                # rolling one-step framework; use 'schedule' for article-faithful
+                # evaluation.
+                'predict_mode': DL_BASELINE_PREDICT_MODE,
             }
             params = {**strategy_params, **ranges}
             run_forecast_pipeline([ds], params, split_date_str,
@@ -647,11 +667,11 @@ ALL_FE_TAGS: List[str] = [
     '',
     #'revin',
     #'log', 
-    'cal', 
+    #'cal', 
     'revin_cal',
     #'log_revin',
-    'log_cal', 
-    'log_revin_cal',
+    #'log_cal', 
+    #'log_revin_cal',
 
     #'diff', 
     #'diff_cal',
@@ -661,6 +681,22 @@ ALL_FE_TAGS: List[str] = [
     #'log_diff_cal_rolling'
     ]
 ALL_HORIZONS: List[int] = [1, 7, 30, 120]
+
+# Evaluation strategies for neural models.
+# Trees always use 'direct' (target shifted h steps forward) and are excluded here.
+ALL_EVAL_STRATEGIES: List[str] = ['mimo', 'recursive']
+
+# Models that always use 'direct' evaluation (target shift, no multi-output model).
+# These are excluded from ALL_EVAL_STRATEGIES iteration.
+_DIRECT_MODELS: frozenset = frozenset({'lightgbm', 'xgboost'})
+
+# Evaluation strategies for neural models.
+# Trees always use 'direct' (target shifted h steps forward) and are excluded here.
+ALL_EVAL_STRATEGIES: List[str] = ['mimo', 'recursive']
+
+# Models that always use 'direct' evaluation (target shift, no multi-output model).
+# These are excluded from ALL_EVAL_STRATEGIES iteration.
+_DIRECT_MODELS: frozenset = frozenset({'lightgbm', 'xgboost'})
 
 # Models that use hussain=True splits and the Hussain architecture variants
 _HUSSAIN_MODELS: frozenset = frozenset({'dl_baseline_lstm', 'dl_baseline_transformer', 'dl_baseline_hybrid'})
@@ -800,7 +836,7 @@ FE_VARIANTS: Dict[str, dict] = {
 
 @dataclass
 class CaseConfig:
-    """Configuration for one (dataset × model × feature_engineering) experiment case."""
+    """Configuration for one (dataset × model × feature_engineering × eval_strategy) experiment case."""
 
     dataset: str
     model_type: str
@@ -808,6 +844,7 @@ class CaseConfig:
     fe_params: dict
     li_forecast_horizons: List[int]
     output_base_dir: Path
+    eval_strategy: str = 'recursive'   # 'mimo', 'recursive', or 'direct' (trees)
     hussain: bool = field(init=False)
 
     def __post_init__(self):
@@ -815,7 +852,7 @@ class CaseConfig:
 
     @property
     def case_id(self) -> str:
-        return f"{self.dataset}_{self.model_type}_{self.fe_tag}"
+        return f"{self.dataset}_{self.model_type}_{self.fe_tag}_{self.eval_strategy}"
 
     @property
     def case_dir(self) -> Path:
@@ -1074,12 +1111,14 @@ def run_single_case(
     look_back_map: Dict[int, int] = {}
 
     if case_config.model_type in _TREE_MODELS:
-        # Single pipeline call handles all horizons internally
+        # Single pipeline call handles all horizons internally.
+        # Trees always use eval_strategy='direct'.
         params = _build_strategy_params_for_case(
             case_config.model_type,
             case_config.fe_params,
             case_config.li_forecast_horizons,
         )
+        params['eval_strategy'] = 'direct'
         params.update(ranges)
         returned = run_forecast_pipeline(
             [case_config.dataset],
@@ -1096,7 +1135,8 @@ def run_single_case(
         _release_resources(case_config.model_type)
 
     else:
-        # Neural models: one call per horizon with appropriate look_back
+        # Neural models: one call per horizon with appropriate look_back.
+        eval_strategy = case_config.eval_strategy
         for h in case_config.li_forecast_horizons:
             # Our models: fixed LOOK_BACK_DAYS=28 (decoupled from horizon).
             # Hussain variants: look_back = max(MIN_LOOK_BACK, h) — article uses h=h.
@@ -1111,6 +1151,7 @@ def run_single_case(
                 [h],
             )
             params['look_back'] = look_back
+            params['eval_strategy'] = eval_strategy
             params.update(ranges)
             returned = run_forecast_pipeline(
                 [case_config.dataset],
@@ -1135,6 +1176,7 @@ def run_single_case(
         'dataset': case_config.dataset,
         'model': case_config.model_type,
         'fe_tag': case_config.fe_tag,
+        'eval_strategy': case_config.eval_strategy,
         'dl_baseline_variant': case_config.hussain,
         'fe_config': case_config.fe_params,
         'split_date': split_date_str,
@@ -1168,6 +1210,7 @@ def run_all_cases(
     models: Optional[List[str]] = None,
     fe_tags: Optional[List[str]] = None,
     horizons: Optional[List[int]] = None,
+    eval_strategies: Optional[List[str]] = None,
     output_base_dir: Optional[Path] = None,
     mlflow_tracking_uri: Optional[str] = None,
     skip_existing: bool = False,
@@ -1184,6 +1227,10 @@ def run_all_cases(
         Feature-engineering variant tags.  Defaults to :data:`ALL_FE_TAGS`.
     horizons : list[int] or None
         Forecast horizons in days.  Defaults to :data:`ALL_HORIZONS`.
+    eval_strategies : list[str] or None
+        Evaluation strategies for neural models.  Defaults to
+        :data:`ALL_EVAL_STRATEGIES` (``['mimo', 'recursive']``).
+        Tree models always use ``'direct'`` regardless of this parameter.
     output_base_dir : Path or None
         Root directory for case artifacts.  Defaults to
         ``tfm/doc/vf/chapters/results/``.
@@ -1200,18 +1247,20 @@ def run_all_cases(
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
 
-    _datasets  = datasets  or ALL_DATASETS
-    _models    = models    or ALL_MODELS
-    _fe_tags   = fe_tags   or ALL_FE_TAGS
-    _horizons  = horizons  or ALL_HORIZONS
+    _datasets  = datasets       or ALL_DATASETS
+    _models    = models         or ALL_MODELS
+    _fe_tags   = fe_tags        or ALL_FE_TAGS
+    _horizons  = horizons       or ALL_HORIZONS
+    _eval_strats = eval_strategies or ALL_EVAL_STRATEGIES
     _base_dir  = output_base_dir or (_TFM_CHAPTERS_DIR / 'results')
 
     _base_dir.mkdir(parents=True, exist_ok=True)
 
-    total = len(_datasets) * len(_models) * len(_fe_tags)
+    # Tree models always use 'direct'; compute effective set per model type at runtime.
+    total = len(_datasets) * len(_models) * len(_fe_tags)  # approximate (skips vary)
     logger.info(
-        "run_all_cases: %d datasets × %d models × %d FE variants = %d cases",
-        len(_datasets), len(_models), len(_fe_tags), total,
+        "run_all_cases: %d datasets × %d models × %d FE variants (eval strategies vary per model type)",
+        len(_datasets), len(_models), len(_fe_tags),
     )
 
     all_results: List[dict] = []
@@ -1223,72 +1272,68 @@ def run_all_cases(
             for fe_tag in _fe_tags:
                 n += 1
                 fe_params = FE_VARIANTS[fe_tag]
-                case_config = CaseConfig(
-                    dataset=dataset,
-                    model_type=model_type,
-                    fe_tag=fe_tag,
-                    fe_params=fe_params,
-                    li_forecast_horizons=_horizons,
-                    output_base_dir=_base_dir,
-                )
-                if skip_existing and (case_config.case_dir / 'metadata.json').exists():
-                    logger.info("[%d/%d] SKIP (existing): %s", n, total, case_config.case_id)
+
+                # Determine which eval strategies apply to this model type.
+                if model_type in _DIRECT_MODELS:
+                    effective_eval_strats = ['direct']
+                else:
+                    effective_eval_strats = _eval_strats
+
+                for eval_strategy in effective_eval_strats:
+                    case_config = CaseConfig(
+                        dataset=dataset,
+                        model_type=model_type,
+                        fe_tag=fe_tag,
+                        fe_params=fe_params,
+                        li_forecast_horizons=_horizons,
+                        output_base_dir=_base_dir,
+                        eval_strategy=eval_strategy,
+                    )
+                    if skip_existing and (case_config.case_dir / 'metadata.json').exists():
+                        logger.info("[%d] SKIP (existing): %s", n, case_config.case_id)
+                        try:
+                            with open(case_config.case_dir / 'metadata.json', encoding='utf-8') as fh:
+                                all_results.append(json.load(fh))
+                        except Exception:
+                            pass
+                        continue
+
+                    # ── Skip guards (same as before, applied per eval_strategy) ──
+
+                    if fe_params.get('use_log_transform') and model_type in _TREE_MODELS:
+                        logger.debug(
+                            "[%d] SKIP log FE '%s' for tree model %s/%s (neural-only).",
+                            n, fe_tag, dataset, model_type,
+                        )
+                        continue
+
+                    if fe_tag in _DIFF_FE_TAGS and model_type not in _TREE_MODELS:
+                        logger.debug(
+                            "[%d] SKIP diff FE '%s' for neural model %s/%s (tree-only).",
+                            n, fe_tag, dataset, model_type,
+                        )
+                        continue
+
+                    if fe_tag in _ROLLING_FE_TAGS and (
+                        dataset not in _ROLLING_DATASETS
+                        or model_type in _HUSSAIN_MODELS
+                        or model_type in _TREE_MODELS
+                    ):
+                        logger.debug(
+                            "[%d] SKIP rolling FE '%s' for %s/%s (excluded).",
+                            n, fe_tag, dataset, model_type,
+                        )
+                        continue
+
+                    logger.info("[%d] Running: %s", n, case_config.case_id)
                     try:
-                        with open(case_config.case_dir / 'metadata.json', encoding='utf-8') as fh:
-                            all_results.append(json.load(fh))
-                    except Exception:
-                        pass
-                    continue
-
-                # Log-transform FE tags are skipped for tree models: gradient-
-                # boosted trees are scale-invariant and learn monotonic
-                # relationships directly; log1p pre-processing of the target
-                # shifts the error landscape without providing any benefit
-                # (and complicates interpretation of the loss).
-                if fe_params.get('use_log_transform') and model_type in _TREE_MODELS:
-                    logger.debug(
-                        "[%d/%d] SKIP log FE '%s' for tree model %s/%s (neural-only).",
-                        n, total, fe_tag, dataset, model_type,
-                    )
-                    continue
-
-                # Diff FE tags are restricted to tree models: neural models
-                # collapse to SNaive on the differenced series (predict ≈0
-                # → inverse-transform gives y[t-7]).  Tree models handle
-                # near-zero-mean targets correctly via splits.
-                if fe_tag in _DIFF_FE_TAGS and model_type not in _TREE_MODELS:
-                    logger.debug(
-                        "[%d/%d] SKIP diff FE '%s' for neural model %s/%s (tree-only).",
-                        n, total, fe_tag, dataset, model_type,
-                    )
-                    continue
-
-                # Rolling FE tags are only run where a known demand-regime
-                # shift makes recalibration worthwhile, and only for standard
-                # neural models (Hussain reproductions have fixed hyperparams;
-                # tree models have no incremental retraining support).
-                if fe_tag in _ROLLING_FE_TAGS and (
-                    dataset not in _ROLLING_DATASETS
-                    or model_type in _HUSSAIN_MODELS
-                    or model_type in _TREE_MODELS
-                ):
-                    logger.debug(
-                        "[%d/%d] SKIP rolling FE '%s' for %s/%s (excluded).",
-                        n, total, fe_tag, dataset, model_type,
-                    )
-                    continue
-
-                logger.info("[%d/%d] Running: %s", n, total, case_config.case_id)
-                try:
-                    meta = run_single_case(case_config, mlflow_tracking_uri=mlflow_tracking_uri)
-                    all_results.append(meta)
-                except Exception as exc:
-                    logger.error("FAILED case %s: %s", case_config.case_id, exc, exc_info=True)
-                    failed.append(case_config.case_id)
-                finally:
-                    # Release any leftover resources between cases regardless of
-                    # outcome — guards against partial cleanup on error paths
-                    _release_resources(model_type)
+                        meta = run_single_case(case_config, mlflow_tracking_uri=mlflow_tracking_uri)
+                        all_results.append(meta)
+                    except Exception as exc:
+                        logger.error("FAILED case %s: %s", case_config.case_id, exc, exc_info=True)
+                        failed.append(case_config.case_id)
+                    finally:
+                        _release_resources(model_type)
 
     # ── Summary ──────────────────────────────────────────────────────────
     logger.info("=" * 70)
@@ -1357,6 +1402,8 @@ if __name__ == "__main__":
     parser.add_argument("--dataset",  default=None)
     parser.add_argument("--model",    default=None)
     parser.add_argument("--fe_tag",   default=None)
+    parser.add_argument("--eval_strategy", default=None,
+                        help="Evaluation strategy: mimo, recursive, or direct (trees).")
     parser.add_argument("--loop",     action="store_true",
                         help="Outer loop mode: re-launch one case at a time as a "
                              "subprocess so a native crash (segfault/XLA) only "
@@ -1385,24 +1432,27 @@ if __name__ == "__main__":
             for mdl in _models:
                 for fe in _fe_tags:
                     n += 1
-                    # Quick skip: check metadata.json before launching a subprocess
-                    from pathlib import Path
-                    case_id  = f"{ds}_{mdl}_{fe}"
-                    case_dir = _TFM_CHAPTERS_DIR / "results" / case_id
-                    if (case_dir / "metadata.json").exists():
-                        print(f"[{n}/{total}] SKIP (existing): {case_id}")
-                        continue
-                    print(f"[{n}/{total}] Launching subprocess: {case_id}")
-                    cmd = [
-                        sys.executable, __file__,
-                        "--dataset", ds,
-                        "--model",   mdl,
-                        "--fe_tag",  fe,
-                    ]
-                    result = subprocess.run(cmd, env=env)
-                    if result.returncode != 0:
-                        print(f"  *** FAILED (exit {result.returncode}): {case_id}")
-                        failed.append(case_id)
+                    effective_strats = ['direct'] if mdl in _DIRECT_MODELS else ALL_EVAL_STRATEGIES
+                    for eval_strat in effective_strats:
+                        # Quick skip: check metadata.json before launching a subprocess
+                        from pathlib import Path
+                        case_id  = f"{ds}_{mdl}_{fe}_{eval_strat}"
+                        case_dir = _TFM_CHAPTERS_DIR / "results" / case_id
+                        if (case_dir / "metadata.json").exists():
+                            print(f"[{n}/{total}] SKIP (existing): {case_id}")
+                            continue
+                        print(f"[{n}/{total}] Launching subprocess: {case_id}")
+                        cmd = [
+                            sys.executable, __file__,
+                            "--dataset",       ds,
+                            "--model",         mdl,
+                            "--fe_tag",        fe,
+                            "--eval_strategy", eval_strat,
+                        ]
+                        result = subprocess.run(cmd, env=env)
+                        if result.returncode != 0:
+                            print(f"  *** FAILED (exit {result.returncode}): {case_id}")
+                            failed.append(case_id)
 
         print(f"\nLoop complete: {n - len(failed)}/{total} succeeded, {len(failed)} failed")
         if failed:
@@ -1414,6 +1464,11 @@ if __name__ == "__main__":
         if fe_params is None:
             logging.error("Unknown fe_tag '%s'", args.fe_tag)
             sys.exit(1)
+        # Determine effective eval_strategy
+        if args.model in _DIRECT_MODELS:
+            eff_eval_strategy = 'direct'
+        else:
+            eff_eval_strategy = args.eval_strategy or 'recursive'
         from pathlib import Path
         case_config = CaseConfig(
             dataset=args.dataset,
@@ -1422,10 +1477,11 @@ if __name__ == "__main__":
             fe_params=fe_params,
             li_forecast_horizons=ALL_HORIZONS,
             output_base_dir=_TFM_CHAPTERS_DIR / "results",
+            eval_strategy=eff_eval_strategy,
         )
         run_single_case(case_config, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
 
     else:
         # ── Default: run everything in-process (original behaviour) ─────────
         print("Running all cases with MLflow tracking URI:", MLFLOW_TRACKING_URI)
-        run_all_cases(skip_existing=True, mlflow_tracking_uri=MLFLOW_TRACKING_URI)
+        run_all_cases(skip_existing=False, mlflow_tracking_uri=MLFLOW_TRACKING_URI)

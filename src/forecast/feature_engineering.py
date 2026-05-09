@@ -150,6 +150,7 @@ def add_tree_lag_features(
     df: pd.DataFrame,
     forecast_horizon: int,
     calendar_cols: List[str] | None = None,
+    target_shift: int = 0,
 ) -> Tuple[pd.DataFrame, List[str]]:
     """Build the full feature set for tree-based models (LightGBM / XGBoost).
 
@@ -173,6 +174,14 @@ def add_tree_lag_features(
     calendar_cols : list[str] | None
         Column names already present in *df* to include in the feature list.
         Typically the output of :func:`add_calendar_features`.
+    target_shift : int, default 0
+        When > 0 (direct-H evaluation for trees), the target column ``'y'``
+        is shifted **forward** by *target_shift* rows **before** lag features
+        are computed.  At each row ``t``, the features then describe context
+        up to ``t`` while the target is ``y[t + target_shift]``.  The last
+        *target_shift* rows will have ``NaN`` targets and are dropped by the
+        caller's ``.dropna()``.  Pass ``forecast_horizon`` here for the
+        direct-H strategy.
 
     Returns
     -------
@@ -181,6 +190,11 @@ def add_tree_lag_features(
         column names.
     """
     df = df.copy()
+
+    # Direct-H strategy: shift target forward so model learns y[t+h] from context at t.
+    # Must happen before lag features so lags are computed on the un-shifted 'y'.
+    if target_shift > 0:
+        df['y'] = df['y'].shift(-target_shift)
 
     # Accumulate all new columns into a dict and concat once to avoid
     # DataFrame fragmentation (PerformanceWarning from repeated inserts).

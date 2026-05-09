@@ -93,19 +93,21 @@ def load_all_metadata(results_dir: Path) -> list[dict]:
 
 # ── Image path helper ─────────────────────────────────────────────────────────
 
-def _img_paths(ds: str, mdl: str, fe: str, h: int) -> tuple[str, str, str]:
+def _img_paths(ds: str, mdl: str, fe: str, h: int, eval_strategy: str | None = None) -> tuple[str, str, str]:
     """Return (avp, tts, zoom) paths relative to the HTML output file."""
-    case_id = f"{ds}_{mdl}_{fe}"
+    case_id = f"{ds}_{mdl}_{fe}_{eval_strategy}" if eval_strategy else f"{ds}_{mdl}_{fe}"
     base    = f"chapters/results/{case_id}/{ds}"
     # Plot filenames join model name parts after the first component without
     # underscores: e.g. "dl_baseline_transformer" → "dl_baselinetransformer"
     _mdl_parts = mdl.split("_")
     mdl_filename = (_mdl_parts[0] + "_" + "".join(_mdl_parts[1:])) if len(_mdl_parts) > 1 else mdl
-    suffix  = f"{mdl_filename}_{h}d_{ds}_{h}days"
+    eval_sfx = f"_{eval_strategy}" if eval_strategy and h > 1 else ""
+    model_name = f"{mdl_filename}_{h}d_{ds}_{eval_strategy}" if eval_strategy else f"{mdl_filename}_{h}d_{ds}"
+    suffix  = f"{model_name}_{h}days"
     return (
-        f"{base}_actual_vs_predict_{suffix}.png",
-        f"{base}_train_test_split_{suffix}.png",
-        f"{base}_train_test_split_{suffix}_zoom.png",
+        f"{base}_actual_vs_predict_{model_name}_{h}days{eval_sfx}.png",
+        f"{base}_train_test_split_{model_name}_{h}days.png",
+        f"{base}_train_test_split_{model_name}_{h}days_zoom.png",
     )
 
 

@@ -435,6 +435,327 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
 
         return output_dict
 
+    def _predict_recursive(
+        self,
+        df: pd.DataFrame,
+        target_column: str,
+        dataset_names: List[str],
+        model,
+        scaler: RobustScaler,
+        look_back: int,
+        forecast_horizon: int,
+        predict_start_date: str | None,
+        predict_end_date: str | None,
+        target_scaler: RobustScaler | None = None,
+        feature_columns: List[str] | None = None,
+    ) -> dict:
+        """Run **recursive rolling-origin** H-step evaluation (stride=1).
+
+        For each origin ``t`` in ``[look_back, n - forecast_horizon]``, the model
+        is seeded with the **actual** context window ``[t-look_back : t]`` and then
+        runs ``forecast_horizon`` recursive 1-step predictions, feeding its own
+        output back at each step.  This is the academically correct multi-horizon
+        evaluation: the model is never aware of actuals beyond its seed.
+
+        Returns a flat ``(values, actuals, dates)`` suitable for metric
+        computation and a ``windows`` list of per-origin dicts for plotting.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Full test dataset (including look_back context rows at the start)
+            with ``dataset_name`` column and ``DatetimeIndex``.
+        target_column : str
+            Name of the target column.
+        dataset_names : list[str]
+            Datasets to iterate over.
+        model : keras.Model
+            Trained Keras model with scalar output (1 step per forward pass).
+        scaler : RobustScaler
+            Fitted on all input columns.
+        look_back : int
+            Window size expected by the model.
+        forecast_horizon : int
+            Number of future steps to predict per origin.
+        predict_start_date, predict_end_date : str or None
+            Optional date bounds to filter ``df``.
+        target_scaler : RobustScaler or None
+            Scaler fitted on the target column only.
+        feature_columns : list[str] or None
+            Exogenous feature columns present in the input window.
+
+        Returns
+        -------
+        dict
+            Keys: ``prediction``, ``values``, ``actuals``, ``dates``,
+            ``windows``, ``value``, ``date``, ``created_at``.
+        """
+        output_dict: Dict[str, Any] = {}
+
+        for dataset_name in dataset_names:
+            subset = df.loc[df['dataset_name'] == dataset_name].copy()
+            if subset.empty:
+                continue
+
+            if predict_start_date or predict_end_date:
+                if isinstance(subset.index, pd.DatetimeIndex):
+                    mask = pd.Series(True, index=subset.index)
+                    if predict_start_date:
+                        mask = mask & (subset.index >= pd.to_datetime(predict_start_date))
+                    if predict_end_date:
+                        mask = mask & (subset.index <= pd.to_datetime(predict_end_date))
+                    subset = subset[mask]
+
+            effective_ts = target_scaler if target_scaler is not None else scaler
+            feat_cols = feature_columns or []
+            cols = [target_column] + feat_cols
+            all_data = subset[cols].values
+            scaled_all = np.clip(scaler.transform(all_data), -3.0, 3.0)
+
+            n = len(scaled_all)
+            if n < look_back + forecast_horizon:
+                self.logger.warning(
+                    f"Not enough data for {dataset_name} to run recursive evaluation "
+                    f"with look_back={look_back}, forecast_horizon={forecast_horizon} "
+                    f"(n={n})"
+                )
+                continue
+
+            has_dates = isinstance(subset.index, pd.DatetimeIndex)
+            all_values: List[float] = []
+            all_actuals: List[float] = []
+            all_dates: List[str] = []
+            windows: List[dict] = []
+
+            # Origins: look_back .. n-forecast_horizon (inclusive both ends)
+            for t in range(look_back, n - forecast_horizon + 1):
+                current_seq = scaled_all[t - look_back:t].copy()  # (look_back, n_cols)
+
+                predictions_scaled: List[float] = []
+                for step in range(forecast_horizon):
+                    pred = model.predict(current_seq[np.newaxis, :, :], verbose=0)
+                    pred_val = float(pred[0, 0])
+                    predictions_scaled.append(pred_val)
+
+                    # Roll window and update the last row with the new prediction
+                    current_seq = np.roll(current_seq, -1, axis=0)
+                    if feat_cols:
+                        from src.forecast.feature_engineering import compute_calendar_row
+                        pred_unscaled = effective_ts.inverse_transform(
+                            np.array([[pred_val]])
+                        )[0, 0]
+                        if has_dates:
+                            new_date = subset.index[t] + pd.Timedelta(days=step)
+                        else:
+                            new_date = pd.Timestamp.now()
+                        cal_values = compute_calendar_row(new_date)
+                        unscaled_row = np.array(
+                            [[pred_unscaled] + [cal_values[c] for c in feat_cols]]
+                        )
+                        scaled_row = np.clip(scaler.transform(unscaled_row), -3.0, 3.0)
+                        current_seq[-1, :] = scaled_row[0, :]
+                    else:
+                        current_seq[-1, 0] = pred_val
+
+                # Inverse-scale predictions (RobustScaler only — log/diff undone by pipeline)
+                preds_unscaled = effective_ts.inverse_transform(
+                    np.array(predictions_scaled).reshape(-1, 1)
+                ).flatten()
+
+                # Actuals for this window (same scale as predictions)
+                actuals_unscaled = effective_ts.inverse_transform(
+                    scaled_all[t:t + forecast_horizon, 0:1]
+                ).flatten()
+
+                if has_dates:
+                    future_dates_idx = subset.index[t:t + forecast_horizon]
+                    origin_date_str = subset.index[t - 1].strftime('%Y-%m-%d')
+                    future_dates_str = future_dates_idx.strftime('%Y-%m-%d').tolist()
+                else:
+                    future_dates_str = [str(t + s) for s in range(forecast_horizon)]
+                    origin_date_str = str(t - 1)
+
+                all_values.extend(preds_unscaled.tolist())
+                all_actuals.extend(actuals_unscaled.tolist())
+                all_dates.extend(future_dates_str)
+                windows.append({
+                    'origin_date': origin_date_str,
+                    'future_dates': future_dates_str,
+                    'predictions': preds_unscaled.tolist(),
+                    'actuals': actuals_unscaled.tolist(),
+                })
+
+            if not all_values:
+                self.logger.warning(
+                    f"_predict_recursive produced no predictions for {dataset_name}"
+                )
+                continue
+
+            output_dict.update({
+                self.output_key: all_values,
+                'values': all_values,
+                'actuals': all_actuals,
+                'dates': all_dates,
+                'windows': windows,
+                'value': all_values[0] if all_values else 0,
+                'date': datetime.now(),
+                'created_at': datetime.now(),
+            })
+
+        if not output_dict:
+            raise ValueError(
+                f"_predict_recursive produced no predictions: all datasets were empty "
+                f"or had fewer rows than look_back={look_back}+forecast_horizon={forecast_horizon}. "
+                f"Datasets: {dataset_names}"
+            )
+
+        return output_dict
+
+    def _predict_mimo(
+        self,
+        df: pd.DataFrame,
+        target_column: str,
+        dataset_names: List[str],
+        model,
+        scaler: RobustScaler,
+        look_back: int,
+        forecast_horizon: int,
+        predict_start_date: str | None,
+        predict_end_date: str | None,
+        target_scaler: RobustScaler | None = None,
+        feature_columns: List[str] | None = None,
+    ) -> dict:
+        """Run **MIMO rolling-origin** H-step evaluation (stride=1).
+
+        For each origin ``t`` in ``[look_back, n - forecast_horizon]``, a single
+        forward pass through the model (which must have a ``Dense(forecast_horizon)``
+        output layer) produces all ``forecast_horizon`` predictions simultaneously.
+
+        Returns the same structure as :meth:`_predict_recursive` for consistency.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Full test dataset with ``dataset_name`` column and ``DatetimeIndex``.
+        target_column : str
+            Name of the target column.
+        dataset_names : list[str]
+            Datasets to iterate over.
+        model : keras.Model
+            Trained Keras model whose output shape is ``(batch, forecast_horizon)``.
+        scaler : RobustScaler
+            Fitted on all input columns.
+        look_back : int
+            Window size expected by the model.
+        forecast_horizon : int
+            Number of future steps the model outputs per forward pass.
+        predict_start_date, predict_end_date : str or None
+            Optional date bounds to filter ``df``.
+        target_scaler : RobustScaler or None
+            Scaler fitted on the target column only.
+        feature_columns : list[str] or None
+            Exogenous feature columns present in the input window.
+
+        Returns
+        -------
+        dict
+            Keys: ``prediction``, ``values``, ``actuals``, ``dates``,
+            ``windows``, ``value``, ``date``, ``created_at``.
+        """
+        output_dict: Dict[str, Any] = {}
+
+        for dataset_name in dataset_names:
+            subset = df.loc[df['dataset_name'] == dataset_name].copy()
+            if subset.empty:
+                continue
+
+            if predict_start_date or predict_end_date:
+                if isinstance(subset.index, pd.DatetimeIndex):
+                    mask = pd.Series(True, index=subset.index)
+                    if predict_start_date:
+                        mask = mask & (subset.index >= pd.to_datetime(predict_start_date))
+                    if predict_end_date:
+                        mask = mask & (subset.index <= pd.to_datetime(predict_end_date))
+                    subset = subset[mask]
+
+            effective_ts = target_scaler if target_scaler is not None else scaler
+            feat_cols = feature_columns or []
+            cols = [target_column] + feat_cols
+            all_data = subset[cols].values
+            scaled_all = np.clip(scaler.transform(all_data), -3.0, 3.0)
+
+            n = len(scaled_all)
+            if n < look_back + forecast_horizon:
+                self.logger.warning(
+                    f"Not enough data for {dataset_name} to run MIMO evaluation "
+                    f"with look_back={look_back}, forecast_horizon={forecast_horizon} "
+                    f"(n={n})"
+                )
+                continue
+
+            has_dates = isinstance(subset.index, pd.DatetimeIndex)
+            all_values: List[float] = []
+            all_actuals: List[float] = []
+            all_dates: List[str] = []
+            windows: List[dict] = []
+
+            for t in range(look_back, n - forecast_horizon + 1):
+                seed = scaled_all[t - look_back:t][np.newaxis, :, :]  # (1, look_back, n_cols)
+
+                # Single forward pass → (1, forecast_horizon)
+                pred_scaled = model.predict(seed, verbose=0)
+                preds_unscaled = effective_ts.inverse_transform(
+                    pred_scaled.reshape(-1, 1)
+                ).flatten()
+
+                actuals_unscaled = effective_ts.inverse_transform(
+                    scaled_all[t:t + forecast_horizon, 0:1]
+                ).flatten()
+
+                if has_dates:
+                    future_dates_idx = subset.index[t:t + forecast_horizon]
+                    origin_date_str = subset.index[t - 1].strftime('%Y-%m-%d')
+                    future_dates_str = future_dates_idx.strftime('%Y-%m-%d').tolist()
+                else:
+                    future_dates_str = [str(t + s) for s in range(forecast_horizon)]
+                    origin_date_str = str(t - 1)
+
+                all_values.extend(preds_unscaled.tolist())
+                all_actuals.extend(actuals_unscaled.tolist())
+                all_dates.extend(future_dates_str)
+                windows.append({
+                    'origin_date': origin_date_str,
+                    'future_dates': future_dates_str,
+                    'predictions': preds_unscaled.tolist(),
+                    'actuals': actuals_unscaled.tolist(),
+                })
+
+            if not all_values:
+                self.logger.warning(
+                    f"_predict_mimo produced no predictions for {dataset_name}"
+                )
+                continue
+
+            output_dict.update({
+                self.output_key: all_values,
+                'values': all_values,
+                'actuals': all_actuals,
+                'dates': all_dates,
+                'windows': windows,
+                'value': all_values[0] if all_values else 0,
+                'date': datetime.now(),
+                'created_at': datetime.now(),
+            })
+
+        if not output_dict:
+            raise ValueError(
+                f"_predict_mimo produced no predictions: all datasets were empty "
+                f"or had fewer rows than look_back={look_back}+forecast_horizon={forecast_horizon}. "
+                f"Datasets: {dataset_names}"
+            )
+
+        return output_dict
+
     def _predict_direct_multistep(
         self,
         df: pd.DataFrame,
@@ -670,11 +991,12 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             look_back = strategy_params.get('look_back', 30)
             forecast_horizon = strategy_params.get('forecast_horizon')
 
-            # Direct multi-step: model outputs forecast_horizon values at once
+            # Direct multi-step (MIMO): model outputs forecast_horizon values at once.
+            # Recursive mode trains with output_steps=1 (1-step model used in rolling fashion).
             predict_mode = strategy_params.get('predict_mode')
             output_steps = (
                 forecast_horizon
-                if predict_mode == 'direct_multistep' and forecast_horizon
+                if predict_mode in ('direct_multistep', 'mimo') and forecast_horizon
                 else 1
             )
             strategy_params['output_steps'] = output_steps
@@ -871,7 +1193,23 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
                 self._resolve_predict_bounds(params, forecast_horizon)
             )
 
-            if submode == 'schedule':
+            if submode == 'recursive':
+                result = self._predict_recursive(
+                    df, target_column, dataset_names,
+                    model, scaler, look_back,
+                    forecast_horizon, predict_start_date, predict_end_date,
+                    target_scaler=target_scaler,
+                    feature_columns=feature_columns_stored,
+                )
+            elif submode == 'mimo':
+                result = self._predict_mimo(
+                    df, target_column, dataset_names,
+                    model, scaler, look_back,
+                    forecast_horizon, predict_start_date, predict_end_date,
+                    target_scaler=target_scaler,
+                    feature_columns=feature_columns_stored,
+                )
+            elif submode == 'schedule':
                 result = self._predict_schedule(
                     df, target_column, dataset_names,
                     model, scaler, look_back,

@@ -67,7 +67,7 @@ from src.forecast.strategies import (
 )
 from src.forecast.strategies.utils_ts import mase, smape
 from src.data.data_fetcher import fetch_daily_energy_for_forecast
-from src.analysis.forecast_plots import plot_train_test_split, plot_test_vs_predict
+from src.analysis.forecast_plots import plot_train_test_split, plot_test_vs_predict, plot_test_vs_predict_multistep
 
 # MLflow (optional)
 try:
@@ -468,6 +468,13 @@ def run_forecast_pipeline(
             logger.info("Prediction window: %d days", forecast_horizon)
             strategy_params['forecast_horizon'] = forecast_horizon
 
+            # Inject predict_mode for MIMO training: Dense(h) output requires
+            # predict_mode='mimo' in strategy_params BEFORE train() reads attrs.
+            # Must be set here so df_model.attrs[params_key] carries it to train().
+            eval_strategy_early = strategy_params.get('eval_strategy', None)
+            if eval_strategy_early == 'mimo' and model_type not in ('xgboost', 'lightgbm'):
+                strategy_params['predict_mode'] = 'mimo'
+
             # 1. Split train/test ───────────────────────────────────────
             if len(df) <= forecast_horizon:
                 logger.warning("Not enough data for test size %d. Skipping.", forecast_horizon)
@@ -526,11 +533,15 @@ def run_forecast_pipeline(
 
             feature_cols: List[str] = []
             if model_type in ('xgboost', 'lightgbm'):
+                eval_strategy_for_trees = strategy_params.get('eval_strategy', 'direct')
+                tree_target_shift = forecast_horizon if eval_strategy_for_trees == 'direct' else 0
                 df_model, feature_cols = add_tree_lag_features(
                     df_model, forecast_horizon, calendar_cols=calendar_cols,
+                    target_shift=tree_target_shift,
                 )
                 train_df, _ = add_tree_lag_features(
                     train_df, forecast_horizon, calendar_cols=calendar_cols,
+                    target_shift=tree_target_shift,
                 )
                 df_model = df_model.dropna()
                 train_df = train_df.dropna()
@@ -691,10 +702,10 @@ def run_forecast_pipeline(
             )
             trained_model_objects = trained_models_dict['train'][f"{model_name_prefix}_{dataset}"]['model']
 
-            model_name = f"{model_name_prefix}_{dataset}{model_suffix}"
+            eval_strategy = strategy_params.get('eval_strategy', None)
+            eval_strategy_suffix = f'_{eval_strategy}' if eval_strategy else ''
+            model_name = f"{model_name_prefix}_{dataset}{model_suffix}{eval_strategy_suffix}"
             save_model(model_name, trained_models_dict, models_dir)
-
-            # 4. Predict ────────────────────────────────────────────────
             logger.info("Generating predictions...")
 
             if model_type in ('xgboost', 'lightgbm'):
@@ -711,10 +722,15 @@ def run_forecast_pipeline(
             else:
                 predict_df = test_df.copy()
                 predict_df['dataset_name'] = dataset
-                # Allow per-run override via strategy_params['predict_mode'].
-                # Neural baseline models may set 'schedule' for article-faithful
-                # recursive evaluation; default None → backtest mode.
-                predict_mode = strategy_params.get('predict_mode', None) or None
+                # Resolve eval_strategy → predict submode.
+                # 'recursive': rolling-origin H-step with actual seeds, 1-step model.
+                # 'mimo':      rolling-origin H-step, single forward pass, Dense(h) model.
+                # None / other: fall back to legacy predict_mode for backward compat.
+                eval_strategy = strategy_params.get('eval_strategy', None)
+                if eval_strategy in ('recursive', 'mimo'):
+                    predict_mode = eval_strategy
+                else:
+                    predict_mode = strategy_params.get('predict_mode', None) or None
 
             predict_dict = strategy.predict(
                 df=predict_df,
@@ -814,6 +830,7 @@ def run_forecast_pipeline(
             )
             horizon_metrics[forecast_horizon] = metrics
 
+            eval_strategy_label = strategy_params.get('eval_strategy', None)
             results_summary.append(
                 _build_metrics_record(
                     experiment_name=model_name,
@@ -822,7 +839,7 @@ def run_forecast_pipeline(
                     forecast_horizon=forecast_horizon,
                     split_date_str=split_date_str,
                     strategy_params=strategy_params,
-                    metrics=metrics,
+                    metrics={**metrics, 'eval_strategy': eval_strategy_label or 'backtest'},
                 )
             )
 
@@ -834,10 +851,54 @@ def run_forecast_pipeline(
                 zoom_range=zoom_range, model_name=model_name,
                 warm_up_days=warm_up, plots_dir=plots_dir,
             )
-            plot_path_predict = plot_test_vs_predict(
-                plot_actuals_df, p, dataset, model_name, forecast_horizon,
-                plots_dir=plots_dir,
-            )
+
+            # Multi-step plot for recursive/mimo; standard plot for h=1 or trees.
+            raw_windows = predict_dict['predict'].get('windows', [])
+            if forecast_horizon > 1 and eval_strategy_label in ('recursive', 'mimo') and raw_windows:
+                # Inverse-transform each window's predictions/actuals to original kWh
+                transformed_windows = []
+                for w in raw_windows:
+                    w_dates = pd.DatetimeIndex(w['future_dates'])
+                    wp = np.clip(
+                        apply_inverse_transforms(
+                            np.array(w['predictions']), np.array(w['actuals']),
+                            w_dates, transform_state,
+                        )[0],
+                        0.0, None,
+                    )
+                    wa = np.clip(
+                        apply_inverse_transforms(
+                            np.array(w['actuals']), np.array(w['actuals']),
+                            w_dates, transform_state,
+                        )[0],
+                        0.0, None,
+                    )
+                    transformed_windows.append({
+                        'origin_date': w['origin_date'],
+                        'future_dates': w['future_dates'],
+                        'predictions': wp.tolist(),
+                        'actuals': wa.tolist(),
+                    })
+                plot_path_predict = plot_test_vs_predict_multistep(
+                    test_df_plot, transformed_windows,
+                    dataset, model_name, forecast_horizon, eval_strategy_label,
+                    plots_dir=plots_dir,
+                )
+                # Also plot a single representative window with the standard
+                # actual-vs-predicted chart so the horizon shape is visible.
+                mid_w = transformed_windows[len(transformed_windows) // 2]
+                mid_dates = pd.DatetimeIndex(mid_w['future_dates'])
+                mid_actuals_df = pd.DataFrame({'y': mid_w['actuals']}, index=mid_dates)
+                plot_test_vs_predict(
+                    mid_actuals_df, np.array(mid_w['predictions']),
+                    dataset, f"{model_name}_window_sample", forecast_horizon,
+                    plots_dir=plots_dir,
+                )
+            else:
+                plot_path_predict = plot_test_vs_predict(
+                    plot_actuals_df, p, dataset, model_name, forecast_horizon,
+                    plots_dir=plots_dir,
+                )
 
             # 7. MLflow (optional) ─────────────────────────────────────
             if mlflow_tracking_uri and _MLFLOW_AVAILABLE and False:
