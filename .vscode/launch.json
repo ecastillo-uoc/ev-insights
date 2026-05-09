@@ -62,7 +62,9 @@
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
             "args" : [
-                "--loop"
+                "--loop",
+                "--neural-workers", "2",
+                "--workers", "6"
             ],
             "env": {
                 "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}",

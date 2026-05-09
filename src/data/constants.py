@@ -12,3 +12,14 @@ COVID_START = '2020-08-05'
 COVID_END = '2020-11-17'
 
 EXCLUDE_COVID_DATA = True
+
+# ---------------------------------------------------------------------------
+# Backtest evaluation stride
+# ---------------------------------------------------------------------------
+# When True  → stride = min(28, forecast_horizon) per rolling-origin loop.
+#              Reduces the number of forward passes proportionally; useful for
+#              quick iteration.  Metrics are still valid, just computed on a
+#              sparser sample of origins.
+# When False → stride = 1 (every possible origin).  Use this for the final
+#              thesis run to produce academically correct, dense evaluations.
+FAST_EVAL_STRIDE: bool = True

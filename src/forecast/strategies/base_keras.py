@@ -33,6 +33,7 @@ from sklearn.preprocessing import RobustScaler
 from src.utils.gpu_config import configure_gpu as _configure_gpu
 _configure_gpu()
 
+from src.data.constants import FAST_EVAL_STRIDE
 from .interfaces import ModelStrategy
 
 
@@ -583,7 +584,8 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             windows: List[dict] = []
 
             # Origins: look_back .. n-forecast_horizon (inclusive both ends)
-            for t in range(look_back, n - forecast_horizon + 1):
+            _stride = min(28, forecast_horizon) if FAST_EVAL_STRIDE else 1
+            for t in range(look_back, n - forecast_horizon + 1, _stride):
                 current_seq = scaled_all[t - look_back:t].copy()  # (look_back, n_cols)
 
                 if has_dates:
@@ -737,7 +739,8 @@ class KerasTimeSeriesBaseStrategy(ModelStrategy):
             all_dates: List[str] = []
             windows: List[dict] = []
 
-            for t in range(look_back, n - forecast_horizon + 1):
+            _stride = min(28, forecast_horizon) if FAST_EVAL_STRIDE else 1
+            for t in range(look_back, n - forecast_horizon + 1, _stride):
                 seed = scaled_all[t - look_back:t][np.newaxis, :, :]  # (1, look_back, n_cols)
 
                 # Single forward pass → (1, forecast_horizon)
