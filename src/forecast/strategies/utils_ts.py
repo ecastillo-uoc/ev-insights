@@ -6,6 +6,8 @@ mean absolute percentage error (sMAPE) metric.
 import numpy as np
 import pandas as pd
 
+from .. import feature_engineering
+
 def add_lags(df_, lag_col, lags, lag_windows=None):
     """Returns a new dataframe that also includes lagged values of the lag_col column of df.
        For long lags (1 day or more), also include mean, min, max over lag_window."""
@@ -29,15 +31,7 @@ def add_lags(df_, lag_col, lags, lag_windows=None):
 
 def add_timefeat_df(df_):
     """Add time-related features to df_"""
-
-    # Create time features (for periodic features: use sin and cos)
-    df = df_.copy()
-    df["day_of_week"] = df.index.dayofweek.astype("category")
-    df["day_of_year_sin"] = np.sin(2 * np.pi * df.index.dayofyear / 365.25)
-    df["day_of_year_cos"] = np.cos(2 * np.pi * df.index.dayofyear / 365.25)
-    df["month"] = df.index.month.astype("category")
-    df['is_business_day'] = df.index.map(lambda x: pd.tseries.offsets.BDay().is_on_offset(x)).astype("category")
-
+    df, _ = feature_engineering.add_calendar_features(df_)
     return df
 
 def smape(preds, target):

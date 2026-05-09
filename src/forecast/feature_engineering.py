@@ -16,8 +16,8 @@ configurations:
 +---------------------+------------------------------------------------------+
 | use_differencing    | 7-day seasonal differencing / per-date reconstruction|
 +---------------------+------------------------------------------------------+
-| use_calendar_features | Day-of-week, month, sin/cos day-of-year, business  |
-|                     | day indicator — added to the DataFrame               |
+| use_calendar_features | Day-of-week sin/cos encoding and business day      |
+|                     | indicator — added to the DataFrame                   |
 +---------------------+------------------------------------------------------+
 
 **Ordering rules**
@@ -60,7 +60,12 @@ windows without distorting real data.
 
 **Calendar features — dtype choice**
 
-All calendar columns use **int** or **float** dtype (never ``pd.Categorical``).
+Active calendar columns are ``day_of_week_sin``, ``day_of_week_cos``, and
+``is_business_day`` (the annual sin/cos day-of-year columns are retained in
+the code but commented out — day-of-week and the business-day flag capture
+the dominant weekly pattern without the year-to-year amplitude shifts that
+annual encoding introduces).
+All active columns use **int** or **float** dtype (never ``pd.Categorical``).
 ``LightGBMModelStrategy.train()`` calls ``select_dtypes(exclude=['object',
 'string'])``; plain numeric types survive that filter without requiring an
 explicit ``categorical_feature=`` parameter on the LightGBM ``Dataset``.
@@ -82,8 +87,8 @@ logger = logging.getLogger(__name__)
 CALENDAR_FEATURE_COLS: List[str] = [
     'day_of_week_sin',
     'day_of_week_cos',
-    'day_of_year_sin',
-    'day_of_year_cos',
+    #'day_of_year_sin',
+    #'day_of_year_cos',
     'is_business_day',
 ]
 """Column names produced by :func:`add_calendar_features`."""
@@ -107,8 +112,8 @@ def compute_calendar_row(date) -> dict:
     return {
         'day_of_week_sin': np.sin(2 * np.pi * ts.dayofweek / 7),
         'day_of_week_cos': np.cos(2 * np.pi * ts.dayofweek / 7),
-        'day_of_year_sin': np.sin(2 * np.pi * ts.dayofyear / 365.25),
-        'day_of_year_cos': np.cos(2 * np.pi * ts.dayofyear / 365.25),
+        #'day_of_year_sin': np.sin(2 * np.pi * ts.dayofyear / 365.25),
+        #'day_of_year_cos': np.cos(2 * np.pi * ts.dayofyear / 365.25),
         'is_business_day': int(pd.tseries.offsets.BDay().is_on_offset(ts)),
     }
 
@@ -133,8 +138,8 @@ def add_calendar_features(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
     df = df.copy()
     df['day_of_week_sin'] = np.sin(2 * np.pi * df.index.dayofweek / 7)
     df['day_of_week_cos'] = np.cos(2 * np.pi * df.index.dayofweek / 7)
-    df['day_of_year_sin'] = np.sin(2 * np.pi * df.index.dayofyear / 365.25)
-    df['day_of_year_cos'] = np.cos(2 * np.pi * df.index.dayofyear / 365.25)
+    #df['day_of_year_sin'] = np.sin(2 * np.pi * df.index.dayofyear / 365.25)
+    #df['day_of_year_cos'] = np.cos(2 * np.pi * df.index.dayofyear / 365.25)
     df['is_business_day'] = df.index.map(
         lambda x: int(pd.tseries.offsets.BDay().is_on_offset(x))
     )
