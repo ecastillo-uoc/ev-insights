@@ -44,6 +44,7 @@ import os
 import sys
 import logging
 import shutil
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1256,6 +1257,35 @@ def run_all_cases(
         len(_datasets), len(_models), len(_fe_tags),
     )
 
+    # ── Pre-compute total planned cases (accounting for skip guards, not skip_existing) ──
+    total_planned = 0
+    for _ds in _datasets:
+        for _mdl in _models:
+            for _ft in _fe_tags:
+                _fep = FE_VARIANTS[_ft]
+                if _fep.get('use_log_transform') and _mdl in _TREE_MODELS:
+                    continue
+                if _ft in _DIFF_FE_TAGS and _mdl not in _TREE_MODELS:
+                    continue
+                if _ft in _ROLLING_FE_TAGS and (
+                    _ds not in _ROLLING_DATASETS
+                    or _mdl in _HUSSAIN_MODELS
+                    or _mdl in _TREE_MODELS
+                ):
+                    continue
+                _strats = ['direct'] if _mdl in _DIRECT_MODELS else list(_eval_strats)
+                total_planned += len(_strats)
+    logger.info("Total planned cases (excl. skip_existing): %d", total_planned)
+
+    def _hms(s: float) -> str:
+        """Format seconds as HH:MM:SS."""
+        s = max(0.0, s)
+        return f"{int(s // 3600):02d}:{int(s % 3600 // 60):02d}:{int(s % 60):02d}"
+
+    run_start = time.monotonic()
+    case_durations: List[float] = []
+    cases_run = 0
+
     all_results: List[dict] = []
     failed: List[str] = []
     n = 0
@@ -1318,7 +1348,8 @@ def run_all_cases(
                         )
                         continue
 
-                    logger.info("[%d] Running: %s", n, case_config.case_id)
+                    logger.info("[%d/%d] Running: %s", cases_run + 1, total_planned, case_config.case_id)
+                    case_start = time.monotonic()
                     try:
                         meta = run_single_case(case_config, mlflow_tracking_uri=mlflow_tracking_uri)
                         all_results.append(meta)
@@ -1327,11 +1358,27 @@ def run_all_cases(
                         failed.append(case_config.case_id)
                     finally:
                         _release_resources(model_type)
+                        case_elapsed = time.monotonic() - case_start
+                        case_durations.append(case_elapsed)
+                        cases_run += 1
+                        total_elapsed = time.monotonic() - run_start
+                        avg_s = total_elapsed / cases_run
+                        remaining = max(0, total_planned - cases_run)
+                        eta_s = remaining * avg_s
+                        logger.info(
+                            "  ↳ [%d/%d] case=%.1fs  elapsed=%s  avg=%.0fs  remaining=%d  ETA=%s",
+                            cases_run, total_planned,
+                            case_elapsed, _hms(total_elapsed), avg_s, remaining, _hms(eta_s),
+                        )
 
     # ── Summary ──────────────────────────────────────────────────────────
+    total_wall = time.monotonic() - run_start
     logger.info("=" * 70)
-    logger.info("run_all_cases COMPLETE: %d/%d cases succeeded, %d failed",
-                len(all_results), total, len(failed))
+    logger.info(
+        "run_all_cases COMPLETE: %d/%d cases succeeded, %d failed  |  wall=%s  avg=%.0fs/case",
+        len(all_results), total_planned, len(failed),
+        _hms(total_wall), total_wall / max(1, cases_run),
+    )
     if failed:
         logger.warning("Failed cases: %s", failed)
 
@@ -1401,16 +1448,33 @@ if __name__ == "__main__":
                         help="Outer loop mode: re-launch one case at a time as a "
                              "subprocess so a native crash (segfault/XLA) only "
                              "loses one case and the loop continues.")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="Max concurrent subprocesses for tree models (CPU-only). "
+                             "Default: 1 (fully sequential). Example: --workers 4.")
+    parser.add_argument("--neural-workers", type=int, default=1, dest="neural_workers",
+                        help="Max concurrent neural-model subprocesses. "
+                             "The first one to start uses the GPU; any additional ones "
+                             "run CPU-only (CUDA_VISIBLE_DEVICES='' set automatically). "
+                             "Default: 1 (GPU only). Example: --neural-workers 3.")
+    parser.add_argument("--cpu-threads", type=int, default=0, dest="cpu_threads",
+                        help="TF intra-op threads for each CPU-fallback neural subprocess "
+                             "(OMP_NUM_THREADS / TF_NUM_INTRAOP_THREADS). "
+                             "0 = auto: floor(available_cpus / (cpu_neural + tree_workers)). "
+                             "Prevents all CPU subprocesses from grabbing all cores.")
     args = parser.parse_args()
 
     MLFLOW_TRACKING_URI = None
 
     if args.loop:
-        # ── Outer loop: dispatch one subprocess per (dataset, model, fe_tag) ──
-        # Each child process runs with --dataset / --model / --fe_tag flags and
-        # exits after exactly one case.  A native crash in XLA therefore only
-        # kills that child; the parent loop continues with the next case.
-        import sys, os
+        # ── Outer loop: dispatch subprocesses with controlled concurrency ──────
+        # Tree models (CPU-only): up to --workers concurrent subprocesses.
+        # Neural models (GPU-bound): serialised to 1 concurrent process.
+        # Both pools can overlap (e.g. 4 tree cases + 1 neural case at once).
+        # Each child process runs exactly one case so a native crash (segfault/
+        # XLA) only loses that case; the outer loop continues with the next.
+        import sys, os, threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         _datasets = ALL_DATASETS
         _models   = ALL_MODELS
         _fe_tags  = ALL_FE_TAGS
@@ -1418,38 +1482,146 @@ if __name__ == "__main__":
         env = os.environ.copy()
         env.setdefault("TF_XLA_FLAGS", "--tf_xla_enable_xla_devices=false")
 
-        total = len(_datasets) * len(_models) * len(_fe_tags)
-        n = 0
-        failed = []
+        # Build the full ordered case list
+        cases: list = []
         for ds in _datasets:
             for mdl in _models:
                 for fe in _fe_tags:
-                    n += 1
                     effective_strats = ['direct'] if mdl in _DIRECT_MODELS else ALL_EVAL_STRATEGIES
-                    for eval_strat in effective_strats:
-                        # Quick skip: check metadata.json before launching a subprocess
-                        from pathlib import Path
-                        case_id  = f"{ds}_{mdl}_{fe}_{eval_strat}"
-                        case_dir = _TFM_CHAPTERS_DIR / "results" / case_id
-                        if (case_dir / "metadata.json").exists():
-                            print(f"[{n}/{total}] SKIP (existing): {case_id}")
-                            continue
-                        print(f"[{n}/{total}] Launching subprocess: {case_id}")
-                        cmd = [
-                            sys.executable, __file__,
-                            "--dataset",       ds,
-                            "--model",         mdl,
-                            "--fe_tag",        fe,
-                            "--eval_strategy", eval_strat,
-                        ]
-                        result = subprocess.run(cmd, env=env)
-                        if result.returncode != 0:
-                            print(f"  *** FAILED (exit {result.returncode}): {case_id}")
-                            failed.append(case_id)
+                    for ev in effective_strats:
+                        cases.append((ds, mdl, fe, ev))
+        total = len(cases)
 
-        print(f"\nLoop complete: {n - len(failed)}/{total} succeeded, {len(failed)} failed")
-        if failed:
-            print("Failed cases:", failed)
+        n_workers_tree   = max(1, args.workers)
+        n_neural_workers = max(1, args.neural_workers)
+        n_cpu_neural     = max(0, n_neural_workers - 1)  # how many run on CPU
+
+        # Auto-compute per-process CPU thread budget to avoid core contention.
+        # GPU neural process keeps its default (uses few CPU threads for I/O).
+        # CPU-fallback neural and tree processes each get a fair share.
+        import os as _os
+        total_cpus  = len(_os.sched_getaffinity(0)) if hasattr(_os, 'sched_getaffinity') else _os.cpu_count() or 8
+        # Slots that will actively use CPU: cpu-neural workers + tree workers.
+        # Reserve 2 cores for the GPU process data pipeline + OS.
+        cpu_consumers = n_cpu_neural + n_workers_tree
+        if args.cpu_threads > 0:
+            threads_per_proc = args.cpu_threads
+        else:
+            reserved = min(4, total_cpus // 4)
+            threads_per_proc = max(1, (total_cpus - reserved) // max(1, cpu_consumers))
+
+        print(
+            f"Loop dispatcher: {total} cases  |  "
+            f"neural workers={n_neural_workers} "
+            f"(1 GPU + {n_cpu_neural} CPU-fallback)  "
+            f"tree workers={n_workers_tree} (CPU)  "
+            f"threads/CPU-proc={threads_per_proc} (of {total_cpus} logical CPUs)"
+        )
+
+        # _gpu_sem:    only 1 neural subprocess may use the GPU at a time.
+        # _neural_sem: caps total concurrent neural processes (1 GPU + rest CPU-only).
+        # _cpu_sem:    caps concurrent tree/CPU processes.
+        # A neural worker acquires _neural_sem then races for _gpu_sem (non-blocking).
+        # If it loses the GPU race it sets CUDA_VISIBLE_DEVICES="" on the child env.
+        _gpu_sem    = threading.Semaphore(1)
+        _neural_sem = threading.Semaphore(n_neural_workers)
+        _cpu_sem    = threading.Semaphore(n_workers_tree)
+        _done_lock  = threading.Lock()
+        _n_done     = [0]
+        _loop_start = time.monotonic()
+
+        def _hms_l(s: float) -> str:
+            s = max(0.0, s)
+            return f"{int(s // 3600):02d}:{int(s % 3600 // 60):02d}:{int(s % 60):02d}"
+
+        def _run_one(ds: str, mdl: str, fe: str, ev: str):
+            case_id  = f"{ds}_{mdl}_{fe}_{ev}"
+            case_dir = _TFM_CHAPTERS_DIR / "results" / case_id
+            if (case_dir / "metadata.json").exists():
+                with _done_lock:
+                    _n_done[0] += 1
+                    done = _n_done[0]
+                print(f"[{done}/{total}] SKIP (existing): {case_id}")
+                return case_id, 'skip'
+
+            is_tree = mdl in _TREE_MODELS
+            t0 = time.monotonic()
+            if is_tree:
+                child_env_tree = env.copy()
+                child_env_tree["OMP_NUM_THREADS"]          = str(threads_per_proc)
+                child_env_tree["TF_NUM_INTRAOP_THREADS"]   = str(threads_per_proc)
+                child_env_tree["TF_NUM_INTEROP_THREADS"]   = "1"
+                with _cpu_sem:
+                    print(f"  \u2192 start (CPU/tree, {threads_per_proc}t): {case_id}")
+                    result = subprocess.run(
+                        [sys.executable, __file__,
+                         "--dataset", ds, "--model", mdl,
+                         "--fe_tag", fe, "--eval_strategy", ev],
+                        env=child_env_tree,
+                    )
+            else:
+                # Grab the total neural slot, then race for the GPU (non-blocking).
+                # Losers run with CUDA_VISIBLE_DEVICES="" (CPU-only TF).
+                _neural_sem.acquire()
+                got_gpu = _gpu_sem.acquire(blocking=False)
+                child_env = env.copy()
+                device_label = "GPU"
+                if not got_gpu:
+                    child_env["CUDA_VISIBLE_DEVICES"]       = ""
+                    child_env["OMP_NUM_THREADS"]            = str(threads_per_proc)
+                    child_env["TF_NUM_INTRAOP_THREADS"]     = str(threads_per_proc)
+                    child_env["TF_NUM_INTEROP_THREADS"]     = "1"
+                    device_label = f"CPU/{threads_per_proc}t"
+                try:
+                    print(f"  \u2192 start ({device_label}/neural): {case_id}")
+                    result = subprocess.run(
+                        [sys.executable, __file__,
+                         "--dataset", ds, "--model", mdl,
+                         "--fe_tag", fe, "--eval_strategy", ev],
+                        env=child_env,
+                    )
+                finally:
+                    if got_gpu:
+                        _gpu_sem.release()
+                    _neural_sem.release()
+            elapsed = time.monotonic() - t0
+            with _done_lock:
+                _n_done[0] += 1
+                done = _n_done[0]
+            wall    = time.monotonic() - _loop_start
+            avg     = wall / max(1, done)
+            remaining = max(0, total - done)
+            eta     = remaining * avg
+            mark    = '\u2713' if result.returncode == 0 else f'\u2717 (rc={result.returncode})'
+            status  = 'ok' if result.returncode == 0 else 'fail'
+            print(
+                f"  {mark} [{done}/{total}] {case_id}  "
+                f"case={elapsed:.0f}s  wall={_hms_l(wall)}  "
+                f"avg={avg:.0f}s  remaining={remaining}  ETA={_hms_l(eta)}"
+            )
+            return case_id, status
+
+        # Thread pool: needs enough threads to keep all semaphore slots busy simultaneously.
+        pool_size = n_workers_tree + n_neural_workers + 2
+        _failed: list = []
+        with ThreadPoolExecutor(max_workers=pool_size) as pool:
+            futures = {
+                pool.submit(_run_one, ds, mdl, fe, ev): (ds, mdl, fe, ev)
+                for (ds, mdl, fe, ev) in cases
+            }
+            for fut in as_completed(futures):
+                case_id, status = fut.result()
+                if status == 'fail':
+                    _failed.append(case_id)
+
+        total_wall = time.monotonic() - _loop_start
+        succeeded  = total - len(_failed)
+        print(
+            f"\nLoop complete: {succeeded}/{total} succeeded, "
+            f"{len(_failed)} failed  |  wall={_hms_l(total_wall)}"
+        )
+        if _failed:
+            print("Failed cases:", _failed)
 
     elif args.dataset and args.model and args.fe_tag is not None:
         # ── Single-case mode (called by the outer loop subprocess) ───────────
