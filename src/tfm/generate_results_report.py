@@ -18,6 +18,113 @@ Colour coding (MASE)
 Usage
   python src/tfm/generate_results_report.py
   python src/tfm/generate_results_report.py --results-dir /path/to/results --out /path/to/report.html
+
+──────────────────────────────────────────────────────────────────────────────
+AI ITERATION GUIDE — How data is embedded in the generated HTML
+──────────────────────────────────────────────────────────────────────────────
+This section documents the machine-readable data structures embedded in the
+output HTML (ev_insights_results.html) so that AI assistants (or scripts) can
+extract all experiment metrics without re-running the Python pipeline.
+
+1. PRIMARY DATA STORE  ── window._scatterStore
+   ─────────────────────────────────────────────
+   A JSON array assigned to `window._scatterStore` near the bottom of <body>:
+
+     <script>window._scatterStore = [...];</script>
+
+   Each element describes one (dataset × horizon × eval_strategy) group:
+     {
+       "title":  "<ds>  ·  <h>d  ·  <STRATEGY>",   // display label
+       "ds":     "Dundee" | "ACN_Caltech" | "ACN_JPL",
+       "h":      1 | 7 | 30 | 120,                  // prediction horizon (days)
+       "ev":     "direct" | "recursive" | "mimo",   // evaluation strategy
+       "points": [                                   // all non-discarded results
+         {
+           "model":       "<model_name>",   // e.g. "lightgbm", "lstm", "hybrid"
+           "fe":          "<fe_label>",     // e.g. "log_revin_cal", "(baseline)"
+           "fe_raw":      "<fe_tag>",       // raw tag; "" means no FE
+           "mase":        <float>,          // Mean Absolute Scaled Error
+           "smape":       <float>,          // symmetric MAPE (%)
+           "rmse":        <float | null>,   // Root Mean Square Error (Wh/day)
+           "isBest":      <bool>,           // true = best in this (ds,h,ev) group
+           "isDiscarded": <bool>            // true = IQR outlier, excluded
+         }, ...
+       ]
+     }
+
+   Python extraction recipe:
+     import re, json
+     html = open("ev_insights_results.html").read()
+     store = json.loads(re.search(
+         r"window\._scatterStore\s*=\s*(\[.*?\]);", html, re.DOTALL
+     ).group(1))
+     all_pts = [dict(pt, ds=g["ds"], h=g["h"], ev=g["ev"])
+                for g in store for pt in g["points"]]
+
+2. BEST RESULTS TABLE  ── <table class="best-table">
+   ──────────────────────────────────────────────────
+   The "Best Results Summary" section contains one <tbody> row per
+   (horizon × dataset × eval_strategy) showing the winning (model, FE) pair.
+   Rows carry class="best-row" and cells are plain <td> elements with text
+   content (no data-* attributes).
+
+   Column order: Horizon | Dataset | Strategy | Best Model | Best FE |
+                 MASE | sMAPE | RMSE | y-range (test)
+
+   Python extraction recipe:
+     from html.parser import HTMLParser
+     # Or use BeautifulSoup / regex on <tr class="best-row">...</tr>
+     rows = re.findall(
+         r'<tr class="best-row"[^>]*>(.*?)</tr>', html, re.DOTALL
+     )
+     for row in rows:
+         cells = [re.sub(r"<[^>]+>", "", c).strip()
+                  for c in re.findall(r"<td[^>]*>(.*?)</td>", row, re.DOTALL)]
+         # cells → [h, ds, strategy, model, fe, mase, smape, rmse, yrange]
+
+3. DETAIL CELLS  ── <td data-case="..." data-horizon="..." ...>
+   ─────────────────────────────────────────────────────────────
+   Every metric cell in the per-horizon tables is a <td> with data-* attributes
+   that link to the prediction plots and identify the experiment:
+
+     data-case     = "<ds>_<mdl>_<fe>_<eval_strategy>"
+     data-horizon  = "<h>"  (integer days)
+     data-avp      = relative path to Actual-vs-Predicted plot
+     data-tts      = relative path to Train/Test Split plot
+     data-zoom     = relative path to Split Zoom plot
+     data-win      = relative path to Window Sample plot (empty for direct)
+     data-title    = human-readable label
+
+   The visible text contains sMAPE (primary for Dundee) or MASE (others)
+   as .metric-main and the secondary metrics as .metric-sub.
+
+   Cells with class "best-cell" are the IQR-clean best for their group.
+   Cells with class "discarded-cell" are IQR outliers (excluded from averages).
+
+4. PRIMARY METRIC CONVENTION
+   ──────────────────────────
+   • Dundee  → primary = sMAPE  (high time-drift; MASE>1 for all models)
+   • ACN_Caltech, ACN_JPL → primary = MASE
+
+   The "best" selection in `best_combo` uses MASE always (consistent with the
+   HTML display code). For thesis text about Dundee the relevant comparison
+   metric is sMAPE because MASE > 1 for every valid Dundee configuration.
+
+5. EMBEDDED AI METADATA  ── <script type="application/json" id="ev-insights-ai-meta">
+   ──────────────────────────────────────────────────────────────────────────────────
+   A compact machine-readable JSON block is also embedded in the HTML (see
+   _build_ai_meta_block() below).  It contains the best-per-(ds,h,ev) table
+   in structured form, dataset-level statistics, and FE component descriptions.
+   Intended for direct AI consumption without regex parsing.
+
+   Extraction:
+     import json
+     block = re.search(
+         r'<script type="application/json" id="ev-insights-ai-meta">(.*?)</script>',
+         html, re.DOTALL
+     ).group(1)
+     meta = json.loads(block)
+──────────────────────────────────────────────────────────────────────────────
 """
 
 from __future__ import annotations
@@ -1165,11 +1272,140 @@ def build_html(records: list[dict]) -> str:
 </script>
 """)
 
+    # ── Embedded AI metadata block ─────────────────────────────────────────────
+    # Invisible <script type="application/json"> that lets AI assistants and
+    # scripts extract all key results without parsing tables or _scatterStore.
+    # See _build_ai_meta_block() and the module docstring (section 5) for schema.
+    parts.append(_build_ai_meta_block(
+        best_combo=best_combo,
+        data=data,
+        discarded_set=discarded_set,
+        datasets=datasets,
+        eval_strategies=eval_strategies,
+        fe_cols=fe_cols,
+    ))
+
     parts.append('</body></html>')
     return "\n".join(parts)
 
+def _build_ai_meta_block(
+    best_combo: dict,
+    data: dict,
+    discarded_set: set,
+    datasets: list[str],
+    eval_strategies: list[str],
+    fe_cols: list[str],
+) -> str:
+    """Return a <script type="application/json"> block with structured metadata.
 
-# ── CLI ───────────────────────────────────────────────────────────────────────
+    This block is embedded invisibly in the HTML so that AI assistants can
+    extract all key results without parsing tables or regexing _scatterStore.
+
+    Schema
+    ------
+    {
+      "schema_version": "1.0",
+      "description": "...",
+      "primary_metric_by_dataset": {"Dundee": "smape", "ACN_Caltech": "mase", ...},
+      "horizons": [1, 7, 30, 120],
+      "eval_strategies": ["direct", "recursive", "mimo"],
+      "fe_components": {"log": "...", "revin": "...", "cal": "...", ...},
+      "best_results": [
+        {
+          "dataset": "Dundee", "horizon": 1, "strategy": "recursive",
+          "model": "lstm", "fe": "log_revin",
+          "mase": 1.029, "smape": 8.6, "rmse": 689.4,
+          "is_discarded": false
+        }, ...
+      ],
+      "dataset_stats": {
+        "Dundee": {"valid_count": 298, "mase_min": 1.029, "mase_max": 2.916,
+                   "mase_avg": 1.478},
+        ...
+      }
+    }
+    """
+    fe_comp_desc = {
+        "log":     "log1p(y) applied to target before training; expm1 on predictions",
+        "revin":   "Reversible Instance Normalisation — window-level re-scaling (28d window)",
+        "cal":     "Learned calendar embeddings: day-of-week, month, day-of-year",
+        "diff":    "Seasonal differencing (lag-7); excluded from active FE columns by default",
+        "rolling": "Rolling statistics features (experimental)",
+    }
+    primary_metric = {
+        "Dundee": "smape",
+        "ACN_Caltech": "mase",
+        "ACN_JPL": "mase",
+    }
+
+    best_rows: list[dict] = []
+    for h in _HORIZONS:
+        for ds in datasets:
+            for ev in eval_strategies:
+                combo = best_combo.get((ds, h, ev))
+                if combo is None:
+                    continue
+                best_mdl, best_fe = combo
+                key = (ds, best_mdl, best_fe, ev, h)
+                mase, rmse, smape = data.get(key, (None, None, None))
+                best_rows.append({
+                    "dataset":      ds,
+                    "horizon":      h,
+                    "strategy":     ev,
+                    "model":        best_mdl,
+                    "fe":           best_fe if best_fe else "(baseline)",
+                    "mase":         round(mase, 4) if mase is not None and not math.isnan(mase) else None,
+                    "smape":        round(smape, 2) if smape is not None and not math.isnan(smape) else None,
+                    "rmse":         round(rmse, 1) if rmse is not None and not math.isnan(rmse) else None,
+                    "is_discarded": key in discarded_set,
+                })
+
+    # Compute dataset-level MASE stats from data dict (active, non-discarded keys)
+    ds_stats: dict[str, dict] = {}
+    for ds in datasets:
+        valid_vals = [
+            v[0] for k, v in data.items()
+            if k[0] == ds and k not in discarded_set
+            and k[2] in set(fe_cols)
+            and v[0] is not None and not math.isnan(v[0])
+        ]
+        if valid_vals:
+            ds_stats[ds] = {
+                "valid_count": len(valid_vals),
+                "mase_min":    round(min(valid_vals), 4),
+                "mase_max":    round(max(valid_vals), 4),
+                "mase_avg":    round(sum(valid_vals) / len(valid_vals), 4),
+            }
+
+    meta = {
+        "schema_version": "1.0",
+        "description": (
+            "Machine-readable summary of EV-Insights forecast experiment results. "
+            "best_results contains the non-discarded winner per (dataset, horizon, strategy). "
+            "For Dundee the primary ranking metric is smape; for others it is mase. "
+            "All metric values are computed on the unscaled original test set. "
+            "RMSE units: Wh/day (Dundee) or kWh/day (ACN datasets). "
+            "Source: ev_insights_results.html generated by generate_results_report.py."
+        ),
+        "primary_metric_by_dataset": primary_metric,
+        "horizons": _HORIZONS,
+        "eval_strategies": eval_strategies,
+        "fe_components": fe_comp_desc,
+        "best_results": best_rows,
+        "dataset_stats": ds_stats,
+    }
+    payload = json.dumps(meta, indent=2, ensure_ascii=False)
+    return (
+        '\n<script type="application/json" id="ev-insights-ai-meta">\n'
+        + payload
+        + '\n</script>\n'
+        '<!-- ev-insights-ai-meta: structured JSON for AI/script consumption. '
+        'Contains best_results (best model per dataset×horizon×strategy), '
+        'dataset_stats, and FE component descriptions. '
+        'See generate_results_report.py module docstring for the full schema. -->\n'
+    )
+
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
