@@ -662,6 +662,9 @@ def run_forecast_pipeline(
                     'MAPE': mean_absolute_percentage_error(a, p),
                     'SMAPE': smape(p, a),
                     'MASE': mase(p, a, train_df_plot['y'].values),
+                    'y_min': float(a.min()),
+                    'y_max': float(a.max()),
+                    'y_mean': float(a.mean()),
                 }
                 logger.info("Metrics for %s (%d days): %s", dataset, forecast_horizon, metrics)
                 if metrics['SMAPE'] >= 50.0:
@@ -828,6 +831,9 @@ def run_forecast_pipeline(
                 'MAPE': mean_absolute_percentage_error(a, p),
                 'SMAPE': smape(p, a),
                 'MASE': mase(p, a, train_df_plot['y'].values),
+                'y_min': float(a.min()),
+                'y_max': float(a.max()),
+                'y_mean': float(a.mean()),
             }
             logger.info("Metrics for %s (%d days): %s", dataset, forecast_horizon, metrics)
             if metrics['SMAPE'] >= 50.0:
