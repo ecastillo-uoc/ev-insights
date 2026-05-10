@@ -71,6 +71,7 @@ description, or parameter value matches the actual code.
 ### Hussain Transformer (article-faithful)
 - `Dense(64,relu) → MHA(dropout=0.2) → GAP → Dense(1)`
 - **No residuals, no LN, no FF block** — matches Fig. 3 of paper
+- Evaluated under same `eval_strategy` framework as other neural models (`'mimo'` / `'recursive'` via `CaseConfig.eval_strategy`)
 - Verified in `dl_baseline_transformer_strategy.py:build_model()`
 
 ### Hussain Hybrid (article-faithful)
