@@ -3,7 +3,10 @@ LSTM recurrent neural network strategy for time-series forecasting.
 
 Architecture (Sequential):
   Input → LSTM(64, tanh, return_sequences=True) → Dropout →
-          LSTM(32, tanh) → Dropout → Dense(1)
+          LSTM(32, tanh) → Dropout → Dense(output_steps)
+
+  ``output_steps = forecast_horizon`` under MIMO (``eval_strategy='mimo'``);
+  ``output_steps = 1`` under recursive or backtest modes.
 
 Hyperparameters read from ``df.attrs['lstm_params']``:
   epochs, batch_size, learning_rate, activation, dropout_rate,

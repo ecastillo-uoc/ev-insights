@@ -28,6 +28,18 @@ every strategy sees the same transformed ``'y'`` column.  After prediction,
 the pipeline inverts the transforms **before** computing metrics, so all
 reported numbers (MSE, RMSE, MAE, MAPE, SMAPE) are in the **original kWh
 scale**.
+
+Evaluation strategy dispatch
+----------------------------
+The ``eval_strategy`` key in ``strategy_params`` controls which prediction
+method is called on the fitted neural model:
+
+* ``'mimo'``      → ``_predict_mimo()``  — single forward pass, ``Dense(h)`` output
+* ``'recursive'`` → ``_predict_recursive()`` — walk-forward one-step with real seeds
+* ``None`` / ``'backtest'`` → ``_predict_backtest()`` — legacy rolling one-step
+
+Tree models (LightGBM, XGBoost) always use the ``'direct'`` strategy
+(``target_shift=forecast_horizon``); they do not call the neural predict methods.
 """
 
 from __future__ import annotations

@@ -14,7 +14,7 @@ configurations:
 +=====================+======================================================+
 | use_log_transform   | ``np.log1p`` / ``np.expm1`` round-trip on target     |
 +---------------------+------------------------------------------------------+
-| use_differencing    | 7-day seasonal differencing / per-date reconstruction|
+| use_differencing    | 7-day seasonal differencing / row-positional reconstruction|
 +---------------------+------------------------------------------------------+
 | use_calendar_features | Day-of-week sin/cos encoding and business day      |
 |                     | indicator — added to the DataFrame                   |
@@ -32,15 +32,17 @@ configurations:
 ``use_differencing`` applies a lag-7 difference (``y[d] - y[d-7]``), removing
 weekly seasonality instead of just yesterday's level.  The first 7 rows are
 dropped to avoid NaN propagation.  Reconstruction uses the actual value from
-7 days prior (stored in ``df_before_diff``).
+7 rows prior (stored in ``df_before_diff``), looked up **by row position**
+(not by calendar date), so COVID-period gaps do not cause cross-contamination.
 
-**Why per-date reconstruction instead of cumsum?**
+**Why row-positional reconstruction instead of cumsum?**
 
 Cumulative sum propagates prediction error: if prediction 1 is off by +100
-every subsequent prediction inherits that bias.  Per-date lookup uses the
-*actual* previous-7-day value (from ``df_before_diff``), keeping each
-prediction's error independent.  The cumsum fallback is only used in
-schedule mode where actual previous values are unavailable.
+every subsequent prediction inherits that bias.  Row-positional lookup uses the
+*actual* previous-7-row value (from ``df_before_diff``), keeping each
+prediction's error independent.  The lookup is row-index based (``iloc[pos-7]``)
+rather than calendar-date based, so date gaps (e.g. COVID exclusion) do not
+cause cross-contamination between pre- and post-gap data.
 
 **Per-window normalisation (RevIN-style)**
 
